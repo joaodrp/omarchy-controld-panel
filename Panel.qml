@@ -19,6 +19,8 @@ Panel {
   // not in it: the cursor visits exactly what hover already highlights.
   property string cursorKey: ""
   property bool cursorActive: false
+  // Where the cursor was, so a row retired by a poll does not send it home.
+  property int lastCursorIndex: 0
 
   readonly property color foreground: bar ? bar.foreground : Color.foreground
   readonly property color urgent: bar ? bar.urgent : Color.urgent
@@ -166,11 +168,14 @@ Panel {
   }
 
   function ensureCursor() {
-    // Rows come and go as polls land, so a cursor whose row has vanished
-    // falls to the nearest one rather than disappearing.
+    // Rows come and go as polls land: the activity log is rebuilt every
+    // fifteen seconds and can change length, which retires a key like
+    // "activity:7". Falling back to the first row would throw the cursor to
+    // the top of the panel mid-read, so it lands on the nearest surviving
+    // row instead.
     if (cursorItems.length === 0) { cursorKey = ""; return }
-    if (cursorIndex >= 0) return
-    cursorKey = cursorItems[0].key
+    if (cursorIndex >= 0) { lastCursorIndex = cursorIndex; return }
+    cursorKey = cursorItems[Math.max(0, Math.min(cursorItems.length - 1, lastCursorIndex))].key
   }
 
   function moveCursor(dx, dy) {
@@ -1092,7 +1097,7 @@ Panel {
       anchors.fill: parent
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
-      onEntered: root.setCursor("profile:" + profileRow.rowIndex)
+      onEntered: root.setCursor(profileRow.cursorKey)
       onClicked: if (profileRow.profile) controld.selectProfile(profileRow.profile.id)
     }
 
