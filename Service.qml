@@ -1,0 +1,323 @@
+import QtQuick
+import Quickshell
+import Quickshell.Io
+import qs.Commons
+import "Model.js" as Model
+
+// Owns every cdctl process and the state the panel renders. Read-only: it
+// lists, it never writes.
+Item {
+  id: root
+
+  property var settings: ({})
+
+  // Resolved once; "" until the lookup runs, and stays "" when cdctl is absent.
+  property string cdctlPath: ""
+  property bool installed: false
+  property bool checkedInstall: false
+
+  property bool authenticated: false
+  property bool needsAuth: false
+  property string email: ""
+  property string region: ""
+
+  property var profiles: []
+  property string selectedProfileId: ""
+  readonly property var selectedProfile: Model.resolveProfile(profiles, selectedProfileId)
+  property var rules: []
+  property var folders: []
+  readonly property var groups: Model.groupRules(rules, folders)
+  readonly property var ruleRows: Model.flattenGroups(groups)
+  readonly property var ruleCount: Model.countRules(rules)
+
+  property bool refreshing: false
+  property bool loadingRules: false
+  property string lastError: ""
+  property string lastHint: ""
+  property string statusText: "Checking…"
+
+  // Emitted when the user picks a profile, so the panel can persist it.
+  signal profileSelected(string id)
+
+  readonly property int refreshIntervalSec: intSetting("refreshIntervalSec", 120, 15, 3600)
+  readonly property string preferredProfile: String(setting("profile", "") || "")
+  readonly property bool busy: lookupProcess.running || authProcess.running || profilesProcess.running || rulesProcess.running || foldersProcess.running
+  readonly property bool ready: installed && authenticated && !needsAuth
+
+  // Which profile a rules/folders fetch was launched for, so a switch mid-flight
+  // discards the stale answer instead of showing another profile's rules.
+  property string _rulesForProfile: ""
+  property string _foldersForProfile: ""
+  property bool _rulesPending: false
+  property bool _foldersPending: false
+  property var _pendingRules: null
+  property var _pendingFolders: null
+
+  function setting(name, fallback) {
+    var value = settings ? settings[name] : undefined
+    return value === undefined || value === null ? fallback : value
+  }
+
+  function intSetting(name, fallback, min, max) {
+    var n = parseInt(String(setting(name, fallback)), 10)
+    if (!isFinite(n)) n = fallback
+    if (n < min) n = min
+    if (n > max) n = max
+    return n
+  }
+
+  function cdctl(args) {
+    // -q keeps info lines off stderr so a failure's stderr is only the JSON
+    // envelope; --timeout bounds each request well inside the watchdog.
+    return [cdctlPath, "--json", "-q", "--timeout", "15"].concat(args)
+  }
+
+  function copyToClipboard(value) {
+    var text = String(value || "")
+    if (text === "") return
+    Quickshell.execDetached(["bash", "-c", "printf %s " + Util.shellQuote(text) + " | wl-copy"])
+  }
+
+  function refresh() {
+    if (!checkedInstall) {
+      if (!lookupProcess.running) {
+        refreshing = true
+        lookupProcess.running = true
+      }
+      return
+    }
+    if (!installed) return
+    refreshing = true
+    if (!authProcess.running) {
+      authProcess.command = cdctl(["auth", "status"])
+      authProcess.running = true
+    }
+    if (!profilesProcess.running) {
+      profilesProcess.command = cdctl(["profile", "list"])
+      profilesProcess.running = true
+    }
+    if (!pollWatchdog.running) pollWatchdog.start()
+  }
+
+  function loadRules(profileId) {
+    var id = String(profileId || "")
+    if (!installed || id === "") return
+    loadingRules = true
+    _pendingRules = null
+    _pendingFolders = null
+    if (!rulesProcess.running) {
+      _rulesForProfile = id
+      _rulesPending = true
+      rulesProcess.command = cdctl(["rule", "list", "--profile", id])
+      rulesProcess.running = true
+    }
+    if (!foldersProcess.running) {
+      _foldersForProfile = id
+      _foldersPending = true
+      foldersProcess.command = cdctl(["folder", "list", "--profile", id])
+      foldersProcess.running = true
+    }
+    if (!pollWatchdog.running) pollWatchdog.start()
+  }
+
+  function selectProfile(id) {
+    var next = String(id || "")
+    if (next === "" || next === selectedProfileId) return
+    selectedProfileId = next
+    rules = []
+    folders = []
+    profileSelected(next)
+    loadRules(next)
+  }
+
+  function selectNextProfile(delta) {
+    var p = Model.nextProfile(profiles, selectedProfile ? selectedProfile.id : "", delta)
+    if (p) selectProfile(p.id)
+  }
+
+  function setUnavailable(message, hint) {
+    authenticated = false
+    profiles = []
+    rules = []
+    folders = []
+    statusText = message
+    lastHint = hint || ""
+  }
+
+  function applyError(err, fallback) {
+    lastError = Model.errorLine(err, fallback)
+    lastHint = err ? err.hint : ""
+    if (err && err.exitCode === Model.EXIT_AUTH) {
+      needsAuth = true
+      authenticated = false
+      statusText = "Not authenticated"
+    }
+  }
+
+  function commitRules() {
+    if (_rulesPending || _foldersPending) return
+    loadingRules = false
+    if (_pendingRules) rules = _pendingRules
+    if (_pendingFolders) folders = _pendingFolders
+  }
+
+  onPreferredProfileChanged: {
+    // The settings form changed the persisted profile: follow it.
+    if (preferredProfile !== "" && preferredProfile !== selectedProfileId) {
+      selectedProfileId = preferredProfile
+      if (selectedProfile) loadRules(selectedProfile.id)
+    }
+  }
+
+  Timer {
+    id: refreshTimer
+    interval: root.refreshIntervalSec * 1000
+    repeat: true
+    running: true
+    triggeredOnStart: true
+    onTriggered: root.refresh()
+  }
+
+  Timer {
+    // A poll that never exits would otherwise block every later refresh, since
+    // each is skipped while its process is still running.
+    id: pollWatchdog
+    interval: 25000
+    repeat: false
+    onTriggered: {
+      if (authProcess.running) authProcess.running = false
+      if (profilesProcess.running) profilesProcess.running = false
+      if (rulesProcess.running) rulesProcess.running = false
+      if (foldersProcess.running) foldersProcess.running = false
+      root.refreshing = false
+      root.loadingRules = false
+    }
+  }
+
+  Process {
+    // The shell inherits Hyprland's environment, which usually lacks the
+    // cargo and ~/.local bin dirs cdctl installs into.
+    id: lookupProcess
+    running: false
+    command: ["sh", "-c",
+      "if command -v cdctl >/dev/null 2>&1; then command -v cdctl; exit 0; fi; " +
+      "for p in \"$HOME/.cargo/bin/cdctl\" \"$HOME/.local/bin/cdctl\" /usr/local/bin/cdctl /usr/bin/cdctl; do " +
+      "if [ -x \"$p\" ]; then echo \"$p\"; exit 0; fi; done; exit 1"]
+    stdout: StdioCollector { id: lookupStdout; waitForEnd: true }
+    onExited: function(exitCode) {
+      root.checkedInstall = true
+      var path = String(lookupStdout.text || "").trim()
+      root.installed = exitCode === 0 && path !== ""
+      root.cdctlPath = root.installed ? path : ""
+      if (root.installed) root.refresh()
+      else {
+        root.refreshing = false
+        root.setUnavailable("cdctl not installed", "Install controld-cli and put cdctl on PATH")
+      }
+    }
+  }
+
+  Process {
+    id: authProcess
+    running: false
+    command: []
+    stdout: StdioCollector { id: authStdout; waitForEnd: true }
+    stderr: StdioCollector { id: authStderr; waitForEnd: true }
+    onExited: function(exitCode) {
+      if (exitCode === 0) {
+        var parsed = Model.parseAuthStatus(authStdout.text)
+        if (!parsed.ok) {
+          root.applyError(null, "Could not read cdctl auth status")
+          return
+        }
+        root.authenticated = parsed.authenticated
+        root.needsAuth = !parsed.authenticated
+        root.email = parsed.email
+        root.region = parsed.region
+        root.statusText = Model.accountLine(parsed)
+        if (root.needsAuth) root.lastHint = "Run: cdctl auth login --token-stdin"
+      } else {
+        var err = Model.parseError(authStderr.text, exitCode)
+        root.applyError(err, "cdctl auth status failed")
+        if (err.exitCode !== Model.EXIT_AUTH) root.statusText = "Unavailable"
+      }
+    }
+  }
+
+  Process {
+    id: profilesProcess
+    running: false
+    command: []
+    stdout: StdioCollector { id: profilesStdout; waitForEnd: true }
+    stderr: StdioCollector { id: profilesStderr; waitForEnd: true }
+    onExited: function(exitCode) {
+      root.refreshing = false
+      if (exitCode !== 0) {
+        root.applyError(Model.parseError(profilesStderr.text, exitCode), "Could not list profiles")
+        return
+      }
+      var parsed = Model.parseProfiles(profilesStdout.text)
+      if (!parsed.ok) {
+        root.applyError(null, "Could not read profile list")
+        return
+      }
+      root.lastError = ""
+      root.lastHint = ""
+      root.needsAuth = false
+      root.profiles = parsed.profiles
+      if (root.selectedProfileId === "" && root.preferredProfile !== "") root.selectedProfileId = root.preferredProfile
+      var current = Model.resolveProfile(root.profiles, root.selectedProfileId)
+      if (current) {
+        if (current.id !== root.selectedProfileId) root.selectedProfileId = current.id
+        root.loadRules(current.id)
+      } else {
+        root.rules = []
+        root.folders = []
+      }
+    }
+  }
+
+  Process {
+    id: rulesProcess
+    running: false
+    command: []
+    stdout: StdioCollector { id: rulesStdout; waitForEnd: true }
+    stderr: StdioCollector { id: rulesStderr; waitForEnd: true }
+    onExited: function(exitCode) {
+      root._rulesPending = false
+      if (root._rulesForProfile !== root.selectedProfileId) { root.commitRules(); return }
+      if (exitCode !== 0) {
+        root.applyError(Model.parseError(rulesStderr.text, exitCode), "Could not list rules")
+        root._pendingRules = []
+      } else {
+        var parsed = Model.parseRules(rulesStdout.text)
+        if (parsed.ok) root._pendingRules = parsed.rules
+        else {
+          root.applyError(null, "Could not read rule list")
+          root._pendingRules = []
+        }
+      }
+      root.commitRules()
+    }
+  }
+
+  Process {
+    id: foldersProcess
+    running: false
+    command: []
+    stdout: StdioCollector { id: foldersStdout; waitForEnd: true }
+    stderr: StdioCollector { id: foldersStderr; waitForEnd: true }
+    onExited: function(exitCode) {
+      root._foldersPending = false
+      if (root._foldersForProfile !== root.selectedProfileId) { root.commitRules(); return }
+      if (exitCode !== 0) {
+        root.applyError(Model.parseError(foldersStderr.text, exitCode), "Could not list folders")
+        root._pendingFolders = []
+      } else {
+        var parsed = Model.parseFolders(foldersStdout.text)
+        root._pendingFolders = parsed.ok ? parsed.folders : []
+      }
+      root.commitRules()
+    }
+  }
+}

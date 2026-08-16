@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "id": "io.github.joaodrp.controld",
+  "name": "Control D",
+  "version": "0.1.0",
+  "author": "João Pereira",
+  "license": "MIT",
+  "description": "Control D account status, profiles, and DNS rules in the Omarchy bar, powered by cdctl.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Control D",
+    "description": "Browse Control D profiles and their DNS rules from the bar.",
+    "category": "Network",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "refreshIntervalSec": 120,
+      "profile": ""
+    },
+    "schema": [
+      {
+        "key": "refreshIntervalSec",
+        "type": "integer",
+        "label": "Refresh interval (seconds)",
+        "min": 15,
+        "max": 3600,
+        "step": 15,
+        "defaultValue": 120
+      },
+      {
+        "key": "profile",
+        "type": "string",
+        "label": "Profile id (empty = first profile)",
+        "defaultValue": ""
+      }
+    ]
+  }
+}
