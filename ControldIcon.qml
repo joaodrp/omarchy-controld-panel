@@ -73,23 +73,19 @@ Item {
     rotation: -45
   }
 
+  // A bare dot: at bar size the ring leaves too little room for a glyph, and a
+  // "!" collapses into a bar there. Sized off the mark's height rather than its
+  // width, so the badge tracks the mark's optical size and not its silhouette.
+  // The floor is what stays legible in the bar, and it carries that size alone
+  // until the mark is large enough for the proportion to take over.
   BorderSurface {
     visible: root.warning
-    width: Math.max(7, parent.width * 0.42)
+    width: Math.max(6, parent.height * 0.4)
     height: width
     radius: width / 2
     color: root.badgeColor
     anchors.right: parent.right
     anchors.bottom: parent.bottom
     borderSpec: Border.flat(Color.popups.background, 1)
-
-    Text {
-      anchors.centerIn: parent
-      text: "!"
-      color: Color.background
-      font.family: Style.font.family
-      font.pixelSize: Math.max(6, parent.height * 0.72)
-      font.bold: true
-    }
   }
 }
