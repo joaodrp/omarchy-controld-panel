@@ -1,8 +1,9 @@
 # Control D panel for Omarchy
 
-Bar widget for the Omarchy shell that shows your [Control D](https://controld.com) account:
-profiles, their rule/filter/service counts, and each profile's custom DNS rules, grouped by
-folder. Backed by [`cdctl`](https://github.com/joaodrp/controld-cli), the Control D CLI.
+Bar widget for the Omarchy shell that reports what [Control D](https://controld.com) is doing
+on **this machine**: the endpoint it resolves through, the profile that endpoint enforces, and
+that profile's statistics, recent lookups and custom DNS rules. Backed by
+[`cdctl`](https://github.com/joaodrp/controld-cli), the Control D CLI.
 
 Read-only for now: it lists, it does not write.
 
@@ -12,11 +13,9 @@ Read-only for now: it lists, it does not write.
   dashboard for everything the panel does not do, identified from the DNS
   resolver actually in use rather than the hostname; the account line is on hover
 - Bar icon shows account state: dimmed when unavailable, badge when `cdctl` needs a login
-- Left click opens a keyboard-friendly panel; middle click refreshes; right click cycles profiles
+- Left click opens a keyboard-friendly panel; middle click refreshes
 - Machine facts under the hero, in the built-in panels' key/value idiom: profile, unmatched
   action, protocol, ctrld version, filter and service counts, and the endpoint ID (click to copy)
-- PROFILES: the browse-mode fallback for a machine that is not on Control D DNS — every profile
-  with its enabled rules, filters, and services; click one to browse it
 - STATISTICS for this endpoint: a queries-over-time chart with the blocked share shaded under
   it, totals, and top domains, filters and destinations as meter rows. Pick the window
   (1h/24h/7d/30d) and the verdict (blocked/bypassed/redirected); destinations switch between
@@ -30,7 +29,9 @@ Read-only for now: it lists, it does not write.
 - RULES: the enforced profile's custom rules, root first, then one group per folder, with
   action, spoof/redirect target, and disabled state
 - Copy a rule's hostname to the clipboard
-- The selected profile persists across restarts (stored on the widget's `shell.json` entry)
+- Every section needs an identified endpoint. Without one the panel shows nothing but the
+  reason: no Control D resolver here, a resolver whose endpoint is not in this account, or a
+  device lookup that failed
 
 ## Keyboard shortcuts
 
@@ -45,7 +46,6 @@ Inside the panel:
 | `j` / `k` or arrows | Move the cursor through every actionable row, top to bottom |
 | `enter` / `space` | Activate the cursor row |
 | `y` | Yank what the cursor is on, or the endpoint ID when it is on nothing |
-| `p` | Next profile (browse mode only) |
 | `R` | Refresh |
 | `esc` | Close |
 
@@ -90,11 +90,12 @@ Move it with `omarchy bar move io.github.joaodrp.controld --section right`.
 
 ## Icons
 
-The panel uses the Control D dashboard's own icons, kept as single-color SVGs under `assets/`
-and tinted to the active Omarchy theme at runtime (`DashIcon.qml`), so one file serves every
-theme. Available names: `profiles`, `endpoints`, `analytics`, `statistics`, `activity`,
-`domain-test`, `preferences`, `rules`, `filters`, `services`, `options`. The bar and hero mark
-is the Control D logo, drawn natively from its paths in `ControldIcon.qml`.
+The bar and hero mark is the Control D logo, drawn natively from its paths in
+`ControldIcon.qml`.
+
+`assets/` carries the Control D dashboard's own icon set as single-color SVGs, tinted to the
+active Omarchy theme at runtime by `DashIcon.qml`, so one file serves every theme. Nothing
+draws them today: they were used by the profile rows the machine-centric panel dropped.
 
 The artwork belongs to Control D; this project is not affiliated with them.
 
@@ -105,7 +106,6 @@ Set through the bar's widget settings, or inline on the widget's `shell.json` en
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `refreshIntervalSec` | `120` | Poll interval, 15-3600 seconds |
-| `profile` | `""` | Profile id (or name) to show; empty picks the first profile |
 | `showStatistics` | `true` | Whether to query analytics at all |
 | `showActivity` | `true` | Whether to poll the activity log while open |
 | `activityRows` | `8` | Rows in the activity list, 3-25 |
@@ -116,8 +116,7 @@ Set through the bar's widget settings, or inline on the widget's `shell.json` en
 ```sh
 omarchy-shell io.github.joaodrp.controld toggle
 omarchy-shell io.github.joaodrp.controld refresh
-omarchy-shell io.github.joaodrp.controld profile              # selected profile name
-omarchy-shell io.github.joaodrp.controld selectProfile <id>
+omarchy-shell io.github.joaodrp.controld profile              # enforced profile name
 omarchy-shell io.github.joaodrp.controld status               # account line
 ```
 

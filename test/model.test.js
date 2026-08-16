@@ -9,7 +9,7 @@ const vm = require("node:vm")
 
 const src = fs.readFileSync(path.join(__dirname, "..", "Model.js"), "utf8")
 const M = {}
-vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, nextProfile, groupRules, flattenGroups, countRules, actionGlyph, ruleDetail, profileDetail, accountLine, resolverUid, parseDevices, findDevice, endpointLine, activeProfile, defaultActionLine, parseStats, formatCount, blockedShare, windowLabel, meterRatio, sparkPoints, filterLabel, countryName, actionTotal, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
+vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, nextProfile, groupRules, flattenGroups, countRules, actionGlyph, ruleDetail, profileDetail, accountLine, resolverUid, parseDevices, findDevice, endpointLine, endpointState, ENDPOINT_PENDING, ENDPOINT_NONE, ENDPOINT_UNKNOWN, ENDPOINT_MACHINE, activeProfile, defaultActionLine, parseStats, formatCount, blockedShare, windowLabel, meterRatio, sparkPoints, filterLabel, countryName, actionTotal, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
 const m = M.__exports
 
 // vm-realm arrays fail strict deepEqual on prototype identity; compare by value.
@@ -170,6 +170,21 @@ test("findDevice matches the endpoint id, and endpointLine reads it", () => {
   assert.equal(m.endpointLine(devices[0], "DNS-over-TLS"), "Home · DNS-over-TLS")
   assert.equal(m.endpointLine(devices[0], ""), "Home")
   assert.equal(m.endpointLine(null, "DNS-over-TLS"), "")
+})
+
+test("endpointState says why this machine has no endpoint", () => {
+  const device = { id: "abc123", name: "laptop" }
+  // Nothing answered yet.
+  assert.equal(m.endpointState(false, "", false, null), m.ENDPOINT_PENDING)
+  // A Control D resolver is configured but the device list is still out.
+  assert.equal(m.endpointState(true, "abc123", false, null), m.ENDPOINT_PENDING)
+  // No Control D resolver here, so there is nothing to identify.
+  assert.equal(m.endpointState(true, "", true, null), m.ENDPOINT_NONE)
+  // Resolver and device agree.
+  assert.equal(m.endpointState(true, "abc123", true, device), m.ENDPOINT_MACHINE)
+  // A resolver we cannot name: the lookup failed, or the endpoint is not in
+  // this account. Distinct from having no resolver at all.
+  assert.equal(m.endpointState(true, "abc123", true, null), m.ENDPOINT_UNKNOWN)
 })
 
 test("activeProfile prefers the endpoint's profile over the browsed one", () => {

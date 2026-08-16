@@ -22,11 +22,9 @@ Item {
   property string region: ""
 
   property var profiles: []
-  property string selectedProfileId: ""
-  readonly property var selectedProfile: Model.resolveProfile(profiles, selectedProfileId)
-  // What the panel describes: the endpoint's profile when this machine is on
-  // Control D, else whatever profile is being browsed.
-  readonly property var activeProfile: Model.activeProfile(profiles, endpointProfileId, selectedProfileId)
+  // The profile this machine's endpoint enforces, which is the only one the
+  // panel describes.
+  readonly property var activeProfile: Model.activeProfile(profiles, endpointProfileId, "")
   property var rules: []
   property var folders: []
   readonly property var groups: Model.groupRules(rules, folders)
@@ -45,6 +43,11 @@ Item {
   readonly property bool usingControld: endpointUid !== ""
   readonly property bool resolverChecked: _resolverChecked
   property bool _resolverChecked: false
+  // Whether the device lookup has answered, which is what separates "still
+  // loading" from "asked, and this endpoint is not one of ours".
+  property bool devicesChecked: false
+  property string devicesError: ""
+  readonly property string endpointState: Model.endpointState(resolverChecked, endpointUid, devicesChecked, endpoint)
 
   // Analytics for this endpoint. Fetched only while the panel is open: the
   // numbers are not visible otherwise, and they cost three requests.
@@ -73,15 +76,11 @@ Item {
   property string lastHint: ""
   property string statusText: "Checking…"
 
-  // Emitted when the user picks a profile, so the panel can persist it.
-  signal profileSelected(string id)
-
   readonly property int refreshIntervalSec: intSetting("refreshIntervalSec", 120, 15, 3600)
   readonly property int statsWindowHours: intSetting("statsWindowHours", 24, 1, 720)
   readonly property bool statsEnabled: setting("showStatistics", true) !== false
   readonly property bool activityEnabled: setting("showActivity", true) !== false
   readonly property int activityRows: intSetting("activityRows", 8, 3, 25)
-  readonly property string preferredProfile: String(setting("profile", "") || "")
   readonly property bool busy: lookupProcess.running || authProcess.running || profilesProcess.running || rulesProcess.running || foldersProcess.running || resolverProcess.running || devicesProcess.running
   readonly property bool ready: installed && authenticated && !needsAuth
 
@@ -228,21 +227,6 @@ Item {
     if (!pollWatchdog.running) pollWatchdog.start()
   }
 
-  function selectProfile(id) {
-    var next = String(id || "")
-    if (next === "" || next === selectedProfileId) return
-    selectedProfileId = next
-    rules = []
-    folders = []
-    profileSelected(next)
-    loadRules(next)
-  }
-
-  function selectNextProfile(delta) {
-    var p = Model.nextProfile(profiles, selectedProfile ? selectedProfile.id : "", delta)
-    if (p) selectProfile(p.id)
-  }
-
   function setUnavailable(message, hint) {
     authenticated = false
     profiles = []
@@ -288,14 +272,6 @@ Item {
 
   onActiveProfileChanged: {
     if (activeProfile && activeProfile.id !== _rulesForProfile) loadRules(activeProfile.id)
-  }
-
-  onPreferredProfileChanged: {
-    // The settings form changed the persisted profile: follow it.
-    if (preferredProfile !== "" && preferredProfile !== selectedProfileId) {
-      selectedProfileId = preferredProfile
-      if (selectedProfile) loadRules(selectedProfile.id)
-    }
   }
 
   Timer {
@@ -365,8 +341,12 @@ Item {
       root.endpointUid = found.uid
       root.endpointTransport = found.transport
       // No Control D resolver here, so there is no endpoint to name.
-      if (found.uid === "") root.devices = []
-      else if (!devicesProcess.running) {
+      if (found.uid === "") {
+        root.devices = []
+        root.devicesError = ""
+        root.devicesChecked = true
+      } else if (!devicesProcess.running) {
+        root.devicesChecked = false
         devicesProcess.command = cdctlApi("/devices")
         devicesProcess.running = true
       }
@@ -375,16 +355,23 @@ Item {
 
   Process {
     // The escape hatch: `cdctl api` emits the upstream body verbatim, so this
-    // reads raw API field names. Failures stay silent — the endpoint line is
-    // an extra, and the panel falls back to the account line without it.
+    // reads raw API field names. A failure here costs the panel every
+    // machine-specific section, so the reason is kept rather than swallowed.
     id: devicesProcess
     running: false
     command: []
     stdout: StdioCollector { id: devicesStdout; waitForEnd: true }
+    stderr: StdioCollector { id: devicesStderr; waitForEnd: true }
     onExited: function(exitCode) {
-      if (exitCode !== 0) { root.devices = []; return }
+      root.devicesChecked = true
+      if (exitCode !== 0) {
+        root.devices = []
+        root.devicesError = Model.errorLine(Model.parseError(devicesStderr.text, exitCode), "Could not read your devices")
+        return
+      }
       var parsed = Model.parseDevices(devicesStdout.text)
       root.devices = parsed.ok ? parsed.devices : []
+      root.devicesError = parsed.ok ? "" : "Could not read your devices"
     }
   }
 
@@ -500,9 +487,6 @@ Item {
       root.lastHint = ""
       root.needsAuth = false
       root.profiles = parsed.profiles
-      if (root.selectedProfileId === "" && root.preferredProfile !== "") root.selectedProfileId = root.preferredProfile
-      var current = Model.resolveProfile(root.profiles, root.selectedProfileId)
-      if (current && current.id !== root.selectedProfileId) root.selectedProfileId = current.id
       if (root.activeProfile) root.loadRules(root.activeProfile.id)
       else {
         root.rules = []

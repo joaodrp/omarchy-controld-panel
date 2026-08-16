@@ -29,19 +29,25 @@ Panel {
   readonly property color hoverFill: bar ? Style.hoverFillFor(bar.foreground, Color.accent) : "transparent"
   readonly property color selectedFill: bar ? Style.selectedFillFor(bar.foreground, Color.accent) : "transparent"
 
-  // Machine mode: this panel describes the endpoint and the profile it
-  // enforces. Browse mode is the fallback for a machine that is not on
-  // Control D DNS, where there is no endpoint to describe.
-  readonly property bool machineMode: controld.endpoint !== null
+  // This panel describes one machine: the endpoint it resolves through and the
+  // profile that endpoint enforces. Every section hangs off that, so without an
+  // identified endpoint there is nothing to show and the panel says why.
+  readonly property bool machineMode: controld.endpointState === "machine"
   readonly property bool showEndpoint: controld.ready && machineMode
-  readonly property bool showProfiles: controld.ready && !machineMode && controld.profiles.length > 0
-  readonly property bool showRules: controld.ready && controld.activeProfile !== null
-  readonly property bool unprotected: controld.ready && controld.resolverChecked && !controld.usingControld
+  readonly property bool showRules: controld.ready && machineMode && controld.activeProfile !== null
+  // No Control D resolver here at all, which is the only state that means this
+  // machine is unprotected.
+  readonly property bool unprotected: controld.ready && controld.endpointState === "none"
+  // A Control D resolver we cannot put a name to: the device lookup failed, or
+  // the endpoint belongs to another account. Protected, but not describable.
+  readonly property bool endpointUnknown: controld.ready && controld.endpointState === "unknown"
   // Where to send someone who has neither the CLI nor an account set up.
   readonly property string guideUrl: "https://github.com/joaodrp/omarchy-controld-panel#readme"
   readonly property string dashboardUrl: "https://controld.com/dashboard"
-  readonly property bool showEmptyState: controld.checkedInstall
-    && (!controld.installed || controld.needsAuth)
+  // The panel is explaining itself rather than showing content.
+  readonly property bool showEmptyState: (controld.checkedInstall && !controld.installed)
+    || (controld.installed && controld.needsAuth)
+    || unprotected || endpointUnknown
   readonly property bool showActivity: controld.ready && machineMode && controld.activityEnabled
     && (controld.activity.length > 0 || controld.activityError !== "")
   readonly property bool showStats: controld.ready && machineMode && controld.statsEnabled
@@ -55,7 +61,6 @@ Panel {
     if (showActivity) keys.push({ key: "a", what: "activity" })
     if (showRules) keys.push({ key: "r", what: "rules" })
     if (showEndpoint) keys.push({ key: "m", what: "machine" })
-    if (showProfiles) keys.push({ key: "p", what: "next profile" })
     keys.push({ key: "g/G", what: "top/bottom" }, { key: "o", what: "dashboard" },
       { key: "R", what: "refresh" }, { key: "esc", what: "close" })
     return keys
@@ -85,18 +90,17 @@ Panel {
   readonly property bool headerHasCursor: cursorActive && cursorKey === "header" && controld.installed
   readonly property color iconColor: controld.ready && !unprotected ? foreground : dim
   readonly property color barIconColor: controld.ready && !unprotected ? barForeground : Qt.darker(barForeground, 1.55)
-  // The hero names this machine's endpoint and what it enforces; the account
-  // line is the fallback when no Control D resolver is in use here.
-  readonly property string heroTitle: {
-    if (controld.endpoint) return controld.endpoint.name
-    return controld.selectedProfile ? controld.selectedProfile.name : "Control D"
-  }
+  // The hero names this machine's endpoint and what it enforces. With no
+  // endpoint to name it carries the reason instead.
+  readonly property string heroTitle: controld.endpoint ? controld.endpoint.name : "Control D"
   readonly property string heroMeta: {
     if (!controld.installed) return "cdctl is not installed"
     if (controld.needsAuth) return "Not authenticated"
     if (controld.refreshing && !controld.authenticated) return "Checking…"
     if (controld.endpoint) return Model.endpointLine(controld.endpoint, "")
-    if (root.unprotected) return "This machine is not using Control D DNS"
+    // With no endpoint to name, the empty state below carries the reason. The
+    // hero says which account is signed in instead, which is what the reader
+    // needs to act on it, and is short enough not to elide.
     return controld.statusText
   }
   readonly property string rulesCaption: {
@@ -105,8 +109,7 @@ Panel {
     if (c.total === 0) return "No custom rules in this profile."
     return c.enabled + " of " + c.total + " enabled"
   }
-  // In machine mode the section above already names the profile these rules
-  // belong to; in browse mode the profile list does.
+  // The machine facts above already name the profile these rules belong to.
   readonly property string rulesTitle: "RULES"
 
   function cursorRuleList() {
@@ -121,10 +124,6 @@ Panel {
     var items = [{ key: "header", kind: "header", value: "" }]
     if (showEndpoint && controld.endpoint)
       items.push({ key: "endpoint", kind: "endpoint", value: controld.endpoint.id })
-    if (showProfiles) {
-      for (var p = 0; p < controld.profiles.length; p++)
-        items.push({ key: "profile:" + p, kind: "profile", index: p, value: controld.profiles[p].id })
-    }
     if (showStats && controld.stats) {
       for (var d = 0; d < controld.stats.domains.length; d++)
         items.push({ key: "domain:" + d, kind: "domain", index: d, value: controld.stats.domains[d].value })
@@ -160,20 +159,6 @@ Panel {
     var entry = currentCursor()
     if (!entry || entry.kind !== "rule") return null
     return cursorRules[entry.index] || null
-  }
-
-  function selectedProfileRow() {
-    var entry = currentCursor()
-    if (!entry || entry.kind !== "profile") return null
-    return controld.profiles[entry.index] || null
-  }
-
-  function persistProfile(id) {
-    if (!root.bar || !root.bar.shell || typeof root.bar.shell.updateEntryInline !== "function") return
-    var entry = { id: root.moduleName }
-    for (var key in settings) if (key !== "id") entry[key] = settings[key]
-    entry.profile = String(id || "")
-    root.bar.shell.updateEntryInline(root.moduleName, entry)
   }
 
   function ensureCursor() {
@@ -217,11 +202,6 @@ Panel {
     if (!entry) return
     if (entry.kind === "header") { controld.refresh(); return }
     if (entry.kind === "reading") return
-    if (entry.kind === "profile") {
-      var profile = selectedProfileRow()
-      if (profile) controld.selectProfile(profile.id)
-      return
-    }
     if (String(entry.value || "") !== "") controld.copyToClipboard(entry.value)
   }
 
@@ -284,7 +264,7 @@ Panel {
     if (!entry) return null
     if (entry.kind === "rule") return ruleRowItem(entry.index)
     if (entry.kind === "endpoint") return machineSection
-    return findByCursorKey([profileColumn, domainList, filterList, destinationList, activityColumn], entry.key)
+    return findByCursorKey([domainList, filterList, destinationList, activityColumn], entry.key)
   }
 
   function findByCursorKey(containers, key) {
@@ -362,7 +342,6 @@ Panel {
   Service {
     id: controld
     settings: root.settings
-    onProfileSelected: function(id) { root.persistProfile(id) }
   }
 
   IpcHandler {
@@ -373,8 +352,7 @@ Panel {
     function hide(): void { root.close() }
     function toggle(): void { root.toggle() }
     function refresh(): string { controld.refresh(); return "ok" }
-    function profile(): string { return controld.selectedProfile ? controld.selectedProfile.name : "" }
-    function selectProfile(id: string): string { controld.selectProfile(id); return "ok" }
+    function profile(): string { return controld.activeProfile ? controld.activeProfile.name : "" }
     function status(): string { return controld.statusText }
   }
 
@@ -396,8 +374,7 @@ Panel {
       }
     }
     onPressed: function(buttonCode) {
-      if (buttonCode === Qt.RightButton && !root.machineMode) controld.selectNextProfile(1)
-      else if (buttonCode === Qt.MiddleButton) controld.refresh()
+      if (buttonCode === Qt.MiddleButton) controld.refresh()
       else root.toggle()
     }
   }
@@ -433,7 +410,6 @@ Panel {
         else if (t === "o") Quickshell.execDetached(["omarchy-launch-browser", root.dashboardUrl])
         // Shift for the action, since the plain letter now names a section.
         else if (t === "R") controld.refresh()
-        else if (t === "p" || t === "P") { if (!root.machineMode) controld.selectNextProfile(1) }
         else if (t === "y" || t === "Y") root.yank()
       }
 
@@ -569,6 +545,31 @@ Panel {
             visible: controld.installed && controld.needsAuth
             title: "Sign in to Control D"
             message: "Run cdctl auth login --token-stdin with a token from the Control D dashboard, then reopen this panel."
+          }
+
+          // Signed in, but this machine's DNS goes somewhere else, so there is
+          // no endpoint for the sections below to describe.
+          EmptyState {
+            width: parent.width
+            visible: root.unprotected
+            title: "This machine is not on Control D"
+            message: "Its DNS resolves somewhere else, so there are no queries, rules or statistics to report here. Point it at one of your endpoints and reopen this panel."
+            actionText: "Open setup guide"
+            actionUrl: root.guideUrl
+          }
+
+          // A Control D resolver we cannot name. The two causes need different
+          // things from the reader, so the panel names which one it hit.
+          EmptyState {
+            width: parent.width
+            visible: root.endpointUnknown
+            title: "This machine could not be identified"
+            message: controld.devicesError !== ""
+              ? "Its DNS goes through Control D, but reading your endpoints failed, so the panel cannot tell which one this is."
+              : "Its DNS goes through Control D, but that endpoint is not in this account. Check you are signed in to the account that owns it."
+            detail: controld.devicesError
+            actionText: "Open dashboard"
+            actionUrl: root.dashboardUrl
           }
 
           // Machine facts, in the built-in panels' key/value idiom: attributes
@@ -795,39 +796,6 @@ Panel {
           }
 
           PanelSeparator {
-            visible: root.showProfiles
-            foreground: root.foreground
-          }
-
-          Column {
-            visible: root.showProfiles
-            width: parent.width
-            spacing: Style.space(10)
-
-            SectionTitle {
-              width: parent.width
-              text: "PROFILES"
-            }
-
-            Column {
-              id: profileColumn
-              width: parent.width
-              spacing: Style.space(6)
-
-              Repeater {
-                model: controld.profiles
-                ProfileRow {
-                  required property var modelData
-                  required property int index
-                  width: profileColumn.width
-                  profile: modelData
-                  rowIndex: index
-                }
-              }
-            }
-          }
-
-          PanelSeparator {
             visible: root.showActivity
             foreground: root.foreground
           }
@@ -1007,155 +975,6 @@ Panel {
     }
   }
 
-  // One "<icon> <count>" pair on a profile row, mirroring the dashboard's
-  // Filters / Services / Rules columns.
-  component CountBadge: Row {
-    id: badge
-    property string icon: ""
-    property int count: 0
-    property bool highlighted: false
-
-    spacing: Style.space(4)
-
-    DashIcon {
-      anchors.verticalCenter: parent.verticalCenter
-      name: badge.icon
-      iconSize: Style.font.caption
-      color: root.dim
-    }
-
-    Text {
-      anchors.verticalCenter: parent.verticalCenter
-      text: badge.count
-      color: badge.count > 0 ? Qt.darker(root.foreground, 1.25) : root.dim
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.caption
-    }
-  }
-
-  component ProfileRow: CursorSurface {
-    id: profileRow
-    property var profile: null
-    property int rowIndex: 0
-    readonly property bool selectedProfile: profile && controld.selectedProfile && controld.selectedProfile.id === profile.id
-    readonly property bool loading: selectedProfile && controld.loadingRules
-    readonly property bool enforcedHere: profile && controld.endpointProfileId !== "" && controld.endpointProfileId === profile.id
-
-    readonly property string cursorKey: "profile:" + rowIndex
-    hasCursor: root.cursorActive && root.cursorKey === cursorKey
-    current: selectedProfile
-    foreground: root.foreground
-    fill: root.hoverFill
-    currentFill: root.selectedFill
-
-    implicitHeight: profileInner.implicitHeight + Style.spacing.xl
-
-    Row {
-      id: profileInner
-      anchors.left: parent.left
-      anchors.right: parent.right
-      anchors.verticalCenter: parent.verticalCenter
-      anchors.leftMargin: Style.space(6)
-      anchors.rightMargin: Style.space(6)
-      spacing: Style.space(8)
-
-      Item {
-        width: Style.space(22)
-        height: Style.font.body
-        anchors.verticalCenter: parent.verticalCenter
-        opacity: profileRow.loading ? 0.45 : 1.0
-
-        DashIcon {
-          anchors.centerIn: parent
-          name: "profiles"
-          iconSize: Style.font.body
-          color: profileRow.selectedProfile ? root.foreground : root.dim
-        }
-
-        SequentialAnimation on opacity {
-          running: profileRow.loading
-          loops: Animation.Infinite
-          NumberAnimation { to: 1.0; duration: 420; easing.type: Easing.InOutQuad }
-          NumberAnimation { to: 0.45; duration: 420; easing.type: Easing.InOutQuad }
-        }
-      }
-
-      Column {
-        width: parent.width - Style.space(30)
-        anchors.verticalCenter: parent.verticalCenter
-        spacing: Style.space(1)
-
-        Row {
-          width: parent.width
-          spacing: Style.space(6)
-
-          Text {
-            anchors.verticalCenter: parent.verticalCenter
-            text: profileRow.profile ? profileRow.profile.name : ""
-            color: root.foreground
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.body
-            font.bold: profileRow.selectedProfile
-            elide: Text.ElideRight
-          }
-
-          // The profile this machine's endpoint actually enforces, which is
-          // not necessarily the one being browsed.
-          DashIcon {
-            anchors.verticalCenter: parent.verticalCenter
-            visible: profileRow.enforcedHere
-            name: "endpoints"
-            iconSize: Style.font.caption
-            color: root.dim
-          }
-        }
-
-        Row {
-          spacing: Style.space(10)
-
-          CountBadge {
-            icon: "rules"
-            count: profileRow.profile ? profileRow.profile.enabledRules : 0
-          }
-
-          CountBadge {
-            icon: "filters"
-            count: profileRow.profile ? profileRow.profile.enabledFilters : 0
-          }
-
-          CountBadge {
-            icon: "services"
-            count: profileRow.profile ? profileRow.profile.enabledServices : 0
-          }
-
-          Text {
-            anchors.verticalCenter: parent.verticalCenter
-            visible: profileRow.profile && !profileRow.profile.enabled
-            text: "disabled"
-            color: root.urgent
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.caption
-          }
-        }
-      }
-    }
-
-    MouseArea {
-      id: profileMouse
-      anchors.fill: parent
-      hoverEnabled: true
-      cursorShape: Qt.PointingHandCursor
-      onEntered: root.setCursorFromPointer(profileRow.cursorKey, profileRow, { x: profileMouse.mouseX, y: profileMouse.mouseY })
-      onPositionChanged: function(mouse) { root.setCursorFromPointer(profileRow.cursorKey, profileRow, mouse) }
-      onClicked: if (profileRow.profile) controld.selectProfile(profileRow.profile.id)
-    }
-
-    PanelToolTip {
-      visible: profileMouse.containsMouse && !profileRow.selectedProfile
-      text: "Show this profile's rules"
-      fontFamily: root.fontFamily
-    }
-  }
 
   component FolderRow: Item {
     id: folderRow
@@ -1462,6 +1281,10 @@ Panel {
     id: emptyState
     property string title: ""
     property string message: ""
+    // What went wrong underneath, when there is something to quote.
+    property string detail: ""
+    property string actionText: "Open setup guide"
+    property string actionUrl: root.guideUrl
 
     spacing: Style.space(6)
 
@@ -1483,15 +1306,25 @@ Panel {
       wrapMode: Text.WordWrap
     }
 
+    Text {
+      width: emptyState.width
+      visible: emptyState.detail !== ""
+      text: emptyState.detail
+      color: root.urgent
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.bodySmall
+      wrapMode: Text.WordWrap
+    }
+
     Button {
-      text: "Open setup guide"
+      text: emptyState.actionText
       bordered: true
       foreground: root.foreground
       accent: Color.accent
       fontFamily: root.fontFamily
       fontSize: Style.font.body
       topPadding: Style.space(4)
-      onClicked: Quickshell.execDetached(["omarchy-launch-browser", root.guideUrl])
+      onClicked: Quickshell.execDetached(["omarchy-launch-browser", emptyState.actionUrl])
     }
   }
 

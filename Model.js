@@ -298,6 +298,24 @@ function findDevice(devices, uid) {
   return null
 }
 
+// Which machine this panel can describe. Everything it shows hangs off an
+// identified endpoint, so the reason there is none has to survive: a machine
+// with no Control D resolver at all is a different story to one whose resolver
+// we cannot put a name to, and only the first means "unprotected".
+var ENDPOINT_PENDING = "pending"
+var ENDPOINT_NONE = "none"
+var ENDPOINT_UNKNOWN = "unknown"
+var ENDPOINT_MACHINE = "machine"
+
+function endpointState(resolverChecked, uid, devicesChecked, endpoint) {
+  if (!resolverChecked) return ENDPOINT_PENDING
+  if (str(uid) === "") return ENDPOINT_NONE
+  if (endpoint) return ENDPOINT_MACHINE
+  // A resolver we cannot name. Either the device lookup has not answered yet,
+  // or it answered and this endpoint is not in the account.
+  return devicesChecked ? ENDPOINT_UNKNOWN : ENDPOINT_PENDING
+}
+
 // The profile the panel describes: the one this machine's endpoint enforces
 // when that is known, else the browsed selection. Machine state wins, so the
 // panel never describes a profile the machine is not using.

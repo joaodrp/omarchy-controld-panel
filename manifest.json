@@ -3,9 +3,9 @@
   "id": "io.github.joaodrp.controld",
   "name": "Control D",
   "version": "0.1.0",
-  "author": "Jo\u00e3o Pereira",
+  "author": "João Pereira",
   "license": "MIT",
-  "description": "Control D account status, profiles, and DNS rules in the Omarchy bar, powered by cdctl.",
+  "description": "What Control D is doing on this machine, in the Omarchy bar, powered by cdctl.",
   "kinds": [
     "bar-widget"
   ],
@@ -14,13 +14,12 @@
   },
   "barWidget": {
     "displayName": "Control D",
-    "description": "Browse Control D profiles and their DNS rules from the bar.",
+    "description": "Report what Control D is doing on this machine: its endpoint, profile, statistics and rules.",
     "category": "Network",
     "allowMultiple": false,
     "defaultSection": "right",
     "defaults": {
       "refreshIntervalSec": 120,
-      "profile": "",
       "statsWindowHours": 24,
       "showStatistics": true,
       "showActivity": true,
@@ -35,12 +34,6 @@
         "max": 3600,
         "step": 15,
         "defaultValue": 120
-      },
-      {
-        "key": "profile",
-        "type": "string",
-        "label": "Profile id (empty = first profile)",
-        "defaultValue": ""
       },
       {
         "key": "showStatistics",
