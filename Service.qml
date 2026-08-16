@@ -152,7 +152,10 @@ Item {
   }
 
   function loadActivity() {
-    if (!activityEnabled || !statsAvailable || region === "" || activityProcess.running) return
+    if (!activityEnabled || !statsAvailable || region === "") return
+    // Still running when the next tick arrives means it is stuck; reaping it
+    // here is what keeps a wedged poll from stalling the section for good.
+    if (activityProcess.running) activityProcess.running = false
     activityLoading = true
     activityProcess.command = ["python3", scriptPath("scripts/activity.py"),
       "--endpoint", endpoint.id,
@@ -318,11 +321,9 @@ Item {
       if (resolverProcess.running) resolverProcess.running = false
       if (devicesProcess.running) devicesProcess.running = false
       if (statsProcess.running) statsProcess.running = false
-      if (activityProcess.running) activityProcess.running = false
       root.refreshing = false
       root.loadingRules = false
       root.statsLoading = false
-      root.activityLoading = false
     }
   }
 
@@ -413,6 +414,9 @@ Item {
       // Keep the rows already on screen: a failed poll should not blank a log
       // the user is reading.
       var stderr = String(activityStderr.text || "").trim()
+      var stdout = String(activityStdout.text || "").trim()
+      // Reaped mid-flight: no output on either stream, and nothing to say.
+      if (stdout === "" && stderr === "") return
       root.activityError = Model.elide(parsed.error !== "" ? parsed.error : (stderr !== "" ? stderr : "activity unavailable"), 120)
     }
   }
