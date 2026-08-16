@@ -32,29 +32,33 @@ Item {
   readonly property var ruleCount: Model.countRules(rules)
 
   // This machine as Control D sees it, resolved from the DNS resolver it is
-  // actually using rather than from its hostname.
-  property string endpointUid: ""
-  property string endpointTransport: ""
-  // Which local config named the endpoint, and whether a ctrld daemon is
-  // actually running. Both come from the machine: the account keeps a `ctrld`
-  // block on a device long after the daemon has gone.
-  property string resolverSource: ""
-  property bool ctrldActive: false
-  readonly property string resolverLine: Model.resolverLine(resolverSource, ctrldActive,
-    endpoint ? endpoint.ctrldVersion : "")
+  // actually using rather than from its hostname. The probe text is kept whole
+  // because the device list is what turns it into an identity: a device
+  // publishes itself as a DoT name, a DoH URL and its own addresses, and only
+  // the account knows which are which.
+  property string resolverProbe: ""
   property var devices: []
-  readonly property var endpoint: Model.findDevice(devices, endpointUid)
+  readonly property var endpointMatch: Model.matchEndpoint(devices, resolverProbe)
+  readonly property var endpoint: endpointMatch.device
+  readonly property string endpointTransport: endpointMatch.transport
+  readonly property string resolverSource: endpointMatch.source
+  readonly property bool ctrldActive: Model.ctrldActive(resolverProbe)
+  readonly property string resolverLine: Model.resolverLabel(resolverSource, ctrldActive,
+    endpoint ? endpoint.ctrldVersion : "")
+  // The endpoint is named but nothing local says what manages it.
+  readonly property bool resolverUnknown: endpoint !== null && Model.resolverUnknown(resolverSource)
   readonly property string endpointProfileId: endpoint ? endpoint.profileId : ""
-  // A Control D resolver is in use here, even if the device behind it could
-  // not be named (a stale token, a device removed from the account).
-  readonly property bool usingControld: endpointUid !== ""
+  // Control D is answering here even when no device matched: a legacy shared
+  // resolver, an endpoint owned by another account, or a device list we could
+  // not read.
+  readonly property bool usingControld: Model.controldPresent(resolverProbe)
   readonly property bool resolverChecked: _resolverChecked
   property bool _resolverChecked: false
   // Whether the device lookup has answered, which is what separates "still
   // loading" from "asked, and this endpoint is not one of ours".
   property bool devicesChecked: false
   property string devicesError: ""
-  readonly property string endpointState: Model.endpointState(resolverChecked, endpointUid, devicesChecked, endpoint)
+  readonly property string endpointState: Model.endpointState(resolverChecked, usingControld, devicesChecked, endpoint)
 
   // Analytics for this endpoint. Fetched only while the panel is open: the
   // numbers are not visible otherwise, and they cost three requests.
@@ -340,25 +344,28 @@ Item {
     // that the account's device record outlives.
     id: resolverProcess
     running: false
+    // One section per resolver the panel can read. The list is deliberately
+    // short: these are the documented Linux setups, and an endpoint found
+    // anywhere else still shows up under `resolvconf`, which reports itself as
+    // unknown rather than guessing.
     command: ["sh", "-c",
+      "echo @@ctrld; cat /etc/controld/ctrld.toml /etc/ctrld.toml 2>/dev/null; " +
+      "echo @@stubby; cat /etc/stubby/stubby.yml 2>/dev/null; " +
+      "echo @@dnscrypt; cat /etc/dnscrypt-proxy/dnscrypt-proxy.toml 2>/dev/null; " +
+      "echo @@unbound; cat /etc/unbound/unbound.conf /etc/unbound/unbound.conf.d/*.conf 2>/dev/null; " +
+      "echo @@dnsmasq; cat /etc/dnsmasq.conf /etc/dnsmasq.d/* 2>/dev/null; " +
+      "echo @@nm; cat /etc/NetworkManager/NetworkManager.conf /etc/NetworkManager/conf.d/*.conf 2>/dev/null; " +
       "echo @@resolved; resolvectl status 2>/dev/null; " +
       "echo @@resolvconf; cat /etc/resolv.conf 2>/dev/null; " +
-      "echo @@ctrld; cat /etc/controld/ctrld.toml 2>/dev/null; cat /etc/ctrld.toml 2>/dev/null; " +
       "echo @@daemon; systemctl is-active ctrld 2>/dev/null"]
     stdout: StdioCollector { id: resolverStdout; waitForEnd: true }
     onExited: {
-      var found = Model.resolverUid(resolverStdout.text)
+      root.resolverProbe = resolverStdout.text
       root._resolverChecked = true
-      root.endpointUid = found.uid
-      root.endpointTransport = found.transport
-      root.resolverSource = found.source
-      root.ctrldActive = Model.ctrldActive(resolverStdout.text)
-      // No Control D resolver here, so there is no endpoint to name.
-      if (found.uid === "") {
-        root.devices = []
-        root.devicesError = ""
-        root.devicesChecked = true
-      } else if (!devicesProcess.running) {
+      // The device list is what turns the probe into an identity, so it is
+      // fetched whether or not the probe looks like Control D: a device
+      // publishes itself as addresses too, and only the account knows them.
+      if (!devicesProcess.running) {
         root.devicesChecked = false
         devicesProcess.command = cdctlApi("/devices")
         devicesProcess.running = true

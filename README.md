@@ -16,8 +16,8 @@ Read-only for now: it lists, it does not write.
 - Left click opens a keyboard-friendly panel; middle click refreshes
 - Machine facts under the hero, in the built-in panels' key/value idiom: profile, unmatched
   action, protocol, resolver, filter and service counts, and the endpoint ID (click to copy).
-  The resolver row is probed on the machine, so it says `ctrld v1.5.5` only when a daemon is
-  actually running, and `systemd-resolved` when this host holds the endpoint itself
+  The resolver row is probed on the machine, never taken from the account, so it says
+  `ctrld v1.5.5` only when a daemon is actually running
 - STATISTICS for this endpoint: a queries-over-time chart with the blocked share shaded under
   it, totals, and top domains, filters and destinations as meter rows. Pick the window
   (1h/24h/7d/30d) and the verdict (blocked/bypassed/redirected); destinations switch between
@@ -53,11 +53,35 @@ Inside the panel:
 
 `r` names the rules section, so refresh takes the shifted `R`.
 
-Endpoint detection reads `resolvectl status`, then `/etc/resolv.conf`, then a local `ctrld`
-config, looking for `<uid>.dns.controld.com` or `dns.controld.com/<uid>`: that id is the
-device id, so the match is exact. Legacy shared resolvers carry no id and fall back to the
-account line. Naming the endpoint needs `cdctl api /devices`, the escape hatch, so that one
-call reads raw upstream fields rather than the CLI's normalized schema.
+## Endpoint detection
+
+Each device publishes itself four ways: a DoT hostname, a DoH URL, and its own IPv6 and legacy
+IPv4 addresses. All four carry the device id, so the panel reads the local DNS config and looks
+for any of them in `cdctl api /devices` (the escape hatch, so it reads raw upstream fields
+rather than the CLI's normalized schema). Matching against the device list rather than a
+hostname pattern is what lets a plain IPv6 resolver identify the endpoint with no proxy at all.
+
+The configs it reads, and the resolver each one implies:
+
+| Config | Resolver |
+| --- | --- |
+| `/etc/controld/ctrld.toml`, `/etc/ctrld.toml` | `ctrld` |
+| `/etc/stubby/stubby.yml` | `stubby` |
+| `/etc/dnscrypt-proxy/dnscrypt-proxy.toml` | `dnscrypt-proxy` |
+| `/etc/unbound/unbound.conf`, `unbound.conf.d/*.conf` | `unbound` |
+| `/etc/dnsmasq.conf`, `/etc/dnsmasq.d/*` | `dnsmasq` |
+| `/etc/NetworkManager/NetworkManager.conf`, `conf.d/*.conf` | `NetworkManager` |
+| `resolvectl status` | `systemd-resolved` |
+| `/etc/resolv.conf` | `unknown` |
+
+The first config that names the endpoint wins, so a manager gets credit over whatever it
+generates downstream. `ctrld` is also confirmed with `systemctl is-active`, because the account
+keeps a `ctrld` block on a device long after the daemon is gone.
+
+An endpoint found only in `/etc/resolv.conf` means something set it that this list does not
+cover: the row reads `unknown` and links to the issue tracker. **If that is your setup, please
+open an issue or a PR** so it can be added. A router or network filtering upstream is not
+visible from the machine at all, and no local probe can change that.
 
 Statistics and activity come from Control D's analytics origin
 (`<region>.analytics.controld.com`), a different host than the REST API and so out of reach of

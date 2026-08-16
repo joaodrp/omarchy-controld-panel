@@ -9,7 +9,7 @@ const vm = require("node:vm")
 
 const src = fs.readFileSync(path.join(__dirname, "..", "Model.js"), "utf8")
 const M = {}
-vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, nextProfile, groupRules, flattenGroups, countRules, actionGlyph, ruleDetail, profileDetail, accountLine, resolverUid, ctrldActive, resolverLine, parseDevices, findDevice, endpointLine, endpointState, ENDPOINT_PENDING, ENDPOINT_NONE, ENDPOINT_UNKNOWN, ENDPOINT_MACHINE, activeProfile, defaultActionLine, parseStats, formatCount, blockedShare, windowLabel, meterRatio, sparkPoints, filterLabel, countryName, actionTotal, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
+vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, nextProfile, groupRules, flattenGroups, countRules, actionGlyph, ruleDetail, profileDetail, accountLine, matchEndpoint, controldPresent, ctrldActive, resolverLabel, resolverUnknown, parseDevices, findDevice, endpointLine, endpointState, ENDPOINT_PENDING, ENDPOINT_NONE, ENDPOINT_UNKNOWN, ENDPOINT_MACHINE, activeProfile, defaultActionLine, parseStats, formatCount, blockedShare, windowLabel, meterRatio, sparkPoints, filterLabel, countryName, actionTotal, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
 const m = M.__exports
 
 // vm-realm arrays fail strict deepEqual on prototype identity; compare by value.
@@ -132,62 +132,106 @@ test("groupRules with no folders", () => {
   same(rows.map(r => r.kind), ["rule", "rule"])
 })
 
-test("resolverUid reads the endpoint id from the local resolver", () => {
-  const resolved = "Current DNS Server: 76.76.2.22#dev0000001.dns.controld.com"
-  same(m.resolverUid(resolved), { uid: "dev0000001", transport: "DNS-over-TLS", source: "resolved" })
-  same(m.resolverUid("https://dns.controld.com/dev0000001"), { uid: "dev0000001", transport: "DNS-over-HTTPS", source: "resolved" })
-  // Legacy shared resolvers carry no endpoint id.
-  same(m.resolverUid("nameserver 76.76.2.11 p2.freedns.controld.com"), { uid: "", transport: "", source: "" })
-  same(m.resolverUid("nameserver 1.1.1.1"), { uid: "", transport: "", source: "" })
+// The probe the service runs, as Model sees it: one labelled section per
+// resolver we know how to read.
+const probe = (s) => Object.keys(s).map(k => `@@${k}\n${s[k]}\n`).join("")
+
+const probedDevices = m.parseDevices(JSON.stringify({ body: { devices: [
+  { device_id: "dev0000001", name: "laptop", status: 1, profile: { PK: "p1", name: "Home" },
+    resolvers: { uid: "dev0000001", doh: "https://dns.controld.com/dev0000001",
+      dot: "dev0000001.dns.controld.com",
+      v6: ["2606:1a40:0:19:1111:2222:3333:0", "2606:1a40:1:19:1111:2222:3333:0"] } },
+  { device_id: "dev0000002", name: "desktop", status: 1, profile: { PK: "p1", name: "Home" },
+    resolvers: { uid: "dev0000002", doh: "https://dns.controld.com/dev0000002",
+      dot: "dev0000002.dns.controld.com", v4: ["76.76.20.20"],
+      v6: ["2606:1a40:0:9:4444:5555:6666:0"] } }
+] } })).devices
+
+function matched(text, devices) {
+  const r = m.matchEndpoint(devices === undefined ? probedDevices : devices, text)
+  return { id: r.device ? r.device.id : "", source: r.source, transport: r.transport }
+}
+
+test("matchEndpoint identifies the device by any resolver form it publishes", () => {
+  // DoT hostname, the form systemd-resolved takes.
+  same(matched(probe({ resolved: "Current DNS Server: 76.76.2.22#dev0000001.dns.controld.com" })),
+    { id: "dev0000001", source: "resolved", transport: "DNS-over-TLS" })
+
+  // DoH URL in ctrld's own config, with resolved only pointing at its listener.
+  same(matched(probe({ resolved: "Current DNS Server: 127.0.0.1",
+    ctrld: 'upstream = "https://dns.controld.com/dev0000001"' })),
+    { id: "dev0000001", source: "ctrld", transport: "DNS-over-HTTPS" })
+
+  // The device-unique IPv6 resolvers, which name the endpoint with no proxy at
+  // all and which a hostname match cannot see.
+  same(matched(probe({ resolvconf: "nameserver 2606:1a40:1:19:1111:2222:3333:0" })),
+    { id: "dev0000001", source: "resolvconf", transport: "IPv6" })
+
+  // A legacy IPv4 resolver, and a different device, so this is a real match and
+  // not the first entry winning.
+  same(matched(probe({ dnsmasq: "server=76.76.20.20" })),
+    { id: "dev0000002", source: "dnsmasq", transport: "IPv4" })
+
+  same(matched(probe({ stubby: 'tls_auth_name: "dev0000001.dns.controld.com"' })),
+    { id: "dev0000001", source: "stubby", transport: "DNS-over-TLS" })
+
+  // Nothing Control D anywhere.
+  same(matched(probe({ resolved: "Current DNS Server: 1.1.1.1", resolvconf: "nameserver 1.1.1.1" })),
+    { id: "", source: "", transport: "" })
+
+  // No device list yet: nothing can be named, whatever the config says.
+  same(matched(probe({ resolved: "dev0000001.dns.controld.com" }), []),
+    { id: "", source: "", transport: "" })
 })
 
-const probe = (resolved, resolvconf, ctrld, daemon) =>
-  `@@resolved\n${resolved}\n@@resolvconf\n${resolvconf}\n@@ctrld\n${ctrld}\n@@daemon\n${daemon}\n`
+test("matchEndpoint credits the config that owns the endpoint", () => {
+  // Both name it. ctrld is the one actually talking to Control D; resolved is
+  // downstream of it.
+  same(matched(probe({ ctrld: "dev0000001.dns.controld.com",
+    resolved: "dev0000001.dns.controld.com" })).source, "ctrld")
+  // A manager's own config beats the stub file it generates.
+  same(matched(probe({ nm: "dev0000001.dns.controld.com",
+    resolvconf: "dev0000001.dns.controld.com" })).source, "nm")
+})
 
-test("resolverUid attributes the endpoint to the config that carries it", () => {
-  // systemd-resolved pointed straight at the endpoint: no daemon in the path.
-  same(m.resolverUid(probe(
-    "Current DNS Server: 76.76.2.22#dev0000001.dns.controld.com",
-    "nameserver 127.0.0.53", "", "inactive")),
-    { uid: "dev0000001", transport: "DNS-over-TLS", source: "resolved" })
-
-  // ctrld owns the endpoint and resolved only points at its local listener, so
-  // the uid in ctrld's config is the one that counts.
-  same(m.resolverUid(probe(
-    "Current DNS Server: 127.0.0.1",
-    "nameserver 127.0.0.1",
-    'upstream = "https://dns.controld.com/dev0000001"',
-    "/usr/bin/ctrld\nactive")),
-    { uid: "dev0000001", transport: "DNS-over-HTTPS", source: "ctrld" })
-
-  // Only the stub file names it.
-  same(m.resolverUid(probe("Current DNS Server: 127.0.0.53",
-    "nameserver 76.76.2.22#dev0000001.dns.controld.com", "", "inactive")),
-    { uid: "dev0000001", transport: "DNS-over-TLS", source: "static" })
-
-  same(m.resolverUid(probe("Current DNS Server: 1.1.1.1", "nameserver 1.1.1.1", "", "inactive")),
-    { uid: "", transport: "", source: "" })
+test("controldPresent sees Control D even when no device matches", () => {
+  // A device that is not in this account.
+  assert.equal(m.controldPresent(probe({ resolved: "notmine.dns.controld.com" })), true)
+  // Legacy shared resolvers, which carry no device id at all.
+  assert.equal(m.controldPresent(probe({ resolvconf: "nameserver 76.76.2.11 p2.freedns.controld.com" })), true)
+  // Control D's anycast addresses and IPv6 prefix.
+  assert.equal(m.controldPresent(probe({ resolvconf: "nameserver 76.76.2.22" })), true)
+  assert.equal(m.controldPresent(probe({ resolvconf: "nameserver 2606:1a40:0:5:1:2:3:0" })), true)
+  assert.equal(m.controldPresent(probe({ resolvconf: "nameserver 1.1.1.1" })), false)
 })
 
 test("ctrldActive answers from the machine, not from the account", () => {
-  assert.equal(m.ctrldActive(probe("", "", "", "/usr/bin/ctrld\nactive")), true)
+  assert.equal(m.ctrldActive(probe({ daemon: "active" })), true)
   // Installed but not running is not in use.
-  assert.equal(m.ctrldActive(probe("", "", "", "/usr/bin/ctrld\ninactive")), false)
-  assert.equal(m.ctrldActive(probe("", "", "", "inactive")), false)
+  assert.equal(m.ctrldActive(probe({ daemon: "inactive" })), false)
   // "activating" is not yet answering queries.
-  assert.equal(m.ctrldActive(probe("", "", "", "activating")), false)
+  assert.equal(m.ctrldActive(probe({ daemon: "activating" })), false)
   assert.equal(m.ctrldActive(""), false)
 })
 
-test("resolverLine names what talks to Control D", () => {
-  assert.equal(m.resolverLine("ctrld", true, "v1.5.5"), "ctrld v1.5.5")
-  // A running daemon with no version reported by the account.
-  assert.equal(m.resolverLine("ctrld", true, ""), "ctrld")
+test("resolverLabel names what talks to Control D, or admits it cannot", () => {
+  assert.equal(m.resolverLabel("ctrld", true, "v1.5.5"), "ctrld v1.5.5")
+  // A running daemon the account reports no version for.
+  assert.equal(m.resolverLabel("ctrld", true, ""), "ctrld")
   // The account still carries a ctrld version for a device that no longer runs
   // one: the local probe wins, which is the whole point of this row.
-  assert.equal(m.resolverLine("resolved", false, "v1.5.5"), "systemd-resolved")
-  assert.equal(m.resolverLine("static", false, ""), "resolv.conf")
-  assert.equal(m.resolverLine("", false, ""), "--")
+  assert.equal(m.resolverLabel("resolved", false, "v1.5.5"), "systemd-resolved")
+  assert.equal(m.resolverLabel("nm", false, ""), "NetworkManager")
+  assert.equal(m.resolverLabel("dnscrypt", false, ""), "dnscrypt-proxy")
+  assert.equal(m.resolverLabel("stubby", false, ""), "stubby")
+  assert.equal(m.resolverLabel("unbound", false, ""), "unbound")
+  assert.equal(m.resolverLabel("dnsmasq", false, ""), "dnsmasq")
+  // Something wrote the stub and we cannot tell what: the honest answer, and
+  // the one the panel offers to have reported.
+  assert.equal(m.resolverLabel("resolvconf", false, ""), "unknown")
+  assert.equal(m.resolverLabel("", false, ""), "--")
+  assert.equal(m.resolverUnknown("resolvconf"), true)
+  assert.equal(m.resolverUnknown("resolved"), false)
 })
 
 test("parseDevices reads the raw upstream body", () => {
@@ -224,16 +268,16 @@ test("findDevice matches the endpoint id, and endpointLine reads it", () => {
 test("endpointState says why this machine has no endpoint", () => {
   const device = { id: "abc123", name: "laptop" }
   // Nothing answered yet.
-  assert.equal(m.endpointState(false, "", false, null), m.ENDPOINT_PENDING)
-  // A Control D resolver is configured but the device list is still out.
-  assert.equal(m.endpointState(true, "abc123", false, null), m.ENDPOINT_PENDING)
+  assert.equal(m.endpointState(false, false, false, null), m.ENDPOINT_PENDING)
+  // Control D is answering but the device list is still out.
+  assert.equal(m.endpointState(true, true, false, null), m.ENDPOINT_PENDING)
   // No Control D resolver here, so there is nothing to identify.
-  assert.equal(m.endpointState(true, "", true, null), m.ENDPOINT_NONE)
+  assert.equal(m.endpointState(true, false, true, null), m.ENDPOINT_NONE)
   // Resolver and device agree.
-  assert.equal(m.endpointState(true, "abc123", true, device), m.ENDPOINT_MACHINE)
-  // A resolver we cannot name: the lookup failed, or the endpoint is not in
-  // this account. Distinct from having no resolver at all.
-  assert.equal(m.endpointState(true, "abc123", true, null), m.ENDPOINT_UNKNOWN)
+  assert.equal(m.endpointState(true, true, true, device), m.ENDPOINT_MACHINE)
+  // Control D is answering but no device matched: the lookup failed, or the
+  // endpoint is not in this account. Distinct from having no resolver at all.
+  assert.equal(m.endpointState(true, true, true, null), m.ENDPOINT_UNKNOWN)
 })
 
 test("activeProfile prefers the endpoint's profile over the browsed one", () => {

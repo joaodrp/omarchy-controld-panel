@@ -101,8 +101,10 @@ precedents this panel follows:
   helpers refuse to guess it: a wrong region is a host that does not exist or is not yours
 - **`cdctl api` rejects `--json`** and emits the upstream body verbatim, so it needs its own
   command builder and its field names are upstream's, not the CLI's normalized schema
-- **The endpoint is identified by resolver, not hostname.** A device's DoT host and DoH path both
-  carry its device id, so `<uid>.dns.controld.com` names the endpoint exactly
+- **The endpoint is identified by resolver, not hostname.** A device publishes itself four ways
+  (DoT host, DoH URL, its own v6 and legacy v4 addresses), all carrying the device id. Matching
+  is done against the device list, not a hostname pattern, so the address forms work too. Adding
+  a resolver means one more section in the probe and one more entry in `RESOLVERS`
 - **`Shape` with `layer.enabled` loses its antialiasing** when scaled down: the layer caches at
   the path's own size and Qt does not mipmap it
 - **A Repeater shares its parent with its delegates**, so rows cannot be found by counting

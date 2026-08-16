@@ -44,6 +44,8 @@ Panel {
   // Where to send someone who has neither the CLI nor an account set up.
   readonly property string guideUrl: "https://github.com/joaodrp/omarchy-controld-panel#readme"
   readonly property string dashboardUrl: "https://controld.com/dashboard"
+  // Where an unrecognised setup goes, so the next person with it is covered.
+  readonly property string issuesUrl: "https://github.com/joaodrp/omarchy-controld-panel/issues"
   // The panel is explaining itself rather than showing content.
   readonly property bool showEmptyState: (controld.checkedInstall && !controld.installed)
     || (controld.installed && controld.needsAuth)
@@ -552,8 +554,8 @@ Panel {
           EmptyState {
             width: parent.width
             visible: root.unprotected
-            title: "This machine is not on Control D"
-            message: "Its DNS resolves somewhere else, so there are no queries, rules or statistics to report here. Point it at one of your endpoints and reopen this panel."
+            title: "No Control D resolver on this machine"
+            message: "Nothing in this host's DNS config points at Control D, so there is no endpoint to report on. A router or network that filters upstream would not show up here either."
             actionText: "Open setup guide"
             actionUrl: root.guideUrl
           }
@@ -594,9 +596,15 @@ Panel {
               InfoLabel { text: "Protocol" }
               DetailValue { text: controld.endpointTransport !== "" ? controld.endpointTransport : "--" }
               // What on this machine talks to Control D, probed here rather
-              // than taken from the account's record of the device.
+              // than taken from the account's record of the device. When the
+              // probe names the endpoint but nothing that manages it, the row
+              // says so and offers to have the setup reported.
               InfoLabel { text: "Resolver" }
-              DetailValue { text: controld.resolverLine }
+              DetailValue {
+                text: controld.resolverLine
+                linkUrl: controld.resolverUnknown ? root.issuesUrl : ""
+                tooltipText: "Resolver not recognised. Report your setup on GitHub so it can be added."
+              }
 
               InfoLabel { text: "Filters" }
               DetailValue { text: controld.activeProfile ? String(controld.activeProfile.enabledFilters) : "--" }
@@ -1049,21 +1057,25 @@ Panel {
   component DetailValue: InfoValue {
     id: detailValue
     property bool copyable: false
+    // Set instead of `copyable` when the value is worth acting on rather than
+    // taking: the glyph and the click follow.
+    property string linkUrl: ""
     property string tooltipText: "Copy to clipboard"
+    readonly property bool actionable: (copyable || linkUrl !== "") && text !== ""
 
     Layout.fillWidth: true
     Layout.preferredWidth: 4
     horizontalAlignment: Text.AlignRight
     // Reserve the glyph's width whether or not it is showing, so the value
     // does not shift sideways under the pointer.
-    rightPadding: copyable ? copyGlyph.width + Style.space(4) : 0
+    rightPadding: actionable ? copyGlyph.width + Style.space(4) : 0
 
     Text {
       id: copyGlyph
-      visible: detailValue.copyable && detailValue.text !== ""
+      visible: detailValue.actionable
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
-      text: "󰆏"
+      text: detailValue.linkUrl !== "" ? "󰏌" : "󰆏"
       color: detailValue.color
       opacity: valueMouse.containsMouse ? 1.0 : 0.45
       font.family: root.fontFamily
@@ -1077,10 +1089,13 @@ Panel {
     MouseArea {
       id: valueMouse
       anchors.fill: parent
-      enabled: detailValue.copyable && detailValue.text !== ""
+      enabled: detailValue.actionable
       hoverEnabled: enabled
       cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-      onClicked: controld.copyToClipboard(detailValue.text)
+      onClicked: {
+        if (detailValue.linkUrl !== "") Quickshell.execDetached(["omarchy-launch-browser", detailValue.linkUrl])
+        else controld.copyToClipboard(detailValue.text)
+      }
     }
 
     PanelToolTip {

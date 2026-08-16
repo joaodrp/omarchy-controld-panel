@@ -19,6 +19,16 @@ function num(value, fallback) {
   return isFinite(n) ? n : (fallback === undefined ? 0 : fallback)
 }
 
+function strList(value) {
+  if (!(value instanceof Array)) return []
+  var out = []
+  for (var i = 0; i < value.length; i++) {
+    var item = str(value[i])
+    if (item !== "") out.push(item)
+  }
+  return out
+}
+
 function parseJson(raw) {
   var text = str(raw).trim()
   if (text === "") return { ok: false, value: null, error: "empty output" }
@@ -244,39 +254,84 @@ function countRules(rules) {
 // device id, so `<uid>.dns.controld.com` or `dns.controld.com/<uid>` in the
 // local DNS config names the endpoint exactly. Legacy shared resolvers
 // (p1/p2/family.freedns.controld.com) carry no id and match nothing.
-// The resolver probe arrives in named sections, because the same uid means
-// different things depending on which config holds it: in ctrld's config a
-// daemon is doing the talking, in resolved's this machine talks to Control D
-// directly. An undelimited blob is read as resolved's, so the parser stays
-// usable on a plain chunk of config.
+// The resolvers this panel knows how to read, most specific first. Order is
+// the attribution rule: when two configs name the endpoint, the one doing the
+// talking wins, and everything downstream of it is only repeating what it was
+// told. `resolvconf` is last because the stub file names no manager at all.
+var RESOLVERS = [
+  { key: "ctrld", label: "ctrld" },
+  { key: "stubby", label: "stubby" },
+  { key: "dnscrypt", label: "dnscrypt-proxy" },
+  { key: "unbound", label: "unbound" },
+  { key: "dnsmasq", label: "dnsmasq" },
+  { key: "nm", label: "NetworkManager" },
+  { key: "resolved", label: "systemd-resolved" },
+  { key: "resolvconf", label: "unknown" }
+]
+
+// Anything Control D answers from, whether or not it names a device: the
+// shared legacy resolvers, the anycast addresses, and the prefix every
+// device-specific v6 resolver sits in.
+var CONTROLD_MARKER = /(dns\.controld\.com|\b2606:1a40:|\b76\.76\.(?:2|10)\.(?:2|11|22)\b)/i
+
+// The probe arrives in labelled sections, because the same endpoint means
+// different things depending on which config holds it. An undelimited blob is
+// read as the stub file's, the one source that claims nothing about who wrote
+// it.
 function probeSections(text) {
-  var out = { resolved: "", resolvconf: "", ctrld: "", daemon: "" }
+  var out = { daemon: "" }
+  for (var r = 0; r < RESOLVERS.length; r++) out[RESOLVERS[r].key] = ""
   var raw = str(text)
-  var parts = raw.split(/^@@(resolved|resolvconf|ctrld|daemon)$/m)
-  if (parts.length < 3) { out.resolved = raw; return out }
-  for (var i = 1; i + 1 < parts.length; i += 2) out[parts[i]] = parts[i + 1]
+  var parts = raw.split(/^@@([a-z]+)$/m)
+  if (parts.length < 3) { out.resolvconf = raw; return out }
+  for (var i = 1; i + 1 < parts.length; i += 2) {
+    if (out.hasOwnProperty(parts[i])) out[parts[i]] = parts[i + 1]
+  }
   return out
 }
 
-function matchUid(text) {
-  var haystack = str(text)
-  var dot = haystack.match(/\b([a-z0-9]{6,})\.dns\.controld\.com\b/i)
-  if (dot) return { uid: dot[1].toLowerCase(), transport: "DNS-over-TLS" }
-  var doh = haystack.match(/dns\.controld\.com\/([a-z0-9]{6,})\b/i)
-  if (doh) return { uid: doh[1].toLowerCase(), transport: "DNS-over-HTTPS" }
-  return { uid: "", transport: "" }
+function hasText(haystack, needle) {
+  var want = str(needle)
+  return want !== "" && str(haystack).toLowerCase().indexOf(want.toLowerCase()) !== -1
 }
 
-function resolverUid(text) {
+// Every form a device publishes itself in, richest first so the transport a
+// match reports is the one actually in use.
+function deviceIdentities(device) {
+  var out = []
+  if (device.dot !== "") out.push({ value: device.dot, transport: "DNS-over-TLS" })
+  if (device.doh !== "") out.push({ value: device.doh, transport: "DNS-over-HTTPS" })
+  for (var i = 0; i < device.v6.length; i++) out.push({ value: device.v6[i], transport: "IPv6" })
+  for (var j = 0; j < device.v4.length; j++) out.push({ value: device.v4[j], transport: "IPv4" })
+  return out
+}
+
+// Which of this account's devices this machine resolves through, and which
+// local config says so. Matching against the device list rather than against a
+// hostname pattern is what lets the plain IPv6 and legacy IPv4 resolvers name
+// the endpoint too: those carry the device id in an address, not in a name.
+function matchEndpoint(devices, text) {
   var probe = probeSections(text)
-  // ctrld first: when it is running, resolved only points at its local
-  // listener, so resolved's config cannot name the endpoint and ctrld's can.
-  var order = [["ctrld", probe.ctrld], ["resolved", probe.resolved], ["static", probe.resolvconf]]
-  for (var i = 0; i < order.length; i++) {
-    var found = matchUid(order[i][1])
-    if (found.uid !== "") return { uid: found.uid, transport: found.transport, source: order[i][0] }
+  var list = devices || []
+  for (var r = 0; r < RESOLVERS.length; r++) {
+    var section = probe[RESOLVERS[r].key]
+    if (str(section) === "") continue
+    for (var d = 0; d < list.length; d++) {
+      var forms = deviceIdentities(list[d])
+      for (var f = 0; f < forms.length; f++) {
+        if (hasText(section, forms[f].value))
+          return { device: list[d], source: RESOLVERS[r].key, transport: forms[f].transport }
+      }
+    }
   }
-  return { uid: "", transport: "", source: "" }
+  return { device: null, source: "", transport: "" }
+}
+
+// Control D is answering here even though no device matched: a legacy shared
+// resolver, an endpoint owned by another account, or a device list we could
+// not read. Distinct from Control D not being in the picture at all.
+function controldPresent(text) {
+  return CONTROLD_MARKER.test(str(text))
 }
 
 // Whether a ctrld daemon is actually running here. The account keeps a `ctrld`
@@ -288,14 +343,20 @@ function ctrldActive(text) {
 
 // What on this machine talks to Control D. "Daemon" would presuppose one:
 // systemd-resolved can hold the endpoint itself, with nothing in between.
-function resolverLine(source, daemonActive, ctrldVersion) {
+function resolverLabel(source, daemonActive, ctrldVersion) {
   if (source === "ctrld" || daemonActive) {
     var version = str(ctrldVersion)
     return version !== "" ? "ctrld " + version : "ctrld"
   }
-  if (source === "resolved") return "systemd-resolved"
-  if (source === "static") return "resolv.conf"
+  for (var i = 0; i < RESOLVERS.length; i++)
+    if (RESOLVERS[i].key === source) return RESOLVERS[i].label
   return "--"
+}
+
+// The endpoint is named but nothing says what manages it, which is the case
+// worth hearing about: the panel offers to have the setup reported.
+function resolverUnknown(source) {
+  return source === "resolvconf"
 }
 
 function normalizeDevice(d) {
@@ -313,7 +374,11 @@ function normalizeDevice(d) {
     // 0 none, 1 some, 2 full — analytics is off for this endpoint at 0.
     analytics: num(d.stats, 0),
     dot: str(resolvers.dot),
-    doh: str(resolvers.doh)
+    doh: str(resolvers.doh),
+    // Device-specific addresses, which name the endpoint with no proxy in the
+    // way. Optional per the API contract, so both default to empty.
+    v4: strList(resolvers.v4),
+    v6: strList(resolvers.v6)
   }
 }
 
@@ -352,9 +417,9 @@ var ENDPOINT_NONE = "none"
 var ENDPOINT_UNKNOWN = "unknown"
 var ENDPOINT_MACHINE = "machine"
 
-function endpointState(resolverChecked, uid, devicesChecked, endpoint) {
+function endpointState(resolverChecked, controldFound, devicesChecked, endpoint) {
   if (!resolverChecked) return ENDPOINT_PENDING
-  if (str(uid) === "") return ENDPOINT_NONE
+  if (!controldFound) return ENDPOINT_NONE
   if (endpoint) return ENDPOINT_MACHINE
   // A resolver we cannot name. Either the device lookup has not answered yet,
   // or it answered and this endpoint is not in the account.
