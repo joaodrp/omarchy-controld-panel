@@ -30,8 +30,10 @@ Read-only for now: it lists, it does not write.
   action, spoof/redirect target, and disabled state. Capped like every other list; the caption
   says how many are hidden
 - ACTIVITY: this endpoint's most recent lookups, refreshed every 15s while the panel is open.
-  The A/AAAA pair of one lookup collapses into a single row. Drawn short with a `+N` at the
-  foot: one poll already holds up to 20, so expanding costs no extra request
+  Filtered to **blocked** by default, which is the verdict worth acting on when a site will not
+  load; `All` shows every verdict. Filtering happens server side, so a blocked list is a full
+  list. The A/AAAA pair of one lookup collapses into a single row. Drawn short with a `+N` at
+  the foot: one poll already holds up to 20, so expanding costs no extra request
 - Copy a rule's hostname to the clipboard
 - Every section needs an identified endpoint. Without one the panel shows nothing but the
   reason: no Control D resolver here, a resolver whose endpoint is not in this account, or a

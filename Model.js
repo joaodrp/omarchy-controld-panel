@@ -561,6 +561,24 @@ function actionOptions() {
   ]
 }
 
+// What the activity log is filtered to. Blocked is the default because it is
+// the verdict worth acting on: a page that is all blocked is the list you came
+// to read when a site did not load. Bypassed is left out on purpose, since it
+// is most of the log and says nothing happened; "All" still reaches it.
+function activityFilterOptions() {
+  return [
+    { value: "blocked", label: "Blocked" },
+    { value: "all", label: "All" }
+  ]
+}
+
+// The `--action` the log is fetched with. "all" sends none, so the API returns
+// every verdict; anything else narrows it server side, which is why filtering
+// costs nothing and still fills the list.
+function activityActionArg(filter) {
+  return str(filter) === "all" ? "" : String(ACTION_BLOCKED)
+}
+
 function actionTotal(stats, action) {
   if (!stats) return 0
   var a = num(action)

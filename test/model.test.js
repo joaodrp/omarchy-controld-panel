@@ -9,7 +9,7 @@ const vm = require("node:vm")
 
 const src = fs.readFileSync(path.join(__dirname, "..", "Model.js"), "utf8")
 const M = {}
-vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, nextProfile, groupRules, flattenGroups, countRules, limitRuleRows, rulesCaption, actionGlyph, ruleDetail, profileDetail, accountLine, matchEndpoint, controldPresent, ctrldActive, resolverLabel, resolverUnknown, parseDevices, findDevice, endpointLine, endpointState, ENDPOINT_PENDING, ENDPOINT_NONE, ENDPOINT_UNKNOWN, ENDPOINT_MACHINE, activeProfile, defaultActionLine, parseStats, formatCount, blockedShare, windowLabel, meterRatio, sparkPoints, filterLabel, countryName, actionTotal, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
+vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, nextProfile, groupRules, flattenGroups, countRules, limitRuleRows, rulesCaption, activityFilterOptions, activityActionArg, actionGlyph, ruleDetail, profileDetail, accountLine, matchEndpoint, controldPresent, ctrldActive, resolverLabel, resolverUnknown, parseDevices, findDevice, endpointLine, endpointState, ENDPOINT_PENDING, ENDPOINT_NONE, ENDPOINT_UNKNOWN, ENDPOINT_MACHINE, activeProfile, defaultActionLine, parseStats, formatCount, blockedShare, windowLabel, meterRatio, sparkPoints, filterLabel, countryName, actionTotal, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
 const m = M.__exports
 
 // vm-realm arrays fail strict deepEqual on prototype identity; compare by value.
@@ -141,6 +141,15 @@ test("limitRuleRows caps rules, not rows, and drops headers left with nothing", 
   // No cap.
   same(m.limitRuleRows(rows, 0).map(r => r.kind), rows.map(r => r.kind))
   same(m.limitRuleRows(null, 3), [])
+})
+
+test("activityActionArg narrows the log server side, or does not", () => {
+  same(m.activityFilterOptions().map(o => o.value), ["blocked", "all"])
+  // Anything but "all" narrows, so an unset or junk filter still lands on the
+  // verdict the section is for rather than showing everything.
+  assert.equal(m.activityActionArg("blocked"), "0")
+  assert.equal(m.activityActionArg(""), "0")
+  assert.equal(m.activityActionArg("all"), "")
 })
 
 test("rulesCaption says what is hidden only when something is", () => {

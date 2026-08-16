@@ -82,10 +82,13 @@ Item {
   readonly property bool statsAvailable: endpoint !== null && endpointAnalytics > 0
 
   // The endpoint's most recent lookups. Polled only while the panel is open,
-  // and faster than the rest, since "recent" is the whole point.
+  // and faster than the rest, since "recent" is the whole point. Filtered to
+  // blocked by default: that is the verdict worth reading, and the one a site
+  // that will not load sends you looking for.
   property var activity: []
   property bool activityLoading: false
   property string activityError: ""
+  property string activityFilter: "blocked"
 
   property bool refreshing: false
   property bool loadingRules: false
@@ -177,12 +180,23 @@ Item {
     // here is what keeps a wedged poll from stalling the section for good.
     if (activityProcess.running) activityProcess.running = false
     activityLoading = true
-    activityProcess.command = ["python3", scriptPath("scripts/activity.py"),
+    // How many to keep is the helper's business: it hands back a whole page so
+    // the panel can expand into it without asking again.
+    var args = ["python3", scriptPath("scripts/activity.py"),
       "--endpoint", endpoint.id,
-      // How many to keep is the helper's business: it hands back a whole
-      // page so the panel can expand into it without asking again.
       "--region", region]
+    var action = Model.activityActionArg(activityFilter)
+    if (action !== "") args = args.concat(["--action", action])
+    activityProcess.command = args
     activityProcess.running = true
+  }
+
+  function setActivityFilter(value) {
+    var next = String(value || "")
+    if (next === "" || next === activityFilter) return
+    activityFilter = next
+    activity = []
+    loadActivity()
   }
 
   function setStatsWindow(hours) {

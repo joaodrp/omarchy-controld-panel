@@ -341,6 +341,7 @@ Panel {
     cursorActive = false
     cursorKey = "header"
     activityExpanded = false
+    controld.setActivityFilter("blocked")
     pointerGate.reset()
     if (panelFlick) panelFlick.contentY = 0
     controld.refresh()
@@ -886,11 +887,42 @@ Panel {
             width: parent.width
             spacing: Style.space(8)
 
-            SectionTitle {
+            // The verdict governs the whole log, so it sits with the
+            // section's own title, as the window does for statistics.
+            RowLayout {
               width: parent.width
-              text: "ACTIVITY"
-              caption: controld.activityError !== "" ? controld.activityError
-                : (controld.activity.length === 0 ? "no queries yet" : "")
+              spacing: Style.space(8)
+
+              PanelSectionHeader {
+                text: "ACTIVITY"
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+              }
+
+              Item { Layout.fillWidth: true }
+
+              ButtonGroup {
+                options: Model.activityFilterOptions()
+                value: controld.activityFilter
+                foreground: root.foreground
+                accent: Color.accent
+                fontFamily: root.fontFamily
+                fontSize: Style.font.caption
+                onChanged: function(v) { controld.setActivityFilter(v) }
+              }
+            }
+
+            Text {
+              width: parent.width
+              visible: text !== ""
+              text: controld.activityError !== "" ? controld.activityError
+                : (controld.activity.length === 0
+                  ? (controld.activityFilter === "blocked" ? "nothing blocked in this window" : "no queries yet")
+                  : "")
+              color: controld.activityError !== "" ? root.urgent : root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              wrapMode: Text.WordWrap
             }
 
             Column {

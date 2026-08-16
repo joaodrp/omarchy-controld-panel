@@ -75,6 +75,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--endpoint", required=True, help="device id to report on")
     parser.add_argument("--region", required=True, help="account region, as `cdctl auth status` reports it")
+    parser.add_argument("--action", type=int, default=None,
+                        help="keep only this verdict: 0 blocked, 1 bypassed, 2 redirected. "
+                             "Omit for every verdict")
     parser.add_argument("--rows", type=int, default=MAX_ROWS,
                         help=f"how many queries to keep after collapsing, at most {MAX_ROWS}")
     parser.add_argument("--hours", type=int, default=6, help="how far back to look for them")
@@ -86,6 +89,11 @@ def main():
         # Ask for more than we keep: collapsing several raw rows into one means
         # a page of 100 can be worth far fewer entries.
         params = dict(api.window(args.hours, args.endpoint), pageSize=PAGE_SIZE)
+        # Narrowing server side is what keeps the list full: a page filtered to
+        # blocked is a page of blocked, not the handful that survive a client
+        # side filter.
+        if args.action is not None:
+            params["action"] = args.action
         body = api.get(api.host_for(args.region), "/v2/activity-log", params, token)
     except RuntimeError as exc:
         json.dump({"ok": False, "error": str(exc)}, sys.stdout)
