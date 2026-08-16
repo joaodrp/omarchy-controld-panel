@@ -44,6 +44,16 @@ omarchy plugin add https://github.com/joaodrp/omarchy-controld-panel.git --enabl
 
 Move it with `omarchy bar move io.github.joaodrp.controld --section right`.
 
+## Icons
+
+The panel uses the Control D dashboard's own icons, kept as single-color SVGs under `assets/`
+and tinted to the active Omarchy theme at runtime (`DashIcon.qml`), so one file serves every
+theme. Available names: `profiles`, `endpoints`, `analytics`, `statistics`, `activity`,
+`domain-test`, `preferences`, `rules`, `filters`, `services`, `options`. The bar and hero mark
+is the Control D logo, drawn natively from its paths in `ControldIcon.qml`.
+
+The artwork belongs to Control D; this project is not affiliated with them.
+
 ## Settings
 
 Set through the bar's widget settings, or inline on the widget's `shell.json` entry:

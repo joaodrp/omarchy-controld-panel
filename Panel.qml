@@ -380,10 +380,10 @@ Panel {
             width: parent.width
             spacing: Style.space(10)
 
-            PanelSectionHeader {
+            SectionTitle {
+              width: parent.width
+              icon: "profiles"
               text: "PROFILES"
-              foreground: root.foreground
-              fontFamily: root.fontFamily
             }
 
             Column {
@@ -414,26 +414,11 @@ Panel {
             width: parent.width
             spacing: Style.space(10)
 
-            RowLayout {
+            SectionTitle {
               width: parent.width
-              spacing: Style.space(8)
-
-              PanelSectionHeader {
-                text: "RULES"
-                foreground: root.foreground
-                fontFamily: root.fontFamily
-              }
-
-              Item { Layout.fillWidth: true }
-
-              Text {
-                text: root.rulesCaption
-                color: root.dim
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
-                elide: Text.ElideRight
-                Layout.maximumWidth: parent.width * 0.6
-              }
+              icon: "rules"
+              text: "RULES"
+              caption: root.rulesCaption
             }
 
             Column {
@@ -482,6 +467,75 @@ Panel {
     return n
   }
 
+  // Section header in the dashboard's idiom: its icon, the label, and an
+  // optional right-aligned caption.
+  component SectionTitle: Item {
+    id: sectionTitle
+    property string icon: ""
+    property string text: ""
+    property string caption: ""
+
+    implicitHeight: Math.max(label.implicitHeight, captionText.implicitHeight)
+
+    DashIcon {
+      id: sectionIcon
+      anchors.left: parent.left
+      anchors.verticalCenter: label.verticalCenter
+      name: sectionTitle.icon
+      iconSize: Style.font.caption
+      color: Qt.darker(root.foreground, 1.4)
+    }
+
+    PanelSectionHeader {
+      id: label
+      anchors.left: sectionIcon.right
+      anchors.leftMargin: Style.space(6)
+      text: sectionTitle.text
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+    }
+
+    Text {
+      id: captionText
+      anchors.right: parent.right
+      anchors.baseline: label.baseline
+      visible: sectionTitle.caption !== ""
+      text: sectionTitle.caption
+      color: root.dim
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
+      elide: Text.ElideRight
+      width: Math.min(implicitWidth, parent.width * 0.6)
+      horizontalAlignment: Text.AlignRight
+    }
+  }
+
+  // One "<icon> <count>" pair on a profile row, mirroring the dashboard's
+  // Filters / Services / Rules columns.
+  component CountBadge: Row {
+    id: badge
+    property string icon: ""
+    property int count: 0
+    property bool highlighted: false
+
+    spacing: Style.space(4)
+
+    DashIcon {
+      anchors.verticalCenter: parent.verticalCenter
+      name: badge.icon
+      iconSize: Style.font.caption
+      color: root.dim
+    }
+
+    Text {
+      anchors.verticalCenter: parent.verticalCenter
+      text: badge.count
+      color: badge.count > 0 ? Qt.darker(root.foreground, 1.25) : root.dim
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
+    }
+  }
+
   component ProfileRow: CursorSurface {
     id: profileRow
     property var profile: null
@@ -506,15 +560,18 @@ Panel {
       anchors.rightMargin: Style.space(6)
       spacing: Style.space(8)
 
-      Text {
-        text: profileRow.profile && !profileRow.profile.enabled ? "󰚌" : "󰒃"
-        color: profileRow.selectedProfile ? root.foreground : root.dim
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.body
+      Item {
         width: Style.space(22)
-        horizontalAlignment: Text.AlignHCenter
+        height: Style.font.body
         anchors.verticalCenter: parent.verticalCenter
         opacity: profileRow.loading ? 0.45 : 1.0
+
+        DashIcon {
+          anchors.centerIn: parent
+          name: "profiles"
+          iconSize: Style.font.body
+          color: profileRow.selectedProfile ? root.foreground : root.dim
+        }
 
         SequentialAnimation on opacity {
           running: profileRow.loading
@@ -539,13 +596,32 @@ Panel {
           elide: Text.ElideRight
         }
 
-        Text {
-          width: parent.width
-          text: Model.profileDetail(profileRow.profile)
-          color: root.dim
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
-          elide: Text.ElideRight
+        Row {
+          spacing: Style.space(10)
+
+          CountBadge {
+            icon: "rules"
+            count: profileRow.profile ? profileRow.profile.enabledRules : 0
+          }
+
+          CountBadge {
+            icon: "filters"
+            count: profileRow.profile ? profileRow.profile.enabledFilters : 0
+          }
+
+          CountBadge {
+            icon: "services"
+            count: profileRow.profile ? profileRow.profile.enabledServices : 0
+          }
+
+          Text {
+            anchors.verticalCenter: parent.verticalCenter
+            visible: profileRow.profile && !profileRow.profile.enabled
+            text: "disabled"
+            color: root.urgent
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+          }
         }
       }
     }
