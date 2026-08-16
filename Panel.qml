@@ -46,11 +46,11 @@ Panel {
   // Only the keys that exist in the state being shown: a legend that lists
   // what does nothing here is worse than none.
   readonly property var legendKeys: {
-    var keys = [{ key: "j/k", what: "move" }, { key: "enter", what: "copy" }]
+    var keys = [{ key: "j/k", what: "move" }, { key: "enter", what: "activate" }, { key: "y", what: "copy" }]
     if (showStats) keys.push({ key: "s", what: "statistics" })
     if (showActivity) keys.push({ key: "a", what: "activity" })
     if (showRules) keys.push({ key: "r", what: "rules" })
-    if (showEndpoint) keys.push({ key: "m", what: "machine" }, { key: "y", what: "endpoint id" })
+    if (showEndpoint) keys.push({ key: "m", what: "machine" })
     if (showProfiles) keys.push({ key: "p", what: "next profile" })
     keys.push({ key: "g/G", what: "top/bottom" }, { key: "R", what: "refresh" }, { key: "esc", what: "close" })
     return keys
@@ -164,6 +164,20 @@ Panel {
     }
     ensureCursor()
     scrollCursorIntoView()
+  }
+
+  // Yank, as vim means it: whatever the cursor is on. With no row under it,
+  // the endpoint id is the one value on screen worth taking.
+  function yank() {
+    if (cursorActive && focusSection === "rules") {
+      var rule = selectedRule()
+      if (rule) { controld.copyToClipboard(rule.hostname); return }
+    }
+    if (cursorActive && focusSection === "profiles") {
+      var profile = selectedProfileRow()
+      if (profile) { controld.copyToClipboard(profile.id); return }
+    }
+    if (controld.endpoint) controld.copyToClipboard(controld.endpoint.id)
   }
 
   function activateCursor() {
@@ -350,8 +364,7 @@ Panel {
         // Shift for the action, since the plain letter now names a section.
         else if (t === "R") controld.refresh()
         else if (t === "p" || t === "P") { if (!root.machineMode) controld.selectNextProfile(1) }
-        else if (t === "c" || t === "C") controld.copyToClipboard(root.selectedRule() ? root.selectedRule().hostname : "")
-        else if (t === "y" || t === "Y") controld.copyToClipboard(controld.endpoint ? controld.endpoint.id : "")
+        else if (t === "y" || t === "Y") root.yank()
       }
 
       Flickable {

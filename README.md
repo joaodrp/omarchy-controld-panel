@@ -41,9 +41,8 @@ Inside the panel:
 | `m` / `s` / `a` / `r` | Jump to machine, statistics, activity, rules |
 | `g` / `G` | Jump to the top or the bottom |
 | `j` / `k` or arrows | Move the cursor |
-| `enter` / `space` | Select profile, or copy the selected rule's hostname |
-| `c` | Copy the selected rule's hostname |
-| `y` | Copy the endpoint ID |
+| `enter` / `space` | Activate the cursor row |
+| `y` | Yank what the cursor is on, or the endpoint ID when it is on nothing |
 | `p` | Next profile (browse mode only) |
 | `R` | Refresh |
 | `esc` | Close |
