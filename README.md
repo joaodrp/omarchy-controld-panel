@@ -32,8 +32,9 @@ Read-only for now: it lists, it does not write.
 - ACTIVITY: this endpoint's most recent lookups, refreshed every 15s while the panel is open.
   Filtered to **blocked** by default, which is the verdict worth acting on when a site will not
   load; `All` shows every verdict. Filtering happens server side, so a blocked list is a full
-  list. The A/AAAA pair of one lookup collapses into a single row. Drawn short with a `+N` at
-  the foot: one poll already holds up to 20, so expanding costs no extra request
+  list. One row per host, not per lookup: repeats fold into the newest row and show as `xN`,
+  which is what keeps a chatty telemetry endpoint from filling the section. Drawn short with a
+  `+N` at the foot: one poll already holds up to 20, so expanding costs no extra request
 - Copy a rule's hostname to the clipboard
 - Every section needs an identified endpoint. Without one the panel shows nothing but the
   reason: no Control D resolver here, a resolver whose endpoint is not in this account, or a

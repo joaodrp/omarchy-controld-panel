@@ -796,6 +796,9 @@ function activityDetail(query) {
   if (query.triggerValue !== "") parts.push(filterLabel(query.triggerValue))
   else if (query.trigger !== "") parts.push(query.trigger)
   if (query.types.length > 0) parts.push(query.types.join("/"))
+  // How many times this host was asked for in the window. One row and a count
+  // beats a screenful of the same name.
+  if (query.repeats > 1) parts.push("x" + query.repeats)
   return parts.join(" · ")
 }
 

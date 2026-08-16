@@ -413,7 +413,10 @@ test("parseActivity reads the collapsed log", () => {
   assert.equal(r.ok, true)
   assert.equal(r.queries.length, 1)
   assert.equal(r.queries[0].repeats, 2)
-  assert.equal(m.activityDetail(r.queries[0]), "block · Hagezi proplus · AAAA/A")
+  // A host blocked over and over is one row and a count, not a screenful.
+  assert.equal(m.activityDetail(r.queries[0]), "block · Hagezi proplus · AAAA/A · x2")
+  assert.equal(m.activityDetail({ action: 0, trigger: "filter", triggerValue: "", types: [], repeats: 1 }),
+               "block · filter")
   assert.equal(m.parseActivity(JSON.stringify({ ok: false, error: "analytics unreachable" })).error,
                "analytics unreachable")
   assert.equal(m.parseActivity("").ok, false)

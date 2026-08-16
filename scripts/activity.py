@@ -15,60 +15,58 @@ import sys
 
 import controld_api as api
 
-# A resolver asks for A and AAAA (often HTTPS too) at the same instant, so the
-# raw log spends three rows on one lookup. In a list this short that is most of
-# the space, so consecutive rows for the same question and verdict collapse
-# into one that keeps every record type it stood for.
-COLLAPSE_SECONDS = 5
+# One row per host, not per lookup. A resolver asks for A and AAAA at the same
+# instant, and a chatty host is asked for again every minute, so a raw page
+# spends most of its rows on a handful of names. What the reader is scanning
+# for is which hosts were blocked, and repetition is a count, so rows for the
+# same question and verdict fold into the newest one and carry a tally.
 # The most this hands back, and the page it reads to fill that. The caller
 # draws a slice and expands into the rest, so keeping them all is what makes
 # expanding cost nothing. The ceiling is small on purpose: past twenty or so a
-# bar panel is the wrong place to be reading a log. The page stays larger than
-# the ceiling because collapsing folds several raw rows into one, and a burst
-# of repeats would otherwise leave the list short of what it could show.
-PAGE_SIZE = 100
+# bar panel is the wrong place to be reading a log.
+#
+# The page is the API's maximum because folding by host costs rows: this
+# endpoint's last hundred blocked lookups are four hosts, one of them eighty
+# times over. Five hundred is what it takes to fill the ceiling with names
+# worth reading, and it is still one request.
+PAGE_SIZE = 500
 MAX_ROWS = 20
 
 
-def parse_time(value):
-    text = str(value or "").replace("Z", "+00:00")
-    try:
-        from datetime import datetime
-        return datetime.fromisoformat(text)
-    except ValueError:
-        return None
-
-
 def collapse(rows, limit):
+    """Fold the page to one entry per (question, verdict), newest kept.
+
+    The whole page is folded before truncating, so a host's tally counts every
+    lookup in the window rather than only those above the cut.
+    """
     out = []
+    seen = {}
     for row in rows:
         question = str(row.get("question") or "")
         if question == "":
             continue
+        action = int(row.get("action") if row.get("action") is not None else -1)
+        kind = str(row.get("rrType") or "")
+        entry = seen.get((question, action))
+        if entry is not None:
+            entry["repeats"] += 1
+            if kind and kind not in entry["types"]:
+                entry["types"].append(kind)
+            continue
+        # Rows arrive newest first, so the one that lands here is the latest.
         entry = {
             "time": str(row.get("timestamp") or ""),
             "question": question,
-            "action": int(row.get("action") if row.get("action") is not None else -1),
+            "action": action,
             "trigger": str(row.get("trigger") or ""),
             "triggerValue": str(row.get("triggerValue") or ""),
             "protocol": str(row.get("protocol") or ""),
-            "types": [str(row.get("rrType") or "")] if row.get("rrType") else [],
+            "types": [kind] if kind else [],
             "repeats": 1,
         }
-        previous = out[-1] if out else None
-        if previous and previous["question"] == entry["question"] and previous["action"] == entry["action"]:
-            first, second = parse_time(previous["time"]), parse_time(entry["time"])
-            close = first is not None and second is not None and abs((first - second).total_seconds()) <= COLLAPSE_SECONDS
-            if close:
-                previous["repeats"] += 1
-                for kind in entry["types"]:
-                    if kind not in previous["types"]:
-                        previous["types"].append(kind)
-                continue
+        seen[(question, action)] = entry
         out.append(entry)
-        if len(out) >= limit:
-            break
-    return out
+    return out[:limit]
 
 
 def main():
