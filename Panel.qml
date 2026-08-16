@@ -185,6 +185,7 @@ Panel {
     var next = cursorIndex < 0 ? 0 : cursorIndex + (dy > 0 ? 1 : -1)
     cursorKey = cursorItems[Math.max(0, Math.min(cursorItems.length - 1, next))].key
     cursorActive = true
+    pointerGate.reset()
     scrollCursorIntoView()
   }
 
@@ -248,6 +249,7 @@ Panel {
         }
       }
     }
+    pointerGate.reset()
     var y = section.mapToItem(panelFlick.contentItem, 0, 0).y
     var maxY = Math.max(0, panelFlick.contentHeight - panelFlick.height)
     panelFlick.contentY = Math.max(0, Math.min(maxY, y - Style.space(8)))
@@ -256,6 +258,7 @@ Panel {
   function jumpToEdge(bottom) {
     if (!panelFlick) return
     cursorActive = false
+    pointerGate.reset()
     panelFlick.contentY = bottom
       ? Math.max(0, panelFlick.contentHeight - panelFlick.height)
       : 0
@@ -308,10 +311,18 @@ Panel {
   }
 
   // Hover and the cursor are the same thing: pointing at a row is a way of
-  // selecting it.
+  // selecting it. Moving the cursor by key scrolls the list under a
+  // stationary pointer, though, and the row that slides beneath it would
+  // otherwise steal the cursor straight back — so pointer selection waits
+  // for the pointer to actually move.
   function setCursor(key) {
     cursorActive = true
     cursorKey = key
+  }
+
+  function setCursorFromPointer(key, item, mouse) {
+    if (!pointerGate.moved(item, mouse)) return
+    setCursor(key)
   }
 
   implicitWidth: button.implicitWidth
@@ -323,11 +334,19 @@ Panel {
     if (!opened) return
     cursorActive = false
     cursorKey = "header"
+    pointerGate.reset()
     if (panelFlick) panelFlick.contentY = 0
     controld.refresh()
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
   onCursorItemsChanged: ensureCursor()
+
+  PointerMoveGate {
+    id: pointerGate
+    // A stable frame to measure against: rows move under the pointer as the
+    // list scrolls, the viewport does not.
+    referenceItem: panelFlick
+  }
 
   Service {
     id: controld
@@ -433,6 +452,8 @@ Panel {
             // PanelHero rather than this Panel.
             readonly property bool ringVisible: root.headerHasCursor
             function focusHero() { root.setCursor("header") }
+            // The hero switch is a control, not a row: its hover is a
+            // deliberate pointer act, so it does not need the gate.
 
             PanelHero {
               id: hero
@@ -1097,7 +1118,8 @@ Panel {
       anchors.fill: parent
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
-      onEntered: root.setCursor(profileRow.cursorKey)
+      onEntered: root.setCursorFromPointer(profileRow.cursorKey, profileRow, { x: profileMouse.mouseX, y: profileMouse.mouseY })
+      onPositionChanged: function(mouse) { root.setCursorFromPointer(profileRow.cursorKey, profileRow, mouse) }
       onClicked: if (profileRow.profile) controld.selectProfile(profileRow.profile.id)
     }
 
@@ -1379,7 +1401,8 @@ Panel {
       enabled: meterRow.interactive
       hoverEnabled: enabled
       cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-      onEntered: if (meterRow.cursorKey !== "") root.setCursor(meterRow.cursorKey)
+      onEntered: if (meterRow.cursorKey !== "") root.setCursorFromPointer(meterRow.cursorKey, meterRow, { x: rowMouse.mouseX, y: rowMouse.mouseY })
+      onPositionChanged: function(mouse) { if (meterRow.cursorKey !== "") root.setCursorFromPointer(meterRow.cursorKey, meterRow, mouse) }
       onClicked: controld.copyToClipboard(meterRow.copyValue)
     }
 
@@ -1494,7 +1517,8 @@ Panel {
       anchors.fill: parent
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
-      onEntered: if (activityRow.cursorKey !== "") root.setCursor(activityRow.cursorKey)
+      onEntered: if (activityRow.cursorKey !== "") root.setCursorFromPointer(activityRow.cursorKey, activityRow, { x: activityMouse.mouseX, y: activityMouse.mouseY })
+      onPositionChanged: function(mouse) { if (activityRow.cursorKey !== "") root.setCursorFromPointer(activityRow.cursorKey, activityRow, mouse) }
       onClicked: controld.copyToClipboard(activityRow.question)
     }
 
@@ -1522,7 +1546,8 @@ Panel {
       anchors.fill: parent
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
-      onEntered: root.setCursor("rule:" + ruleRow.rowIndex)
+      onEntered: root.setCursorFromPointer("rule:" + ruleRow.rowIndex, ruleRow, { x: ruleMouse.mouseX, y: ruleMouse.mouseY })
+      onPositionChanged: function(mouse) { root.setCursorFromPointer("rule:" + ruleRow.rowIndex, ruleRow, mouse) }
       onClicked: if (ruleRow.rule) controld.copyToClipboard(ruleRow.rule.hostname)
     }
 
