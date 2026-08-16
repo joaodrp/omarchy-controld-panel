@@ -589,6 +589,9 @@ Panel {
                 width: parent.width
                 title: "DOMAINS"
                 rows: controld.stats ? controld.stats.domains : []
+                // A hostname is the one value here that goes straight into
+                // `cdctl rule create`, a browser, or a dig.
+                copyable: true
               }
 
               MeterList {
@@ -1073,6 +1076,8 @@ Panel {
     // badly raw. The copied value is always what the API reported.
     property bool pretty: false
     property string labelFor: ""
+    // Only rows whose value can be acted on elsewhere offer to be copied.
+    property bool copyable: false
 
     visible: rows.length > 0
     spacing: Style.space(1)
@@ -1098,7 +1103,7 @@ Panel {
           if (meterList.labelFor === "country") return Model.countryName(modelData.value)
           return modelData.value
         }
-        copyValue: modelData.value
+        copyValue: meterList.copyable ? modelData.value : ""
         hits: modelData.count
         ratio: Model.meterRatio(modelData.count, meterList.rows)
       }
@@ -1117,6 +1122,9 @@ Panel {
 
     implicitHeight: rowLabel.implicitHeight + Style.spacing.sm * 2
 
+    readonly property bool interactive: copyValue !== ""
+    readonly property bool hot: interactive && rowMouse.containsMouse
+
     Text {
       id: rowLabel
       anchors.left: parent.left
@@ -1124,7 +1132,7 @@ Panel {
       anchors.rightMargin: Style.space(10)
       anchors.verticalCenter: parent.verticalCenter
       text: meterRow.label
-      color: rowMouse.containsMouse ? root.foreground : Qt.darker(root.foreground, 1.25)
+      color: meterRow.hot ? root.foreground : Qt.darker(root.foreground, 1.25)
       font.family: root.fontFamily
       font.pixelSize: Style.font.bodySmall
       elide: Text.ElideMiddle
@@ -1146,7 +1154,7 @@ Panel {
         height: parent.height
         radius: parent.radius
         width: parent.width * Math.max(0, Math.min(1, meterRow.ratio))
-        color: rowMouse.containsMouse ? root.foreground : Qt.darker(root.foreground, 1.2)
+        color: meterRow.hot ? root.foreground : Qt.darker(root.foreground, 1.2)
 
         Behavior on width {
           NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
@@ -1169,13 +1177,14 @@ Panel {
     MouseArea {
       id: rowMouse
       anchors.fill: parent
-      hoverEnabled: true
-      cursorShape: Qt.PointingHandCursor
+      enabled: meterRow.interactive
+      hoverEnabled: enabled
+      cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
       onClicked: controld.copyToClipboard(meterRow.copyValue)
     }
 
     PanelToolTip {
-      visible: rowMouse.containsMouse
+      visible: meterRow.hot
       text: "Copy " + meterRow.copyValue
       fontFamily: root.fontFamily
     }

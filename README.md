@@ -19,8 +19,9 @@ Read-only for now: it lists, it does not write.
 - STATISTICS for this endpoint: a queries-over-time chart with the blocked share shaded under
   it, totals, and top domains, filters and destinations as meter rows. Pick the window
   (1h/24h/7d/30d) and the verdict (blocked/bypassed/redirected); destinations switch between
-  networks and countries, spelled out from ISO 3166-1. Any row copies its value, and what is
-  copied is what the API reported. Fetched only while the panel is open.
+  networks and countries, spelled out from ISO 3166-1. Domain rows copy the hostname; filter,
+  network and country rows are inert, since nothing takes those as input. Fetched only while
+  the panel is open.
   The verdict governs domains and filters, not destinations: a blocked query never reaches
   one, so destinations are the traffic that was allowed
 - RULES: the enforced profile's custom rules, root first, then one group per folder, with
