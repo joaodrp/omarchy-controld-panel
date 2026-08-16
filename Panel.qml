@@ -419,6 +419,11 @@ Panel {
         id: panelFlick
         anchors.left: parent.left
         anchors.right: parent.right
+        // Reach into the card's padding so the scrollbar, which overlays the
+        // right edge rather than taking space, sits in that gutter instead of
+        // over the content. The column below gives the width straight back, so
+        // nothing shifts sideways.
+        anchors.rightMargin: -panel.padding
         anchors.top: parent.top
         anchors.bottom: legend.visible ? legend.top : parent.bottom
         anchors.bottomMargin: legend.visible ? Style.space(8) : 0
@@ -432,7 +437,7 @@ Panel {
 
         Column {
           id: column
-          width: panelFlick.width
+          width: panelFlick.width - panel.padding
           spacing: Style.space(12)
 
           Item {
