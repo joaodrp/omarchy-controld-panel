@@ -61,6 +61,12 @@ Item {
   readonly property int endpointAnalytics: endpoint ? endpoint.analytics : 0
   readonly property bool statsAvailable: endpoint !== null && endpointAnalytics > 0
 
+  // The endpoint's most recent lookups. Polled only while the panel is open,
+  // and faster than the rest, since "recent" is the whole point.
+  property var activity: []
+  property bool activityLoading: false
+  property string activityError: ""
+
   property bool refreshing: false
   property bool loadingRules: false
   property string lastError: ""
@@ -73,6 +79,8 @@ Item {
   readonly property int refreshIntervalSec: intSetting("refreshIntervalSec", 120, 15, 3600)
   readonly property int statsWindowHours: intSetting("statsWindowHours", 24, 1, 720)
   readonly property bool statsEnabled: setting("showStatistics", true) !== false
+  readonly property bool activityEnabled: setting("showActivity", true) !== false
+  readonly property int activityRows: intSetting("activityRows", 8, 3, 25)
   readonly property string preferredProfile: String(setting("profile", "") || "")
   readonly property bool busy: lookupProcess.running || authProcess.running || profilesProcess.running || rulesProcess.running || foldersProcess.running || resolverProcess.running || devicesProcess.running
   readonly property bool ready: installed && authenticated && !needsAuth
@@ -143,6 +151,16 @@ Item {
     statsProcess.running = true
   }
 
+  function loadActivity() {
+    if (!activityEnabled || !statsAvailable || activityProcess.running) return
+    activityLoading = true
+    activityProcess.command = ["python3", scriptPath("scripts/activity.py"),
+      "--endpoint", endpoint.id,
+      "--region", region !== "" ? region : "europe",
+      "--rows", String(activityRows)]
+    activityProcess.running = true
+  }
+
   function setStatsWindow(hours) {
     var next = parseInt(String(hours), 10)
     if (!isFinite(next) || next === statsHours) return
@@ -182,7 +200,7 @@ Item {
       profilesProcess.running = true
     }
     if (!resolverProcess.running) resolverProcess.running = true
-    if (statsWanted) loadStats(true)
+    if (statsWanted) { loadStats(true); loadActivity() }
     if (!pollWatchdog.running) pollWatchdog.start()
   }
 
@@ -261,8 +279,8 @@ Item {
     if (statsWanted) loadStats()
   }
 
-  onStatsAvailableChanged: if (statsWanted && statsAvailable) loadStats()
-  onStatsWantedChanged: if (statsWanted) loadStats()
+  onStatsAvailableChanged: if (statsWanted && statsAvailable) { loadStats(); loadActivity() }
+  onStatsWantedChanged: if (statsWanted) { loadStats(); loadActivity() }
 
   onActiveProfileChanged: {
     if (activeProfile && activeProfile.id !== _rulesForProfile) loadRules(activeProfile.id)
@@ -299,9 +317,11 @@ Item {
       if (resolverProcess.running) resolverProcess.running = false
       if (devicesProcess.running) devicesProcess.running = false
       if (statsProcess.running) statsProcess.running = false
+      if (activityProcess.running) activityProcess.running = false
       root.refreshing = false
       root.loadingRules = false
       root.statsLoading = false
+      root.activityLoading = false
     }
   }
 
@@ -363,6 +383,36 @@ Item {
       if (exitCode !== 0) { root.devices = []; return }
       var parsed = Model.parseDevices(devicesStdout.text)
       root.devices = parsed.ok ? parsed.devices : []
+    }
+  }
+
+  Timer {
+    // The log is only worth anything fresh, and it is one request.
+    id: activityTimer
+    interval: 15000
+    repeat: true
+    running: root.statsWanted && root.activityEnabled && root.statsAvailable
+    onTriggered: root.loadActivity()
+  }
+
+  Process {
+    id: activityProcess
+    running: false
+    command: []
+    stdout: StdioCollector { id: activityStdout; waitForEnd: true }
+    stderr: StdioCollector { id: activityStderr; waitForEnd: true }
+    onExited: function(exitCode) {
+      root.activityLoading = false
+      var parsed = Model.parseActivity(activityStdout.text)
+      if (parsed.ok) {
+        root.activity = parsed.queries
+        root.activityError = ""
+        return
+      }
+      // Keep the rows already on screen: a failed poll should not blank a log
+      // the user is reading.
+      var stderr = String(activityStderr.text || "").trim()
+      root.activityError = Model.elide(parsed.error !== "" ? parsed.error : (stderr !== "" ? stderr : "activity unavailable"), 120)
     }
   }
 

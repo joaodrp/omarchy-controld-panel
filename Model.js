@@ -558,6 +558,69 @@ function filterLabel(value) {
   return name === "" ? "unknown" : name.charAt(0).toUpperCase() + name.slice(1)
 }
 
+// scripts/activity.py returns the endpoint's most recent lookups, newest
+// first, with the A/AAAA pairs of one lookup already collapsed.
+function parseActivity(raw) {
+  var parsed = parseJson(raw)
+  if (!parsed.ok || !parsed.value || typeof parsed.value !== "object") {
+    return { ok: false, queries: [], error: parsed.error || "bad activity output" }
+  }
+  var v = parsed.value
+  if (v.ok !== true) return { ok: false, queries: [], error: str(v.error) || "activity log failed" }
+  var out = []
+  var list = v.queries instanceof Array ? v.queries : []
+  for (var i = 0; i < list.length; i++) {
+    var q = list[i]
+    if (!q || str(q.question) === "") continue
+    out.push({
+      time: str(q.time),
+      question: str(q.question),
+      action: num(q.action, -1),
+      trigger: str(q.trigger),
+      triggerValue: str(q.triggerValue),
+      protocol: str(q.protocol),
+      types: q.types instanceof Array ? q.types.map(str) : [],
+      repeats: num(q.repeats, 1)
+    })
+  }
+  return { ok: true, queries: out, error: "" }
+}
+
+// Analytics reports the verdict as an integer; the rest of the panel speaks
+// the names cdctl uses.
+function actionName(action) {
+  switch (num(action, -1)) {
+  case 0: return "block"
+  case 1: return "bypass"
+  case 2: return "redirect"
+  case 3: return "spoof"
+  default: return ""
+  }
+}
+
+// Wall clock for a log row. Local time, since the reader is looking at what
+// their own machine just did.
+function clockTime(iso) {
+  var text = str(iso)
+  if (text === "") return ""
+  var when = new Date(text)
+  if (isNaN(when.getTime())) return ""
+  function pad(n) { return n < 10 ? "0" + n : String(n) }
+  return pad(when.getHours()) + ":" + pad(when.getMinutes()) + ":" + pad(when.getSeconds())
+}
+
+// Second line of a log row: what decided it, and what else it carried.
+function activityDetail(query) {
+  if (!query) return ""
+  var parts = []
+  var name = actionName(query.action)
+  if (name !== "") parts.push(name)
+  if (query.triggerValue !== "") parts.push(filterLabel(query.triggerValue))
+  else if (query.trigger !== "") parts.push(query.trigger)
+  if (query.types.length > 0) parts.push(query.types.join("/"))
+  return parts.join(" · ")
+}
+
 // Nerd Font glyphs, matching what the built-in panels use for their rows.
 function actionGlyph(action) {
   switch (str(action)) {

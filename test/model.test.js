@@ -9,7 +9,7 @@ const vm = require("node:vm")
 
 const src = fs.readFileSync(path.join(__dirname, "..", "Model.js"), "utf8")
 const M = {}
-vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, nextProfile, groupRules, flattenGroups, countRules, actionGlyph, ruleDetail, profileDetail, accountLine, resolverUid, parseDevices, findDevice, endpointLine, activeProfile, defaultActionLine, parseStats, formatCount, blockedShare, windowLabel, meterRatio, sparkPoints, filterLabel, countryName, actionTotal, windowOptions, actionOptions, EXIT_AUTH };", M)
+vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, nextProfile, groupRules, flattenGroups, countRules, actionGlyph, ruleDetail, profileDetail, accountLine, resolverUid, parseDevices, findDevice, endpointLine, activeProfile, defaultActionLine, parseStats, formatCount, blockedShare, windowLabel, meterRatio, sparkPoints, filterLabel, countryName, actionTotal, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
 const m = M.__exports
 
 // vm-realm arrays fail strict deepEqual on prototype identity; compare by value.
@@ -260,6 +260,38 @@ test("formatCount, blockedShare, windowLabel", () => {
   assert.equal(m.windowLabel(24), "last 24h")
   assert.equal(m.windowLabel(1), "last hour")
   assert.equal(m.windowLabel(168), "last 7d")
+})
+
+test("parseActivity reads the collapsed log", () => {
+  const raw = JSON.stringify({ ok: true, queries: [
+    { time: "2026-08-16T15:22:56.975Z", question: "p.controld.com", action: 0,
+      trigger: "filter", triggerValue: "x-hagezi-proplus", protocol: "dot",
+      types: ["AAAA", "A"], repeats: 2 },
+    { question: "", action: 1 }
+  ] })
+  const r = m.parseActivity(raw)
+  assert.equal(r.ok, true)
+  assert.equal(r.queries.length, 1)
+  assert.equal(r.queries[0].repeats, 2)
+  assert.equal(m.activityDetail(r.queries[0]), "block · Hagezi proplus · AAAA/A")
+  assert.equal(m.parseActivity(JSON.stringify({ ok: false, error: "analytics unreachable" })).error,
+               "analytics unreachable")
+  assert.equal(m.parseActivity("").ok, false)
+})
+
+test("actionName maps the analytics verdicts", () => {
+  assert.equal(m.actionName(0), "block")
+  assert.equal(m.actionName(1), "bypass")
+  assert.equal(m.actionName(2), "redirect")
+  // -1 is the log's "no verdict", and must not become a block.
+  assert.equal(m.actionName(-1), "")
+  assert.equal(m.actionName(99), "")
+})
+
+test("clockTime survives a bad timestamp", () => {
+  assert.match(m.clockTime("2026-08-16T15:22:56.975Z"), /^\d\d:\d\d:\d\d$/)
+  assert.equal(m.clockTime("not a date"), "")
+  assert.equal(m.clockTime(""), "")
 })
 
 test("actionGlyph has a fallback", () => {

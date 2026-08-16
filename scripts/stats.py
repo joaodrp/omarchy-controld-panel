@@ -3,10 +3,8 @@
 
 Analytics lives on a different origin than the REST API (`<region>.analytics.
 controld.com`), which `cdctl api` cannot reach, so the panel comes here
-instead. The fan-out lives in Python rather than QML because it is nine
-requests folded into one document, and because the token must never reach a
-process argument: it is read from the environment or cdctl's own config and
-sent only in a request header.
+instead (see controld_api). The fan-out lives in Python rather than QML
+because it is nine requests folded into one document.
 
 One run answers one (window, action) pair: the totals and the series never
 change with the action, so the panel can cache per pair and still redraw its
@@ -25,75 +23,17 @@ On failure, the same envelope with "ok": false and an "error" string, exit 1.
 
 import argparse
 import json
-import os
 import sys
-import tomllib
-import urllib.error
-import urllib.parse
-import urllib.request
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
-TIMEOUT = 15
-CONFIG_ENV = "CDCTL_CONFIG"
+import controld_api as api
+
 # The verdict analytics records per query. Values match the dashboard's tabs.
 ACTIONS = {"blocked": 0, "bypassed": 1, "redirected": 2}
 # Buckets in the series. The API decides the interval from the window and this
 # cap, and returns one more bucket than asked for.
 SERIES_BUCKETS = 24
-
-
-def config_path():
-    override = os.environ.get(CONFIG_ENV)
-    if override:
-        return override
-    base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
-    return os.path.join(base, "cdctl", "config.toml")
-
-
-def read_token():
-    """The environment wins, exactly as cdctl resolves it."""
-    env = os.environ.get("CONTROLD_API_TOKEN")
-    if env:
-        return env
-    path = config_path()
-    try:
-        with open(path, "rb") as handle:
-            config = tomllib.load(handle)
-    except FileNotFoundError:
-        raise RuntimeError("no API token: set CONTROLD_API_TOKEN or run `cdctl auth login`")
-    except (OSError, tomllib.TOMLDecodeError) as exc:
-        raise RuntimeError("could not read %s: %s" % (path, exc))
-    context = config.get("current_context", "personal")
-    token = (config.get("contexts", {}).get(context, {}) or {}).get("token")
-    if not token:
-        raise RuntimeError("no API token in %s for context %s" % (path, context))
-    return token
-
-
-def get(host, path, params, token):
-    query = urllib.parse.urlencode(params, doseq=True)
-    request = urllib.request.Request(
-        "https://%s%s?%s" % (host, path, query),
-        headers={"Authorization": "Bearer %s" % token, "Accept": "application/json"},
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
-            payload = json.load(response)
-    except urllib.error.HTTPError as exc:
-        detail = ""
-        try:
-            detail = (json.load(exc).get("error") or {}).get("message") or ""
-        except Exception:
-            pass
-        raise RuntimeError("HTTP %s from analytics%s" % (exc.code, ": " + detail if detail else ""))
-    except urllib.error.URLError as exc:
-        raise RuntimeError("analytics unreachable: %s" % exc.reason)
-    except (ValueError, TimeoutError) as exc:
-        raise RuntimeError("bad analytics response: %s" % exc)
-    if not payload.get("success"):
-        raise RuntimeError((payload.get("error") or {}).get("message") or "analytics request failed")
-    return payload.get("body") or {}
 
 
 def counts(body, limit):
@@ -142,21 +82,17 @@ def main():
     args = parser.parse_args()
 
     try:
-        token = read_token()
+        token = api.read_token()
     except RuntimeError as exc:
         json.dump({"ok": False, "error": str(exc)}, sys.stdout)
         return 1
 
-    host = "%s.analytics.controld.com" % (args.region or "europe")
+    host = api.host_for(args.region)
     now = datetime.now(timezone.utc).replace(microsecond=0)
     hours = max(1, min(args.hours, 24 * 30))
     action = args.action if args.action in ACTIONS.values() else 0
     top = max(1, min(args.top, 20))
-    window = {
-        "startTime": (now - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "endTime": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "endpointId[]": args.endpoint,
-    }
+    window = api.window(hours, args.endpoint, now)
     listed = dict(window, **{"action[]": action, "limit": top, "sortOrder": "desc"})
 
     calls = {
@@ -174,7 +110,7 @@ def main():
     }
     # Serially these add up to a visible wait every time a tab is switched.
     with ThreadPoolExecutor(max_workers=len(calls)) as pool:
-        futures = {name: pool.submit(get, host, path, params, token) for name, (path, params) in calls.items()}
+        futures = {name: pool.submit(api.get, host, path, params, token) for name, (path, params) in calls.items()}
         try:
             bodies = {name: future.result() for name, future in futures.items()}
         except RuntimeError as exc:

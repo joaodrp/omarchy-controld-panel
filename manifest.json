@@ -22,7 +22,9 @@
       "refreshIntervalSec": 120,
       "profile": "",
       "statsWindowHours": 24,
-      "showStatistics": true
+      "showStatistics": true,
+      "showActivity": true,
+      "activityRows": 8
     },
     "schema": [
       {
@@ -54,6 +56,21 @@
         "max": 720,
         "step": 1,
         "defaultValue": 24
+      },
+      {
+        "key": "showActivity",
+        "type": "boolean",
+        "label": "Show recent activity",
+        "defaultValue": true
+      },
+      {
+        "key": "activityRows",
+        "type": "integer",
+        "label": "Activity rows",
+        "min": 3,
+        "max": 25,
+        "step": 1,
+        "defaultValue": 8
       }
     ]
   }

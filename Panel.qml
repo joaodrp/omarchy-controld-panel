@@ -34,6 +34,8 @@ Panel {
   readonly property bool showProfiles: controld.ready && !machineMode && controld.profiles.length > 0
   readonly property bool showRules: controld.ready && controld.activeProfile !== null
   readonly property bool unprotected: controld.ready && controld.resolverChecked && !controld.usingControld
+  readonly property bool showActivity: controld.ready && machineMode && controld.activityEnabled
+    && (controld.activity.length > 0 || controld.activityError !== "")
   readonly property bool showStats: controld.ready && machineMode && controld.statsEnabled
     && (controld.statsAvailable || controld.statsError !== "")
   property string destinationView: "networks"
@@ -674,6 +676,38 @@ Panel {
           }
 
           PanelSeparator {
+            visible: root.showActivity
+            foreground: root.foreground
+          }
+
+          Column {
+            visible: root.showActivity
+            width: parent.width
+            spacing: Style.space(8)
+
+            SectionTitle {
+              width: parent.width
+              text: "ACTIVITY"
+              caption: controld.activityError !== "" ? controld.activityError
+                : (controld.activity.length === 0 ? "no queries yet" : "")
+            }
+
+            Column {
+              width: parent.width
+              spacing: Style.space(6)
+
+              Repeater {
+                model: controld.activity
+                ActivityRow {
+                  required property var modelData
+                  width: parent.width
+                  query: modelData
+                }
+              }
+            }
+          }
+
+          PanelSeparator {
             visible: root.showRules
             foreground: root.foreground
           }
@@ -1186,6 +1220,78 @@ Panel {
     PanelToolTip {
       visible: meterRow.hot
       text: "Copy " + meterRow.copyValue
+      fontFamily: root.fontFamily
+    }
+  }
+
+  // One lookup: what was asked, what happened to it, and when. The A/AAAA
+  // pair of a single lookup arrives already collapsed.
+  component ActivityRow: Item {
+    id: activityRow
+    property var query: null
+    readonly property string question: query ? query.question : ""
+    readonly property bool blocked: query && query.action === 0
+
+    implicitHeight: activityText.implicitHeight + Style.spacing.sm * 2
+
+    RowLayout {
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      spacing: Style.space(8)
+
+      Text {
+        text: Model.actionGlyph(Model.actionName(activityRow.query ? activityRow.query.action : -1))
+        color: activityRow.blocked ? root.foreground : root.dim
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.icon
+        Layout.alignment: Qt.AlignVCenter
+      }
+
+      ColumnLayout {
+        id: activityText
+        Layout.fillWidth: true
+        spacing: Style.space(1)
+
+        Text {
+          Layout.fillWidth: true
+          text: activityRow.question
+          color: activityMouse.containsMouse ? root.foreground : Qt.darker(root.foreground, 1.25)
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.bodySmall
+          elide: Text.ElideMiddle
+        }
+
+        Text {
+          Layout.fillWidth: true
+          text: Model.activityDetail(activityRow.query)
+          color: root.dim
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.caption
+          elide: Text.ElideRight
+        }
+      }
+
+      Text {
+        text: Model.clockTime(activityRow.query ? activityRow.query.time : "")
+        color: root.dim
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.caption
+        Layout.alignment: Qt.AlignVCenter
+      }
+    }
+
+    MouseArea {
+      id: activityMouse
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onClicked: controld.copyToClipboard(activityRow.question)
+    }
+
+    PanelToolTip {
+      visible: activityMouse.containsMouse
+      text: "Copy " + activityRow.question
       fontFamily: root.fontFamily
     }
   }

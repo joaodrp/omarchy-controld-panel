@@ -24,6 +24,8 @@ Read-only for now: it lists, it does not write.
   the panel is open.
   The verdict governs domains and filters, not destinations: a blocked query never reaches
   one, so destinations are the traffic that was allowed
+- ACTIVITY: this endpoint's most recent lookups, refreshed every 15s while the panel is open.
+  The A/AAAA pair of one lookup collapses into a single row
 - RULES: the enforced profile's custom rules, root first, then one group per folder, with
   action, spoof/redirect target, and disabled state
 - Copy a rule's hostname to the clipboard
@@ -47,11 +49,12 @@ device id, so the match is exact. Legacy shared resolvers carry no id and fall b
 account line. Naming the endpoint needs `cdctl api /devices`, the escape hatch, so that one
 call reads raw upstream fields rather than the CLI's normalized schema.
 
-Statistics come from Control D's analytics origin (`<region>.analytics.controld.com`), which is
-a different host than the REST API and so out of reach of `cdctl api`. `scripts/stats.py` makes
-those calls: it takes the token from `CONTROLD_API_TOKEN` or `cdctl`'s own config, sends it in a
-request header, and never places it in a process argument or its output. Analytics has to be on
-for the endpoint (`none` reports nothing); the section says so when it is off.
+Statistics and activity come from Control D's analytics origin
+(`<region>.analytics.controld.com`), a different host than the REST API and so out of reach of
+`cdctl api`. `scripts/stats.py` and `scripts/activity.py` make those calls through
+`scripts/controld_api.py`: it takes the token from `CONTROLD_API_TOKEN` or `cdctl`'s own config,
+sends it in a request header, and never places it in a process argument or its output. Analytics
+has to be on for the endpoint (`none` reports nothing); the section says so when it is off.
 
 ## Requirements
 
@@ -90,6 +93,8 @@ Set through the bar's widget settings, or inline on the widget's `shell.json` en
 | `refreshIntervalSec` | `120` | Poll interval, 15-3600 seconds |
 | `profile` | `""` | Profile id (or name) to show; empty picks the first profile |
 | `showStatistics` | `true` | Whether to query analytics at all |
+| `showActivity` | `true` | Whether to poll the activity log while open |
+| `activityRows` | `8` | Rows in the activity list, 3-25 |
 | `statsWindowHours` | `24` | Statistics window the panel opens on, 1-720 hours |
 
 ## IPC
