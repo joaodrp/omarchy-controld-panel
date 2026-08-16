@@ -32,8 +32,10 @@ Item {
     transformOrigin: Item.TopLeft
     scale: root.markScale
     antialiasing: true
-    layer.enabled: true
-    layer.samples: 4
+    // No layer: caching the mark at its 42x38 path size and then scaling that
+    // texture down to bar size throws the antialiasing away. The curve
+    // renderer rasterizes after the transform, so the edges stay smooth at
+    // whatever size the mark is drawn.
     preferredRendererType: Shape.CurveRenderer
 
     Blade { path: "M2.59817 16C1.73199 16 1.03883 15.2655 1.18488 14.4118C2.39502 7.338 8.52232 2 16.2388 2H19.3786C20.0414 2 20.5786 2.53726 20.5786 3.2C20.5786 10.2692 14.8479 16 7.77861 16H2.59817Z" }
