@@ -40,7 +40,7 @@ Inside the panel:
 | `?` | Show or hide the key legend |
 | `m` / `s` / `a` / `r` | Jump to machine, statistics, activity, rules |
 | `g` / `G` | Jump to the top or the bottom |
-| `j` / `k` or arrows | Move the cursor |
+| `j` / `k` or arrows | Move the cursor through every actionable row, top to bottom |
 | `enter` / `space` | Activate the cursor row |
 | `y` | Yank what the cursor is on, or the endpoint ID when it is on nothing |
 | `p` | Next profile (browse mode only) |

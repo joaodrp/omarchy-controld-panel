@@ -14,9 +14,10 @@ Panel {
   ipcTarget: "io.github.joaodrp.controld"
   manageIpc: false
 
-  property string focusSection: "header"
-  property int profileIndex: 0
-  property int ruleIndex: 0
+  // The cursor walks one flat list of actionable rows in document order, so
+  // j/k does the same thing wherever it is. Rows that cannot be acted on are
+  // not in it: the cursor visits exactly what hover already highlights.
+  property string cursorKey: ""
   property bool cursorActive: false
 
   readonly property color foreground: bar ? bar.foreground : Color.foreground
@@ -77,7 +78,7 @@ Panel {
   }
   // Only rule rows take the cursor; folder headers are labels.
   readonly property var cursorRules: cursorRuleList()
-  readonly property bool headerHasCursor: cursorActive && focusSection === "header" && controld.installed
+  readonly property bool headerHasCursor: cursorActive && cursorKey === "header" && controld.installed
   readonly property color iconColor: controld.ready && !unprotected ? foreground : dim
   readonly property color barIconColor: controld.ready && !unprotected ? barForeground : Qt.darker(barForeground, 1.55)
   // The hero names this machine's endpoint and what it enforces; the account
@@ -111,14 +112,49 @@ Panel {
     return out
   }
 
-  function selectedProfileRow() {
-    if (controld.profiles.length === 0) return null
-    return controld.profiles[Math.max(0, Math.min(profileIndex, controld.profiles.length - 1))]
+  // Document order, so moving the cursor also walks the panel top to bottom.
+  readonly property var cursorItems: {
+    var items = [{ key: "header", kind: "header", value: "" }]
+    if (showEndpoint && controld.endpoint)
+      items.push({ key: "endpoint", kind: "endpoint", value: controld.endpoint.id })
+    if (showProfiles) {
+      for (var p = 0; p < controld.profiles.length; p++)
+        items.push({ key: "profile:" + p, kind: "profile", index: p, value: controld.profiles[p].id })
+    }
+    if (showStats && controld.stats) {
+      for (var d = 0; d < controld.stats.domains.length; d++)
+        items.push({ key: "domain:" + d, kind: "domain", index: d, value: controld.stats.domains[d].value })
+    }
+    if (showActivity) {
+      for (var a = 0; a < controld.activity.length; a++)
+        items.push({ key: "activity:" + a, kind: "activity", index: a, value: controld.activity[a].question })
+    }
+    if (showRules) {
+      for (var r = 0; r < cursorRules.length; r++)
+        items.push({ key: "rule:" + r, kind: "rule", index: r, value: cursorRules[r].hostname })
+    }
+    return items
+  }
+
+  readonly property int cursorIndex: {
+    for (var i = 0; i < cursorItems.length; i++) if (cursorItems[i].key === cursorKey) return i
+    return -1
+  }
+
+  function currentCursor() {
+    return cursorIndex >= 0 ? cursorItems[cursorIndex] : null
   }
 
   function selectedRule() {
-    if (cursorRules.length === 0) return null
-    return cursorRules[Math.max(0, Math.min(ruleIndex, cursorRules.length - 1))]
+    var entry = currentCursor()
+    if (!entry || entry.kind !== "rule") return null
+    return cursorRules[entry.index] || null
+  }
+
+  function selectedProfileRow() {
+    var entry = currentCursor()
+    if (!entry || entry.kind !== "profile") return null
+    return controld.profiles[entry.index] || null
   }
 
   function persistProfile(id) {
@@ -130,66 +166,46 @@ Panel {
   }
 
   function ensureCursor() {
-    if (profileIndex >= controld.profiles.length) profileIndex = Math.max(0, controld.profiles.length - 1)
-    if (ruleIndex >= cursorRules.length) ruleIndex = Math.max(0, cursorRules.length - 1)
-    if (focusSection === "profiles" && !showProfiles) focusSection = "header"
-    if (focusSection === "rules" && (!showRules || cursorRules.length === 0)) focusSection = showProfiles ? "profiles" : "header"
+    // Rows come and go as polls land, so a cursor whose row has vanished
+    // falls to the nearest one rather than disappearing.
+    if (cursorItems.length === 0) { cursorKey = ""; return }
+    if (cursorIndex >= 0) return
+    cursorKey = cursorItems[0].key
   }
 
   function moveCursor(dx, dy) {
+    if (dy === 0) return
+    ensureCursor()
+    if (cursorItems.length === 0) return
+    var next = cursorIndex < 0 ? 0 : cursorIndex + (dy > 0 ? 1 : -1)
+    cursorKey = cursorItems[Math.max(0, Math.min(cursorItems.length - 1, next))].key
     cursorActive = true
-    ensureCursor()
-    if (dy !== 0) {
-      if (focusSection === "header") {
-        if (dy > 0) {
-          if (showProfiles) focusSection = "profiles"
-          else if (cursorRules.length > 0) focusSection = "rules"
-        }
-      } else if (focusSection === "profiles") {
-        if (dy < 0) {
-          if (profileIndex <= 0) focusSection = "header"
-          else profileIndex--
-        } else {
-          if (profileIndex < controld.profiles.length - 1) profileIndex++
-          else if (cursorRules.length > 0) focusSection = "rules"
-        }
-      } else if (focusSection === "rules") {
-        if (dy < 0) {
-          if (ruleIndex <= 0) focusSection = showProfiles ? "profiles" : "header"
-          else ruleIndex--
-        } else if (ruleIndex < cursorRules.length - 1) {
-          ruleIndex++
-        }
-      }
-    }
-    ensureCursor()
     scrollCursorIntoView()
   }
 
   // Yank, as vim means it: whatever the cursor is on. With no row under it,
   // the endpoint id is the one value on screen worth taking.
   function yank() {
-    if (cursorActive && focusSection === "rules") {
-      var rule = selectedRule()
-      if (rule) { controld.copyToClipboard(rule.hostname); return }
-    }
-    if (cursorActive && focusSection === "profiles") {
-      var profile = selectedProfileRow()
-      if (profile) { controld.copyToClipboard(profile.id); return }
+    var entry = cursorActive ? currentCursor() : null
+    if (entry && entry.kind !== "header" && String(entry.value || "") !== "") {
+      controld.copyToClipboard(entry.value)
+      return
     }
     if (controld.endpoint) controld.copyToClipboard(controld.endpoint.id)
   }
 
+  // What the row does when you press enter on it. Copy is the only action a
+  // read-only panel has for most of them.
   function activateCursor() {
-    ensureCursor()
-    if (focusSection === "header") controld.refresh()
-    else if (focusSection === "profiles") {
-      var p = selectedProfileRow()
-      if (p) controld.selectProfile(p.id)
-    } else if (focusSection === "rules") {
-      var r = selectedRule()
-      if (r) controld.copyToClipboard(r.hostname)
+    var entry = currentCursor()
+    if (!entry) return
+    if (entry.kind === "header") { controld.refresh(); return }
+    if (entry.kind === "profile") {
+      var profile = selectedProfileRow()
+      if (profile) controld.selectProfile(profile.id)
+      return
     }
+    if (String(entry.value || "") !== "") controld.copyToClipboard(entry.value)
   }
 
   function scrollItemIntoView(item) {
@@ -212,10 +228,20 @@ Panel {
   // nudging it into sight, so the key lands somewhere predictable.
   function jumpTo(section) {
     if (!panelFlick || !section || !section.visible) return
-    cursorActive = section === rulesSection
-    if (section === rulesSection) {
-      focusSection = "rules"
-      ruleIndex = 0
+    // Put the cursor on that section's first actionable row, so j/k carries
+    // on from where the eye landed.
+    var prefix = section === rulesSection ? "rule:"
+      : section === statsSection ? "domain:"
+      : section === activitySection ? "activity:"
+      : section === machineSection ? "endpoint" : ""
+    if (prefix !== "") {
+      for (var i = 0; i < cursorItems.length; i++) {
+        if (cursorItems[i].key === prefix || cursorItems[i].key.indexOf(prefix) === 0) {
+          cursorKey = cursorItems[i].key
+          cursorActive = true
+          break
+        }
+      }
     }
     var y = section.mapToItem(panelFlick.contentItem, 0, 0).y
     var maxY = Math.max(0, panelFlick.contentHeight - panelFlick.height)
@@ -230,15 +256,35 @@ Panel {
       : 0
   }
 
-  function scrollCursorIntoView() {
-    if (focusSection === "rules") {
-      var target = ruleRowItem(ruleIndex)
-      if (target) scrollItemIntoView(target)
-    } else if (focusSection === "profiles" && profileColumn && profileIndex >= 0 && profileIndex < profileColumn.children.length) {
-      scrollItemIntoView(profileColumn.children[profileIndex])
-    } else if (focusSection === "header") {
-      panelFlick.contentY = 0
+  // The item under the cursor. Rows carry their own key rather than sitting
+  // at a known index: a Repeater's delegates share their parent with the
+  // Repeater itself and any header, so counting children lands on the wrong
+  // one.
+  function cursorItem() {
+    var entry = currentCursor()
+    if (!entry) return null
+    if (entry.kind === "rule") return ruleRowItem(entry.index)
+    if (entry.kind === "endpoint") return machineSection
+    return findByCursorKey([profileColumn, domainList, activityColumn], entry.key)
+  }
+
+  function findByCursorKey(containers, key) {
+    for (var c = 0; c < containers.length; c++) {
+      var container = containers[c]
+      if (!container) continue
+      for (var i = 0; i < container.children.length; i++) {
+        var child = container.children[i]
+        if (child && child.cursorKey === key) return child
+      }
     }
+    return null
+  }
+
+  function scrollCursorIntoView() {
+    var entry = currentCursor()
+    if (!entry) return
+    if (entry.kind === "header") { panelFlick.contentY = 0; return }
+    scrollItemIntoView(cursorItem())
   }
 
   // The rules column mixes folder headers and rules; find the item that
@@ -256,21 +302,11 @@ Panel {
     return null
   }
 
-  function setHeaderCursor() {
+  // Hover and the cursor are the same thing: pointing at a row is a way of
+  // selecting it.
+  function setCursor(key) {
     cursorActive = true
-    focusSection = "header"
-  }
-
-  function setProfileCursor(index) {
-    cursorActive = true
-    focusSection = "profiles"
-    profileIndex = index
-  }
-
-  function setRuleCursor(index) {
-    cursorActive = true
-    focusSection = "rules"
-    ruleIndex = index
+    cursorKey = key
   }
 
   implicitWidth: button.implicitWidth
@@ -281,15 +317,12 @@ Panel {
     legendOpen = false
     if (!opened) return
     cursorActive = false
+    cursorKey = "header"
     if (panelFlick) panelFlick.contentY = 0
     controld.refresh()
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
-  onRuleIndexChanged: scrollCursorIntoView()
-  onProfileIndexChanged: scrollCursorIntoView()
-  onShowProfilesChanged: ensureCursor()
-  onShowRulesChanged: ensureCursor()
-  onCursorRulesChanged: ensureCursor()
+  onCursorItemsChanged: ensureCursor()
 
   Service {
     id: controld
@@ -394,7 +427,7 @@ Panel {
             // Reached from the hero's trailingControl, whose `root` is the
             // PanelHero rather than this Panel.
             readonly property bool ringVisible: root.headerHasCursor
-            function focusHero() { root.setHeaderCursor() }
+            function focusHero() { root.setCursor("header") }
 
             PanelHero {
               id: hero
@@ -652,12 +685,14 @@ Panel {
               }
 
               MeterList {
+                id: domainList
                 width: parent.width
                 title: "DOMAINS"
                 rows: controld.stats ? controld.stats.domains : []
                 // A hostname is the one value here that goes straight into
                 // `cdctl rule create`, a browser, or a dig.
                 copyable: true
+                cursorPrefix: "domain:"
               }
 
               MeterList {
@@ -758,6 +793,7 @@ Panel {
             }
 
             Column {
+              id: activityColumn
               width: parent.width
               spacing: Style.space(6)
 
@@ -765,8 +801,10 @@ Panel {
                 model: controld.activity
                 ActivityRow {
                   required property var modelData
+                  required property int index
                   width: parent.width
                   query: modelData
+                  cursorKey: "activity:" + index
                 }
               }
             }
@@ -950,7 +988,8 @@ Panel {
     readonly property bool loading: selectedProfile && controld.loadingRules
     readonly property bool enforcedHere: profile && controld.endpointProfileId !== "" && controld.endpointProfileId === profile.id
 
-    hasCursor: root.cursorActive && root.focusSection === "profiles" && root.profileIndex === rowIndex
+    readonly property string cursorKey: "profile:" + rowIndex
+    hasCursor: root.cursorActive && root.cursorKey === cursorKey
     current: selectedProfile
     foreground: root.foreground
     fill: root.hoverFill
@@ -1053,7 +1092,7 @@ Panel {
       anchors.fill: parent
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
-      onEntered: root.setProfileCursor(profileRow.rowIndex)
+      onEntered: root.setCursor("profile:" + profileRow.rowIndex)
       onClicked: if (profileRow.profile) controld.selectProfile(profileRow.profile.id)
     }
 
@@ -1227,6 +1266,8 @@ Panel {
     property string labelFor: ""
     // Only rows whose value can be acted on elsewhere offer to be copied.
     property bool copyable: false
+    // Set for a list the cursor walks; rows key off it by index.
+    property string cursorPrefix: ""
 
     visible: rows.length > 0
     spacing: Style.space(1)
@@ -1246,7 +1287,9 @@ Panel {
       model: meterList.rows
       MeterRow {
         required property var modelData
+        required property int index
         width: meterList.width
+        cursorKey: meterList.cursorPrefix === "" ? "" : meterList.cursorPrefix + index
         label: {
           if (meterList.pretty) return Model.filterLabel(modelData.value)
           if (meterList.labelFor === "country") return Model.countryName(modelData.value)
@@ -1266,13 +1309,15 @@ Panel {
     id: meterRow
     property string label: ""
     property string copyValue: ""
+    property string cursorKey: ""
     property int hits: 0
     property real ratio: 0
 
     implicitHeight: rowLabel.implicitHeight + Style.spacing.sm * 2
 
     readonly property bool interactive: copyValue !== ""
-    readonly property bool hot: interactive && rowMouse.containsMouse
+    readonly property bool hasCursor: cursorKey !== "" && root.cursorActive && root.cursorKey === cursorKey
+    readonly property bool hot: interactive && (rowMouse.containsMouse || hasCursor)
 
     Text {
       id: rowLabel
@@ -1329,6 +1374,7 @@ Panel {
       enabled: meterRow.interactive
       hoverEnabled: enabled
       cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+      onEntered: if (meterRow.cursorKey !== "") root.setCursor(meterRow.cursorKey)
       onClicked: controld.copyToClipboard(meterRow.copyValue)
     }
 
@@ -1383,8 +1429,11 @@ Panel {
   component ActivityRow: Item {
     id: activityRow
     property var query: null
+    property string cursorKey: ""
     readonly property string question: query ? query.question : ""
     readonly property bool blocked: query && query.action === 0
+    readonly property bool hasCursor: cursorKey !== "" && root.cursorActive && root.cursorKey === cursorKey
+    readonly property bool hot: activityMouse.containsMouse || hasCursor
 
     implicitHeight: activityText.implicitHeight + Style.spacing.sm * 2
 
@@ -1410,7 +1459,7 @@ Panel {
         Text {
           Layout.fillWidth: true
           text: activityRow.question
-          color: activityMouse.containsMouse ? root.foreground : Qt.darker(root.foreground, 1.25)
+          color: activityRow.hot ? root.foreground : Qt.darker(root.foreground, 1.25)
           font.family: root.fontFamily
           font.pixelSize: Style.font.bodySmall
           elide: Text.ElideMiddle
@@ -1440,6 +1489,7 @@ Panel {
       anchors.fill: parent
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
+      onEntered: if (activityRow.cursorKey !== "") root.setCursor(activityRow.cursorKey)
       onClicked: controld.copyToClipboard(activityRow.question)
     }
 
@@ -1456,7 +1506,7 @@ Panel {
     property int rowIndex: 0
     readonly property bool ruleEnabled: rule ? rule.enabled : false
 
-    hasCursor: root.cursorActive && root.focusSection === "rules" && root.ruleIndex === rowIndex
+    hasCursor: root.cursorActive && root.cursorKey === "rule:" + rowIndex
     foreground: root.foreground
     fill: root.hoverFill
 
@@ -1467,7 +1517,7 @@ Panel {
       anchors.fill: parent
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
-      onEntered: root.setRuleCursor(ruleRow.rowIndex)
+      onEntered: root.setCursor("rule:" + ruleRow.rowIndex)
       onClicked: if (ruleRow.rule) controld.copyToClipboard(ruleRow.rule.hostname)
     }
 
