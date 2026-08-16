@@ -9,7 +9,7 @@ const vm = require("node:vm")
 
 const src = fs.readFileSync(path.join(__dirname, "..", "Model.js"), "utf8")
 const M = {}
-vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, nextProfile, groupRules, flattenGroups, countRules, actionGlyph, ruleDetail, profileDetail, accountLine, resolverUid, parseDevices, findDevice, endpointLine, activeProfile, defaultActionLine, parseStats, formatCount, blockedShare, windowLabel, EXIT_AUTH };", M)
+vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, nextProfile, groupRules, flattenGroups, countRules, actionGlyph, ruleDetail, profileDetail, accountLine, resolverUid, parseDevices, findDevice, endpointLine, activeProfile, defaultActionLine, parseStats, formatCount, blockedShare, windowLabel, meterRatio, sparkPoints, filterLabel, actionTotal, windowOptions, actionOptions, EXIT_AUTH };", M)
 const m = M.__exports
 
 // vm-realm arrays fail strict deepEqual on prototype identity; compare by value.
@@ -191,18 +191,52 @@ test("defaultActionLine", () => {
 })
 
 test("parseStats validates the helper's document", () => {
-  const raw = JSON.stringify({ ok: true, hours: 24, total: 21432, blocked: 6302,
-    top_blocked: [{ value: "d.dropbox.com", count: 2112 }, { value: "", count: 9 }, { count: 3 }] })
+  const raw = JSON.stringify({
+    ok: true, hours: 24, action: 0,
+    totals: { all: 21432, blocked: 6302, bypassed: 14709, redirected: 0 },
+    series: [{ time: "t0", total: 100, blocked: 20 }, { time: "t1", total: 50, blocked: 10 }],
+    domains: [{ value: "d.dropbox.com", count: 2112 }, { value: "", count: 9 }, { count: 3 }],
+    filters: [{ value: "x-hagezi-proplus", count: 6288 }],
+    networks: [{ value: "Google", count: 72 }],
+    countries: [{ value: "US", count: 211 }]
+  })
   const r = m.parseStats(raw)
   assert.equal(r.ok, true)
-  assert.equal(r.total, 21432)
-  same(r.topBlocked, [{ value: "d.dropbox.com", count: 2112 }])
+  assert.equal(r.totals.all, 21432)
+  assert.equal(r.totals.bypassed, 14709)
+  // Entries without a value are dropped rather than rendered blank.
+  same(r.domains, [{ value: "d.dropbox.com", count: 2112 }])
+  assert.equal(r.series.length, 2)
+  assert.equal(m.actionTotal(r, 1), 14709)
+  assert.equal(m.actionTotal(r, 0), 6302)
   // The helper reports its own failures in the same envelope.
   const failed = m.parseStats(JSON.stringify({ ok: false, error: "analytics unreachable: timed out" }))
   assert.equal(failed.ok, false)
   assert.equal(failed.error, "analytics unreachable: timed out")
   assert.equal(m.parseStats("").ok, false)
   assert.equal(m.parseStats("not json").ok, false)
+})
+
+test("meterRatio scales against the biggest row", () => {
+  const rows = [{ count: 100 }, { count: 25 }, { count: 0 }]
+  assert.equal(m.meterRatio(100, rows), 1)
+  assert.equal(m.meterRatio(25, rows), 0.25)
+  assert.equal(m.meterRatio(5, []), 0)
+  assert.equal(m.meterRatio(5, [{ count: 0 }]), 0)
+})
+
+test("sparkPoints normalizes and flips the y axis", () => {
+  same(m.sparkPoints([{ total: 10 }, { total: 5 }, { total: 0 }], "total"),
+       [{ x: 0, y: 0 }, { x: 0.5, y: 0.5 }, { x: 1, y: 1 }])
+  // One point cannot be a line, and an all-zero window must not divide by zero.
+  same(m.sparkPoints([{ total: 4 }], "total"), [])
+  same(m.sparkPoints([{ total: 0 }, { total: 0 }], "total"), [{ x: 0, y: 1 }, { x: 1, y: 1 }])
+})
+
+test("filterLabel makes a slug readable", () => {
+  assert.equal(m.filterLabel("x-hagezi-proplus"), "Hagezi proplus")
+  assert.equal(m.filterLabel("iot"), "Iot")
+  assert.equal(m.filterLabel(""), "unknown")
 })
 
 test("formatCount, blockedShare, windowLabel", () => {

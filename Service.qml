@@ -52,6 +52,12 @@ Item {
   property var stats: null
   property bool statsLoading: false
   property string statsError: ""
+  // The window and the verdict the lists describe, both driven from the panel.
+  property int statsHours: 24
+  property int statsAction: 0
+  // Answers are cached per window and action so flipping a tab back is free.
+  property var statsCache: ({})
+  property string _statsKey: ""
   readonly property int endpointAnalytics: endpoint ? endpoint.analytics : 0
   readonly property bool statsAvailable: endpoint !== null && endpointAnalytics > 0
 
@@ -109,14 +115,46 @@ Item {
     return String(Qt.resolvedUrl(name)).replace(/^file:\/\//, "")
   }
 
-  function loadStats() {
-    if (!statsEnabled || !statsAvailable || statsProcess.running) return
+  function statsKey(hours, action) {
+    return String(hours) + ":" + String(action)
+  }
+
+  function loadStats(force) {
+    if (!statsEnabled || !statsAvailable) return
+    var key = statsKey(statsHours, statsAction)
+    var cached = statsCache[key]
+    if (cached && force !== true) {
+      stats = cached
+      statsError = ""
+      statsLoading = false
+      return
+    }
+    if (statsProcess.running) return
+    // Keep the previous numbers on screen while the next window loads; an
+    // empty section that flashes back is worse than slightly stale figures.
     statsLoading = true
+    _statsKey = key
     statsProcess.command = ["python3", scriptPath("scripts/stats.py"),
       "--endpoint", endpoint.id,
       "--region", region !== "" ? region : "europe",
-      "--hours", String(statsWindowHours)]
+      "--hours", String(statsHours),
+      "--action", String(statsAction),
+      "--top", "5"]
     statsProcess.running = true
+  }
+
+  function setStatsWindow(hours) {
+    var next = parseInt(String(hours), 10)
+    if (!isFinite(next) || next === statsHours) return
+    statsHours = next
+    loadStats()
+  }
+
+  function setStatsAction(action) {
+    var next = parseInt(String(action), 10)
+    if (!isFinite(next) || next === statsAction) return
+    statsAction = next
+    loadStats()
   }
 
   function copyToClipboard(value) {
@@ -144,7 +182,7 @@ Item {
       profilesProcess.running = true
     }
     if (!resolverProcess.running) resolverProcess.running = true
-    if (statsWanted) loadStats()
+    if (statsWanted) loadStats(true)
     if (!pollWatchdog.running) pollWatchdog.start()
   }
 
@@ -214,6 +252,15 @@ Item {
   // once it lands rather than staying on the browsed profile.
   // The endpoint lands after the panel has already opened, so the first fetch
   // usually happens here rather than on open.
+  Component.onCompleted: statsHours = statsWindowHours
+
+  // A fresh window setting resets the runtime choice and everything cached.
+  onStatsWindowHoursChanged: {
+    statsCache = ({})
+    statsHours = statsWindowHours
+    if (statsWanted) loadStats()
+  }
+
   onStatsAvailableChanged: if (statsWanted && statsAvailable) loadStats()
   onStatsWantedChanged: if (statsWanted) loadStats()
 
@@ -332,8 +379,16 @@ Item {
       root.statsLoading = false
       var parsed = Model.parseStats(statsStdout.text)
       if (parsed.ok) {
-        root.stats = parsed
-        root.statsError = ""
+        var next = ({})
+        for (var key in root.statsCache) next[key] = root.statsCache[key]
+        next[root._statsKey] = parsed
+        root.statsCache = next
+        // A slow answer for a window the user has already left must not
+        // overwrite what they are looking at now.
+        if (root._statsKey === root.statsKey(root.statsHours, root.statsAction)) {
+          root.stats = parsed
+          root.statsError = ""
+        }
         return
       }
       root.stats = null

@@ -16,8 +16,10 @@ Read-only for now: it lists, it does not write.
   action, protocol, ctrld version, filter and service counts, and the endpoint ID (click to copy)
 - PROFILES: the browse-mode fallback for a machine that is not on Control D DNS — every profile
   with its enabled rules, filters, and services; click one to browse it
-- STATISTICS: queries and blocks for this endpoint over the last 24h, with the top blocked
-  domains (click one to copy it). Fetched only while the panel is open
+- STATISTICS for this endpoint: a queries-over-time chart with the blocked share shaded under
+  it, totals, and top domains, filters and destinations as meter rows. Pick the window
+  (1h/24h/7d/30d) and the verdict (blocked/bypassed/redirected); destinations switch between
+  networks and countries. Any row copies its value. Fetched only while the panel is open
 - RULES: the enforced profile's custom rules, root first, then one group per folder, with
   action, spoof/redirect target, and disabled state
 - Copy a rule's hostname to the clipboard
@@ -84,7 +86,7 @@ Set through the bar's widget settings, or inline on the widget's `shell.json` en
 | `refreshIntervalSec` | `120` | Poll interval, 15-3600 seconds |
 | `profile` | `""` | Profile id (or name) to show; empty picks the first profile |
 | `showStatistics` | `true` | Whether to query analytics at all |
-| `statsWindowHours` | `24` | Statistics window, 1-720 hours |
+| `statsWindowHours` | `24` | Statistics window the panel opens on, 1-720 hours |
 
 ## IPC
 

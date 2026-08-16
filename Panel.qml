@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Shapes
 import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
@@ -35,8 +36,20 @@ Panel {
   readonly property bool unprotected: controld.ready && controld.resolverChecked && !controld.usingControld
   readonly property bool showStats: controld.ready && machineMode && controld.statsEnabled
     && (controld.statsAvailable || controld.statsError !== "")
+  property string destinationView: "networks"
+  readonly property var destinationRows: {
+    if (!controld.stats) return []
+    return destinationView === "countries" ? controld.stats.countries : controld.stats.networks
+  }
+  readonly property var actionRows: controld.stats ? controld.stats.domains : []
+  readonly property string actionWord: {
+    var a = controld.statsAction
+    if (a === 1) return "bypassed"
+    if (a === 2) return "redirected"
+    return "blocked"
+  }
   readonly property string statsCaption: {
-    if (controld.statsLoading && controld.stats === null) return "loading…"
+    if (controld.statsLoading) return "loading…"
     if (!controld.statsAvailable) return "analytics off for this endpoint"
     return Model.windowLabel(controld.stats ? controld.stats.hours : controld.statsWindowHours)
   }
@@ -461,9 +474,25 @@ Panel {
 
             SectionTitle {
               width: parent.width
-              icon: "statistics"
               text: "STATISTICS"
               caption: root.statsCaption
+            }
+
+            ButtonGroup {
+              width: parent.width
+              options: Model.windowOptions()
+              value: String(controld.statsHours)
+              foreground: root.foreground
+              accent: Color.accent
+              fontFamily: root.fontFamily
+              fontSize: Style.font.caption
+              onChanged: function(v) { controld.setStatsWindow(v) }
+            }
+
+            Sparkline {
+              width: parent.width
+              visible: controld.stats !== null && controld.stats.series.length > 1
+              series: controld.stats ? controld.stats.series : []
             }
 
             GridLayout {
@@ -474,13 +503,13 @@ Panel {
               rowSpacing: Style.spacing.labelGap
 
               InfoLabel { text: "Queries" }
-              DetailValue { text: controld.stats ? Model.formatCount(controld.stats.total) : "--" }
+              DetailValue { text: controld.stats ? Model.formatCount(controld.stats.totals.all) : "--" }
               InfoLabel { text: "Blocked" }
               DetailValue {
                 text: {
                   if (!controld.stats) return "--"
-                  var share = Model.blockedShare(controld.stats.total, controld.stats.blocked)
-                  var count = Model.formatCount(controld.stats.blocked)
+                  var share = Model.blockedShare(controld.stats.totals.all, controld.stats.totals.blocked)
+                  var count = Model.formatCount(controld.stats.totals.blocked)
                   return share !== "" ? count + " (" + share + ")" : count
                 }
               }
@@ -496,34 +525,73 @@ Panel {
               wrapMode: Text.WordWrap
             }
 
+            // Which verdict the lists below describe, mirroring the
+            // dashboard's tabs.
+            ButtonGroup {
+              width: parent.width
+              visible: controld.stats !== null
+              options: Model.actionOptions()
+              value: String(controld.statsAction)
+              foreground: root.foreground
+              accent: Color.accent
+              fontFamily: root.fontFamily
+              fontSize: Style.font.caption
+              onChanged: function(v) { controld.setStatsAction(v) }
+            }
+
             Text {
               width: parent.width
-              visible: controld.statsError === "" && controld.stats !== null && controld.stats.topBlocked.length === 0
-              text: "Nothing blocked in this window."
+              visible: controld.stats !== null && root.actionRows.length === 0 && controld.statsError === ""
+              text: "Nothing " + root.actionWord + " in this window."
               color: root.dim
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
             }
 
+            MeterList {
+              width: parent.width
+              title: "DOMAINS"
+              rows: controld.stats ? controld.stats.domains : []
+            }
+
+            MeterList {
+              width: parent.width
+              title: "FILTERS"
+              rows: controld.stats ? controld.stats.filters : []
+              pretty: true
+            }
+
             Column {
               width: parent.width
-              visible: controld.stats !== null && controld.stats.topBlocked.length > 0
+              visible: root.destinationRows.length > 0
               spacing: Style.space(6)
 
-              PanelSectionHeader {
-                text: "TOP BLOCKED"
-                foreground: root.foreground
-                fontFamily: root.fontFamily
+              RowLayout {
+                width: parent.width
+                spacing: Style.space(8)
+
+                PanelSectionHeader {
+                  text: "DESTINATIONS"
+                  foreground: root.foreground
+                  fontFamily: root.fontFamily
+                }
+
+                Item { Layout.fillWidth: true }
+
+                ButtonGroup {
+                  options: [{ value: "networks", label: "Networks" }, { value: "countries", label: "Countries" }]
+                  value: root.destinationView
+                  foreground: root.foreground
+                  accent: Color.accent
+                  fontFamily: root.fontFamily
+                  fontSize: Style.font.caption
+                  onChanged: function(v) { root.destinationView = v }
+                }
               }
 
-              Repeater {
-                model: controld.stats ? controld.stats.topBlocked : []
-                TopBlockedRow {
-                  required property var modelData
-                  width: parent.width
-                  domain: modelData.value
-                  hits: modelData.count
-                }
+              MeterList {
+                width: parent.width
+                rows: root.destinationRows
               }
             }
           }
@@ -540,7 +608,6 @@ Panel {
 
             SectionTitle {
               width: parent.width
-              icon: "profiles"
               text: "PROFILES"
             }
 
@@ -574,7 +641,6 @@ Panel {
 
             SectionTitle {
               width: parent.width
-              icon: "rules"
               text: root.rulesTitle
               caption: root.rulesCaption
             }
@@ -625,29 +691,18 @@ Panel {
     return n
   }
 
-  // Section header in the dashboard's idiom: its icon, the label, and an
-  // optional right-aligned caption.
+  // A section header with an optional right-aligned caption. No icon: the
+  // built-in panels label their sections with text alone.
   component SectionTitle: Item {
     id: sectionTitle
-    property string icon: ""
     property string text: ""
     property string caption: ""
 
     implicitHeight: Math.max(label.implicitHeight, captionText.implicitHeight)
 
-    DashIcon {
-      id: sectionIcon
-      anchors.left: parent.left
-      anchors.verticalCenter: label.verticalCenter
-      name: sectionTitle.icon
-      iconSize: Style.font.caption
-      color: Qt.darker(root.foreground, 1.4)
-    }
-
     PanelSectionHeader {
       id: label
-      anchors.left: sectionIcon.right
-      anchors.leftMargin: Style.space(6)
+      anchors.left: parent.left
       text: sectionTitle.text
       foreground: root.foreground
       fontFamily: root.fontFamily
@@ -916,50 +971,162 @@ Panel {
     }
   }
 
-  // Informational, like the key/value pairs above it: click to copy the
-  // domain, no cursor.
-  component TopBlockedRow: Item {
-    id: blockedRow
-    property string domain: ""
+  // Queries over the window: the line is every query, the shaded area under
+  // it is the blocked share, so the gap between them is what was let through.
+  component Sparkline: Item {
+    id: spark
+    property var series: []
+    readonly property real peak: {
+      var items = spark.series || []
+      var max = 0
+      for (var i = 0; i < items.length; i++) max = Math.max(max, items[i].total)
+      return max
+    }
+
+    function pointsFor(key, closed) {
+      var items = spark.series || []
+      if (items.length < 2 || spark.peak <= 0) return []
+      var out = closed === true ? [Qt.point(0, spark.height)] : []
+      for (var i = 0; i < items.length; i++) {
+        out.push(Qt.point((i / (items.length - 1)) * spark.width,
+                          (1 - items[i][key] / spark.peak) * spark.height))
+      }
+      if (closed === true) out.push(Qt.point(spark.width, spark.height))
+      return out
+    }
+
+    implicitHeight: Style.space(44)
+
+    Shape {
+      anchors.fill: parent
+      antialiasing: true
+      layer.enabled: true
+      layer.samples: 4
+      preferredRendererType: Shape.CurveRenderer
+
+      ShapePath {
+        strokeWidth: 0
+        strokeColor: "transparent"
+        fillColor: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.18)
+        PathPolyline { path: spark.pointsFor("blocked", true) }
+      }
+
+      ShapePath {
+        strokeWidth: Math.max(1, Style.space(2))
+        strokeColor: Qt.darker(root.foreground, 1.3)
+        fillColor: "transparent"
+        capStyle: ShapePath.RoundCap
+        joinStyle: ShapePath.RoundJoin
+        PathPolyline { path: spark.pointsFor("total", false) }
+      }
+    }
+  }
+
+  // A titled list of rows whose background is filled in proportion to the
+  // biggest row, so the bar is the row rather than a rule beneath it.
+  component MeterList: Column {
+    id: meterList
+    property string title: ""
+    property var rows: []
+    // Filter ids arrive as slugs and read badly raw.
+    property bool pretty: false
+
+    visible: rows.length > 0
+    spacing: Style.space(1)
+
+    PanelSectionHeader {
+      text: meterList.title
+      visible: meterList.title !== ""
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+      bottomPadding: Style.space(4)
+    }
+
+    Repeater {
+      model: meterList.rows
+      MeterRow {
+        required property var modelData
+        width: meterList.width
+        label: meterList.pretty ? Model.filterLabel(modelData.value) : modelData.value
+        copyValue: modelData.value
+        hits: modelData.count
+        ratio: Model.meterRatio(modelData.count, meterList.rows)
+      }
+    }
+  }
+
+  // Label, bar, value on one line, as the agents panel lays out its tokens by
+  // day. The bar keeps a fixed share of the row so long domain names have
+  // room to read.
+  component MeterRow: Item {
+    id: meterRow
+    property string label: ""
+    property string copyValue: ""
     property int hits: 0
+    property real ratio: 0
 
-    implicitHeight: blockedInner.implicitHeight
+    implicitHeight: rowLabel.implicitHeight + Style.spacing.sm * 2
 
-    RowLayout {
-      id: blockedInner
+    Text {
+      id: rowLabel
       anchors.left: parent.left
+      anchors.right: meterTrack.left
+      anchors.rightMargin: Style.space(10)
+      anchors.verticalCenter: parent.verticalCenter
+      text: meterRow.label
+      color: rowMouse.containsMouse ? root.foreground : Qt.darker(root.foreground, 1.25)
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.bodySmall
+      elide: Text.ElideMiddle
+    }
+
+    Rectangle {
+      id: meterTrack
+      anchors.right: rowValue.left
+      anchors.rightMargin: Style.space(10)
+      anchors.verticalCenter: parent.verticalCenter
+      width: parent.width * 0.28
+      height: Math.max(Style.space(3), Math.round(Style.spacing.controlHeight * 0.10))
+      radius: height / 2
+      color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.10)
+
+      Rectangle {
+        anchors.left: parent.left
+        anchors.verticalCenter: parent.verticalCenter
+        height: parent.height
+        radius: parent.radius
+        width: parent.width * Math.max(0, Math.min(1, meterRow.ratio))
+        color: rowMouse.containsMouse ? root.foreground : Qt.darker(root.foreground, 1.2)
+
+        Behavior on width {
+          NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
+        }
+      }
+    }
+
+    Text {
+      id: rowValue
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
-      spacing: Style.space(10)
-
-      Text {
-        Layout.fillWidth: true
-        text: blockedRow.domain
-        color: blockedMouse.containsMouse ? root.foreground : Qt.darker(root.foreground, 1.25)
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.bodySmall
-        elide: Text.ElideMiddle
-      }
-
-      Text {
-        text: Model.formatCount(blockedRow.hits)
-        color: root.dim
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.bodySmall
-      }
+      width: Style.space(38)
+      horizontalAlignment: Text.AlignRight
+      text: Model.formatCount(meterRow.hits)
+      color: root.dim
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.bodySmall
     }
 
     MouseArea {
-      id: blockedMouse
+      id: rowMouse
       anchors.fill: parent
       hoverEnabled: true
       cursorShape: Qt.PointingHandCursor
-      onClicked: controld.copyToClipboard(blockedRow.domain)
+      onClicked: controld.copyToClipboard(meterRow.copyValue)
     }
 
     PanelToolTip {
-      visible: blockedMouse.containsMouse
-      text: "Copy domain"
+      visible: rowMouse.containsMouse
+      text: "Copy " + meterRow.copyValue
       fontFamily: root.fontFamily
     }
   }

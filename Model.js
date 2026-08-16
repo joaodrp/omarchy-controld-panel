@@ -327,32 +327,124 @@ function endpointLine(device, transport) {
   return parts.length > 0 ? parts.join(" · ") : "Control D"
 }
 
-// scripts/stats.py already fans the analytics calls into one document, so
-// this only has to validate it.
+// scripts/stats.py fans the analytics calls into one document per (window,
+// action) pair, so this only has to validate it.
 function parseStats(raw) {
   var parsed = parseJson(raw)
+  var empty = {
+    ok: false, hours: 0, action: 0,
+    totals: { all: 0, blocked: 0, bypassed: 0, redirected: 0 },
+    series: [], domains: [], filters: [], networks: [], countries: [], error: ""
+  }
   if (!parsed.ok || !parsed.value || typeof parsed.value !== "object") {
-    return { ok: false, hours: 0, total: 0, blocked: 0, topBlocked: [], error: parsed.error || "bad stats output" }
+    empty.error = parsed.error || "bad stats output"
+    return empty
   }
   var v = parsed.value
   if (v.ok !== true) {
-    return { ok: false, hours: 0, total: 0, blocked: 0, topBlocked: [], error: str(v.error) || "analytics failed" }
+    empty.error = str(v.error) || "analytics failed"
+    return empty
   }
-  var top = []
-  var list = v.top_blocked instanceof Array ? v.top_blocked : []
-  for (var i = 0; i < list.length; i++) {
-    var entry = list[i]
-    if (!entry || str(entry.value) === "") continue
-    top.push({ value: str(entry.value), count: num(entry.count) })
-  }
+  var totals = v.totals && typeof v.totals === "object" ? v.totals : {}
   return {
     ok: true,
     hours: num(v.hours, 24),
-    total: num(v.total),
-    blocked: num(v.blocked),
-    topBlocked: top,
+    action: num(v.action),
+    totals: {
+      all: num(totals.all),
+      blocked: num(totals.blocked),
+      bypassed: num(totals.bypassed),
+      redirected: num(totals.redirected)
+    },
+    series: parseSeries(v.series),
+    domains: parseCounts(v.domains),
+    filters: parseCounts(v.filters),
+    networks: parseCounts(v.networks),
+    countries: parseCounts(v.countries),
     error: ""
   }
+}
+
+function parseCounts(list) {
+  var out = []
+  var items = list instanceof Array ? list : []
+  for (var i = 0; i < items.length; i++) {
+    var entry = items[i]
+    if (!entry || str(entry.value) === "") continue
+    out.push({ value: str(entry.value), count: num(entry.count) })
+  }
+  return out
+}
+
+function parseSeries(list) {
+  var out = []
+  var items = list instanceof Array ? list : []
+  for (var i = 0; i < items.length; i++) {
+    var bucket = items[i]
+    if (!bucket) continue
+    out.push({ time: str(bucket.time), total: num(bucket.total), blocked: num(bucket.blocked) })
+  }
+  return out
+}
+
+// The action the lists describe. Values are the API's, and the labels are the
+// dashboard's tabs.
+var ACTION_BLOCKED = 0
+var ACTION_BYPASSED = 1
+var ACTION_REDIRECTED = 2
+
+function actionOptions() {
+  return [
+    { value: String(ACTION_BLOCKED), label: "Blocked" },
+    { value: String(ACTION_BYPASSED), label: "Bypassed" },
+    { value: String(ACTION_REDIRECTED), label: "Redirected" }
+  ]
+}
+
+function actionTotal(stats, action) {
+  if (!stats) return 0
+  var a = num(action)
+  if (a === ACTION_BYPASSED) return stats.totals.bypassed
+  if (a === ACTION_REDIRECTED) return stats.totals.redirected
+  return stats.totals.blocked
+}
+
+// The windows the dashboard offers, minus Real-Time and Custom.
+function windowOptions() {
+  return [
+    { value: "1", label: "1h" },
+    { value: "24", label: "24h" },
+    { value: "168", label: "7d" },
+    { value: "720", label: "30d" }
+  ]
+}
+
+// Bars are drawn against the biggest row rather than the total, so the top row
+// always fills: a list where every bar is 2% wide says nothing.
+function meterRatio(count, rows) {
+  var items = rows || []
+  var max = 0
+  for (var i = 0; i < items.length; i++) max = Math.max(max, num(items[i].count))
+  if (max <= 0) return 0
+  return Math.max(0, Math.min(1, num(count) / max))
+}
+
+// Sparkline geometry: normalized 0..1 points, y already flipped for QML's
+// downward axis, so the caller only scales by width and height.
+function sparkPoints(series, key) {
+  var items = series || []
+  if (items.length < 2) return []
+  var field = key || "total"
+  var max = 0
+  for (var i = 0; i < items.length; i++) max = Math.max(max, num(items[i][field]))
+  var points = []
+  for (var j = 0; j < items.length; j++) {
+    points.push({
+      x: j / (items.length - 1),
+      y: max > 0 ? 1 - (num(items[j][field]) / max) : 1
+    })
+  }
+  return points
 }
 
 // Query counts run to five and six digits, and the panel has one column for
@@ -381,6 +473,13 @@ function windowLabel(hours) {
   if (h < 48) return "last " + h + "h"
   var days = Math.round(h / 24)
   return "last " + days + "d"
+}
+
+// Filter ids come back as slugs; the dashboard shows titles we do not have,
+// so make the slug readable rather than inventing a name.
+function filterLabel(value) {
+  var name = str(value).replace(/^x-/, "").replace(/[-_]+/g, " ").trim()
+  return name === "" ? "unknown" : name.charAt(0).toUpperCase() + name.slice(1)
 }
 
 // Nerd Font glyphs, matching what the built-in panels use for their rows.
