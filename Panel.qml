@@ -579,11 +579,8 @@ Panel {
             width: parent.width
             spacing: Style.spacing.labelGap
 
-            GridLayout {
+            FactGrid {
               width: parent.width
-              columns: 4
-              columnSpacing: Style.space(20)
-              rowSpacing: Style.spacing.labelGap
 
               InfoLabel { text: "Profile" }
               DetailValue { text: controld.activeProfile ? controld.activeProfile.name : "--" }
@@ -668,12 +665,9 @@ Panel {
               series: controld.stats ? controld.stats.series : []
             }
 
-            GridLayout {
+            FactGrid {
               width: parent.width
               visible: controld.stats !== null
-              columns: 4
-              columnSpacing: Style.space(20)
-              rowSpacing: Style.spacing.labelGap
 
               InfoLabel { text: "Queries" }
               DetailValue { text: controld.stats ? Model.formatCount(controld.stats.totals.all) : "--" }
@@ -1206,11 +1200,22 @@ Panel {
     }
   }
 
+  // One geometry for every key/value block, so a label in one lines up with
+  // the label in the next. Sized rather than left to each grid's own content,
+  // which is what made the second block sit a few pixels off the first.
+  component FactGrid: GridLayout {
+    columns: 4
+    columnSpacing: Style.space(12)
+    rowSpacing: Style.spacing.labelGap
+  }
+
   component InfoLabel: Text {
     color: root.foreground
     opacity: 0.6
     font.family: root.fontFamily
     font.pixelSize: Style.font.bodySmall
+    Layout.fillWidth: true
+    Layout.preferredWidth: 3
   }
 
   component InfoValue: Text {
@@ -1225,6 +1230,7 @@ Panel {
     property string tooltipText: "Copy to clipboard"
 
     Layout.fillWidth: true
+    Layout.preferredWidth: 4
     horizontalAlignment: Text.AlignRight
     // Reserve the glyph's width whether or not it is showing, so the value
     // does not shift sideways under the pointer.
