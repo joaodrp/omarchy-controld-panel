@@ -26,11 +26,11 @@ Read-only for now: it lists, it does not write.
   the panel is open.
   The verdict governs domains and filters, not destinations: a blocked query never reaches
   one, so destinations are the traffic that was allowed
-- ACTIVITY: this endpoint's most recent lookups, refreshed every 15s while the panel is open.
-  The A/AAAA pair of one lookup collapses into a single row
 - RULES: the enforced profile's custom rules, root first, then one group per folder, with
   action, spoof/redirect target, and disabled state. Capped like every other list; the caption
   says how many are hidden
+- ACTIVITY: this endpoint's most recent lookups, refreshed every 15s while the panel is open.
+  The A/AAAA pair of one lookup collapses into a single row
 - Copy a rule's hostname to the clipboard
 - Every section needs an identified endpoint. Without one the panel shows nothing but the
   reason: no Control D resolver here, a resolver whose endpoint is not in this account, or a
@@ -44,7 +44,7 @@ Inside the panel:
 | --- | --- |
 | `?` | Show or hide the key legend |
 | `o` | Open the Control D dashboard |
-| `m` / `s` / `a` / `r` | Jump to machine, statistics, activity, rules |
+| `m` / `s` / `r` / `a` | Jump to machine, statistics, rules, activity |
 | `g` / `G` | Jump to the top or the bottom |
 | `j` / `k` or arrows | Move the cursor through every actionable row, top to bottom |
 | `enter` / `space` | Activate the cursor row |

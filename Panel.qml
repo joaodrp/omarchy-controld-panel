@@ -60,8 +60,8 @@ Panel {
   readonly property var legendKeys: {
     var keys = [{ key: "j/k", what: "move" }, { key: "enter", what: "activate" }, { key: "y", what: "copy" }]
     if (showStats) keys.push({ key: "s", what: "statistics" })
-    if (showActivity) keys.push({ key: "a", what: "activity" })
     if (showRules) keys.push({ key: "r", what: "rules" })
+    if (showActivity) keys.push({ key: "a", what: "activity" })
     if (showEndpoint) keys.push({ key: "m", what: "machine" })
     keys.push({ key: "g/G", what: "top/bottom" }, { key: "o", what: "dashboard" },
       { key: "R", what: "refresh" }, { key: "esc", what: "close" })
@@ -137,13 +137,13 @@ Panel {
       for (var t = 0; t < destinationRows.length; t++)
         items.push({ key: "destination:" + t, kind: "reading", index: t, value: "" })
     }
-    if (showActivity) {
-      for (var a = 0; a < controld.activity.length; a++)
-        items.push({ key: "activity:" + a, kind: "activity", index: a, value: controld.activity[a].question })
-    }
     if (showRules) {
       for (var r = 0; r < cursorRules.length; r++)
         items.push({ key: "rule:" + r, kind: "rule", index: r, value: cursorRules[r].hostname })
+    }
+    if (showActivity) {
+      for (var a = 0; a < controld.activity.length; a++)
+        items.push({ key: "activity:" + a, kind: "activity", index: a, value: controld.activity[a].question })
     }
     return items
   }
@@ -811,42 +811,6 @@ Panel {
           }
 
           PanelSeparator {
-            visible: root.showActivity
-            foreground: root.foreground
-          }
-
-          Column {
-            id: activitySection
-            visible: root.showActivity
-            width: parent.width
-            spacing: Style.space(8)
-
-            SectionTitle {
-              width: parent.width
-              text: "ACTIVITY"
-              caption: controld.activityError !== "" ? controld.activityError
-                : (controld.activity.length === 0 ? "no queries yet" : "")
-            }
-
-            Column {
-              id: activityColumn
-              width: parent.width
-              spacing: Style.space(6)
-
-              Repeater {
-                model: controld.activity
-                ActivityRow {
-                  required property var modelData
-                  required property int index
-                  width: parent.width
-                  query: modelData
-                  cursorKey: "activity:" + index
-                }
-              }
-            }
-          }
-
-          PanelSeparator {
             visible: root.showRules
             foreground: root.foreground
           }
@@ -892,6 +856,42 @@ Panel {
                     rule: rowSlot.isRuleRow ? rowSlot.modelData.rule : null
                     rowIndex: rowSlot.isRuleRow ? root.ruleOrdinal(rowSlot.index) : -1
                   }
+                }
+              }
+            }
+          }
+
+          PanelSeparator {
+            visible: root.showActivity
+            foreground: root.foreground
+          }
+
+          Column {
+            id: activitySection
+            visible: root.showActivity
+            width: parent.width
+            spacing: Style.space(8)
+
+            SectionTitle {
+              width: parent.width
+              text: "ACTIVITY"
+              caption: controld.activityError !== "" ? controld.activityError
+                : (controld.activity.length === 0 ? "no queries yet" : "")
+            }
+
+            Column {
+              id: activityColumn
+              width: parent.width
+              spacing: Style.space(6)
+
+              Repeater {
+                model: controld.activity
+                ActivityRow {
+                  required property var modelData
+                  required property int index
+                  width: parent.width
+                  query: modelData
+                  cursorKey: "activity:" + index
                 }
               }
             }
