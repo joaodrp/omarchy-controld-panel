@@ -25,13 +25,19 @@ Panel {
   readonly property color hoverFill: bar ? Style.hoverFillFor(bar.foreground, Color.accent) : "transparent"
   readonly property color selectedFill: bar ? Style.selectedFillFor(bar.foreground, Color.accent) : "transparent"
 
-  readonly property bool showProfiles: controld.ready && controld.profiles.length > 0
-  readonly property bool showRules: controld.ready && controld.selectedProfile !== null
+  // Machine mode: this panel describes the endpoint and the profile it
+  // enforces. Browse mode is the fallback for a machine that is not on
+  // Control D DNS, where there is no endpoint to describe.
+  readonly property bool machineMode: controld.endpoint !== null
+  readonly property bool showEndpoint: controld.ready && machineMode
+  readonly property bool showProfiles: controld.ready && !machineMode && controld.profiles.length > 0
+  readonly property bool showRules: controld.ready && controld.activeProfile !== null
+  readonly property bool unprotected: controld.ready && controld.resolverChecked && !controld.usingControld
   // Only rule rows take the cursor; folder headers are labels.
   readonly property var cursorRules: cursorRuleList()
   readonly property bool headerHasCursor: cursorActive && focusSection === "header" && controld.installed
-  readonly property color iconColor: controld.ready ? foreground : dim
-  readonly property color barIconColor: controld.ready ? barForeground : Qt.darker(barForeground, 1.55)
+  readonly property color iconColor: controld.ready && !unprotected ? foreground : dim
+  readonly property color barIconColor: controld.ready && !unprotected ? barForeground : Qt.darker(barForeground, 1.55)
   // The hero names this machine's endpoint and what it enforces; the account
   // line is the fallback when no Control D resolver is in use here.
   readonly property string heroTitle: {
@@ -42,7 +48,8 @@ Panel {
     if (!controld.installed) return "cdctl is not installed"
     if (controld.needsAuth) return "Not authenticated"
     if (controld.refreshing && !controld.authenticated) return "Checking…"
-    if (controld.endpoint) return Model.endpointLine(controld.endpoint, controld.endpointTransport)
+    if (controld.endpoint) return Model.endpointLine(controld.endpoint, "")
+    if (root.unprotected) return "This machine is not using Control D DNS"
     return controld.statusText
   }
   readonly property string rulesCaption: {
@@ -51,6 +58,9 @@ Panel {
     if (c.total === 0) return "No custom rules in this profile."
     return c.enabled + " of " + c.total + " enabled"
   }
+  // In machine mode the section above already names the profile these rules
+  // belong to; in browse mode the profile list does.
+  readonly property string rulesTitle: "RULES"
 
   function cursorRuleList() {
     var rows = controld.ruleRows
@@ -230,13 +240,13 @@ Panel {
           iconSize: Style.space(12)
           color: root.barIconColor
           badgeColor: root.urgent
-          crossed: controld.checkedInstall && !controld.installed
+          crossed: (controld.checkedInstall && !controld.installed) || root.unprotected
           warning: controld.installed && controld.needsAuth
         }
       }
     }
     onPressed: function(buttonCode) {
-      if (buttonCode === Qt.RightButton) controld.selectNextProfile(1)
+      if (buttonCode === Qt.RightButton && !root.machineMode) controld.selectNextProfile(1)
       else if (buttonCode === Qt.MiddleButton) controld.refresh()
       else root.toggle()
     }
@@ -264,8 +274,9 @@ Panel {
       onTabRequested: function(direction) { root.switchPanel(direction) }
       onTextKey: function(t) {
         if (t === "r" || t === "R") controld.refresh()
-        else if (t === "p" || t === "P") controld.selectNextProfile(1)
+        else if ((t === "p" || t === "P") && !root.machineMode) controld.selectNextProfile(1)
         else if (t === "c" || t === "C") controld.copyToClipboard(root.selectedRule() ? root.selectedRule().hostname : "")
+        else if (t === "y" || t === "Y") controld.copyToClipboard(controld.endpoint ? controld.endpoint.id : "")
       }
 
       Flickable {
@@ -306,7 +317,7 @@ Panel {
                   iconSize: Style.font.display
                   color: root.iconColor
                   badgeColor: root.urgent
-                  crossed: controld.checkedInstall && !controld.installed
+                  crossed: (controld.checkedInstall && !controld.installed) || root.unprotected
                   warning: controld.installed && controld.needsAuth
                 }
               }
@@ -384,6 +395,51 @@ Panel {
             }
           }
 
+          // Machine facts, in the built-in panels' key/value idiom: attributes
+          // sit under the hero without a header, and only the interactive
+          // lists below get their own separated section.
+          Column {
+            visible: root.showEndpoint
+            width: parent.width
+            spacing: Style.spacing.labelGap
+
+            GridLayout {
+              width: parent.width
+              columns: 4
+              columnSpacing: Style.space(20)
+              rowSpacing: Style.spacing.labelGap
+
+              InfoLabel { text: "Profile" }
+              DetailValue { text: controld.activeProfile ? controld.activeProfile.name : "--" }
+              // The profile's default action governs domains that match no
+              // rule, filter, or service.
+              InfoLabel { text: "Unmatched" }
+              DetailValue { text: controld.activeProfile ? Model.actionLabel(controld.activeProfile.defaultAction) : "--" }
+
+              InfoLabel { text: "Protocol" }
+              DetailValue { text: controld.endpointTransport !== "" ? controld.endpointTransport : "--" }
+              InfoLabel { text: "Daemon" }
+              DetailValue { text: controld.endpoint && controld.endpoint.ctrldVersion !== "" ? "ctrld " + controld.endpoint.ctrldVersion : "--" }
+
+              InfoLabel { text: "Filters" }
+              DetailValue { text: controld.activeProfile ? String(controld.activeProfile.enabledFilters) : "--" }
+              InfoLabel { text: "Services" }
+              DetailValue { text: controld.activeProfile ? String(controld.activeProfile.enabledServices) : "--" }
+
+              // The id is the whole content: every endpoint's resolver is that
+              // id plus a constant suffix, and Protocol already says which form
+              // it takes.
+              InfoLabel { text: "Endpoint" }
+              DetailValue {
+                text: controld.endpoint ? controld.endpoint.id : "--"
+                copyable: controld.endpoint !== null
+                tooltipText: "Copy endpoint ID"
+              }
+              Item { Layout.fillWidth: true }
+              Item { Layout.fillWidth: true }
+            }
+          }
+
           PanelSeparator {
             visible: root.showProfiles
             foreground: root.foreground
@@ -431,7 +487,7 @@ Panel {
             SectionTitle {
               width: parent.width
               icon: "rules"
-              text: "RULES"
+              text: root.rulesTitle
               caption: root.rulesCaption
             }
 
@@ -713,6 +769,62 @@ Panel {
         elide: Text.ElideRight
         anchors.verticalCenter: parent.verticalCenter
       }
+    }
+  }
+
+  component InfoLabel: Text {
+    color: root.foreground
+    opacity: 0.6
+    font.family: root.fontFamily
+    font.pixelSize: Style.font.bodySmall
+  }
+
+  component InfoValue: Text {
+    color: root.foreground
+    font.family: root.fontFamily
+    font.pixelSize: Style.font.bodySmall
+  }
+
+  component DetailValue: InfoValue {
+    id: detailValue
+    property bool copyable: false
+    property string tooltipText: "Copy to clipboard"
+
+    Layout.fillWidth: true
+    horizontalAlignment: Text.AlignRight
+    // Reserve the glyph's width whether or not it is showing, so the value
+    // does not shift sideways under the pointer.
+    rightPadding: copyable ? copyGlyph.width + Style.space(4) : 0
+
+    Text {
+      id: copyGlyph
+      visible: detailValue.copyable && detailValue.text !== ""
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      text: "󰆏"
+      color: detailValue.color
+      opacity: valueMouse.containsMouse ? 1.0 : 0.45
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
+
+      Behavior on opacity {
+        NumberAnimation { duration: 120; easing.type: Easing.OutQuad }
+      }
+    }
+
+    MouseArea {
+      id: valueMouse
+      anchors.fill: parent
+      enabled: detailValue.copyable && detailValue.text !== ""
+      hoverEnabled: enabled
+      cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+      onClicked: controld.copyToClipboard(detailValue.text)
+    }
+
+    PanelToolTip {
+      visible: valueMouse.enabled && valueMouse.containsMouse
+      text: detailValue.tooltipText
+      fontFamily: root.fontFamily
     }
   }
 

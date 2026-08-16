@@ -24,6 +24,9 @@ Item {
   property var profiles: []
   property string selectedProfileId: ""
   readonly property var selectedProfile: Model.resolveProfile(profiles, selectedProfileId)
+  // What the panel describes: the endpoint's profile when this machine is on
+  // Control D, else whatever profile is being browsed.
+  readonly property var activeProfile: Model.activeProfile(profiles, endpointProfileId, selectedProfileId)
   property var rules: []
   property var folders: []
   readonly property var groups: Model.groupRules(rules, folders)
@@ -37,6 +40,11 @@ Item {
   property var devices: []
   readonly property var endpoint: Model.findDevice(devices, endpointUid)
   readonly property string endpointProfileId: endpoint ? endpoint.profileId : ""
+  // A Control D resolver is in use here, even if the device behind it could
+  // not be named (a stale token, a device removed from the account).
+  readonly property bool usingControld: endpointUid !== ""
+  readonly property bool resolverChecked: _resolverChecked
+  property bool _resolverChecked: false
 
   property bool refreshing: false
   property bool loadingRules: false
@@ -175,6 +183,12 @@ Item {
     if (_pendingFolders) folders = _pendingFolders
   }
 
+  // The endpoint resolves after the first rules fetch, so the rules follow it
+  // once it lands rather than staying on the browsed profile.
+  onActiveProfileChanged: {
+    if (activeProfile && activeProfile.id !== _rulesForProfile) loadRules(activeProfile.id)
+  }
+
   onPreferredProfileChanged: {
     // The settings form changed the persisted profile: follow it.
     if (preferredProfile !== "" && preferredProfile !== selectedProfileId) {
@@ -244,6 +258,7 @@ Item {
     stdout: StdioCollector { id: resolverStdout; waitForEnd: true }
     onExited: {
       var found = Model.resolverUid(resolverStdout.text)
+      root._resolverChecked = true
       root.endpointUid = found.uid
       root.endpointTransport = found.transport
       // No Control D resolver here, so there is no endpoint to name.
@@ -320,10 +335,9 @@ Item {
       root.profiles = parsed.profiles
       if (root.selectedProfileId === "" && root.preferredProfile !== "") root.selectedProfileId = root.preferredProfile
       var current = Model.resolveProfile(root.profiles, root.selectedProfileId)
-      if (current) {
-        if (current.id !== root.selectedProfileId) root.selectedProfileId = current.id
-        root.loadRules(current.id)
-      } else {
+      if (current && current.id !== root.selectedProfileId) root.selectedProfileId = current.id
+      if (root.activeProfile) root.loadRules(root.activeProfile.id)
+      else {
         root.rules = []
         root.folders = []
       }
@@ -338,7 +352,7 @@ Item {
     stderr: StdioCollector { id: rulesStderr; waitForEnd: true }
     onExited: function(exitCode) {
       root._rulesPending = false
-      if (root._rulesForProfile !== root.selectedProfileId) { root.commitRules(); return }
+      if (!root.activeProfile || root._rulesForProfile !== root.activeProfile.id) { root.commitRules(); return }
       if (exitCode !== 0) {
         root.applyError(Model.parseError(rulesStderr.text, exitCode), "Could not list rules")
         root._pendingRules = []
@@ -362,7 +376,7 @@ Item {
     stderr: StdioCollector { id: foldersStderr; waitForEnd: true }
     onExited: function(exitCode) {
       root._foldersPending = false
-      if (root._foldersForProfile !== root.selectedProfileId) { root.commitRules(); return }
+      if (!root.activeProfile || root._foldersForProfile !== root.activeProfile.id) { root.commitRules(); return }
       if (exitCode !== 0) {
         root.applyError(Model.parseError(foldersStderr.text, exitCode), "Could not list folders")
         root._pendingFolders = []

@@ -296,6 +296,26 @@ function findDevice(devices, uid) {
   return null
 }
 
+// The profile the panel describes: the one this machine's endpoint enforces
+// when that is known, else the browsed selection. Machine state wins, so the
+// panel never describes a profile the machine is not using.
+function activeProfile(profiles, endpointProfileId, selectedId) {
+  var enforced = str(endpointProfileId)
+  if (enforced !== "") {
+    var list = profiles || []
+    for (var i = 0; i < list.length; i++) if (list[i].id === enforced) return list[i]
+  }
+  return resolveProfile(profiles, selectedId)
+}
+
+// Second line of the endpoint's profile row.
+function defaultActionLine(profile) {
+  if (!profile) return ""
+  var parts = ["default: " + actionLabel(profile.defaultAction)]
+  if (!profile.enabled) parts.push("profile disabled")
+  return parts.join(" · ")
+}
+
 // Hero meta when this machine's endpoint is known: what it enforces and how.
 function endpointLine(device, transport) {
   if (!device) return ""

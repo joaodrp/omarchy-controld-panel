@@ -12,10 +12,11 @@ Read-only for now: it lists, it does not write.
   resolver actually in use rather than the hostname; the account line is on hover
 - Bar icon shows account state: dimmed when unavailable, badge when `cdctl` needs a login
 - Left click opens a keyboard-friendly panel; middle click refreshes; right click cycles profiles
-- PROFILES: every profile with enabled rules, filters, and services; click one to browse it.
-  The endpoint's own profile is marked, so what this machine enforces stays distinct from what
-  is being browsed
-- RULES: the selected profile's custom rules, root first, then one group per folder, with
+- Machine facts under the hero, in the built-in panels' key/value idiom: profile, unmatched
+  action, protocol, ctrld version, filter and service counts, and the endpoint ID (click to copy)
+- PROFILES: the browse-mode fallback for a machine that is not on Control D DNS — every profile
+  with its enabled rules, filters, and services; click one to browse it
+- RULES: the enforced profile's custom rules, root first, then one group per folder, with
   action, spoof/redirect target, and disabled state
 - Copy a rule's hostname to the clipboard
 - The selected profile persists across restarts (stored on the widget's `shell.json` entry)
@@ -27,7 +28,8 @@ Inside the panel:
 - `j` / `k` or arrows: move cursor
 - `enter` / `space`: select profile, or copy the selected rule's hostname
 - `c`: copy selected rule hostname
-- `p`: next profile
+- `p`: next profile (browse mode only)
+- `y`: copy the endpoint ID
 - `r`: refresh
 - `esc`: close
 

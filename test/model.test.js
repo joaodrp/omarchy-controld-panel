@@ -9,7 +9,7 @@ const vm = require("node:vm")
 
 const src = fs.readFileSync(path.join(__dirname, "..", "Model.js"), "utf8")
 const M = {}
-vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, nextProfile, groupRules, flattenGroups, countRules, actionGlyph, ruleDetail, profileDetail, accountLine, resolverUid, parseDevices, findDevice, endpointLine, EXIT_AUTH };", M)
+vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, nextProfile, groupRules, flattenGroups, countRules, actionGlyph, ruleDetail, profileDetail, accountLine, resolverUid, parseDevices, findDevice, endpointLine, activeProfile, defaultActionLine, EXIT_AUTH };", M)
 const m = M.__exports
 
 // vm-realm arrays fail strict deepEqual on prototype identity; compare by value.
@@ -170,6 +170,24 @@ test("findDevice matches the endpoint id, and endpointLine reads it", () => {
   assert.equal(m.endpointLine(devices[0], "DNS-over-TLS"), "Home · DNS-over-TLS")
   assert.equal(m.endpointLine(devices[0], ""), "Home")
   assert.equal(m.endpointLine(null, "DNS-over-TLS"), "")
+})
+
+test("activeProfile prefers the endpoint's profile over the browsed one", () => {
+  const { profiles } = m.parseProfiles(profilesJson)
+  assert.equal(m.activeProfile(profiles, "p2", "p1").id, "p2")
+  // No endpoint: fall back to the browsed selection, then to the first profile.
+  assert.equal(m.activeProfile(profiles, "", "p2").id, "p2")
+  assert.equal(m.activeProfile(profiles, "", "").id, "p1")
+  // An endpoint on a profile this account no longer lists must not win.
+  assert.equal(m.activeProfile(profiles, "gone", "p2").id, "p2")
+  assert.equal(m.activeProfile([], "p1", "p1"), null)
+})
+
+test("defaultActionLine", () => {
+  const { profiles } = m.parseProfiles(profilesJson)
+  assert.equal(m.defaultActionLine(profiles[0]), "default: bypass")
+  assert.equal(m.defaultActionLine(profiles[1]), "default: bypass · profile disabled")
+  assert.equal(m.defaultActionLine(null), "")
 })
 
 test("actionGlyph has a fallback", () => {
