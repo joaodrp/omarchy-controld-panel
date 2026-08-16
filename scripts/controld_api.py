@@ -48,7 +48,15 @@ def read_token():
 
 
 def host_for(region):
-    return "%s.analytics.controld.com" % (region or "europe")
+    """Analytics is per region, and only the account knows which.
+
+    `cdctl auth status` reports it; guessing would send the query to a host
+    that either does not exist or holds someone else's region.
+    """
+    name = str(region or "").strip().lower()
+    if name == "":
+        raise RuntimeError("no region: pass --region as `cdctl auth status` reports it")
+    return "%s.analytics.controld.com" % name
 
 
 def window(hours, endpoint, now=None):

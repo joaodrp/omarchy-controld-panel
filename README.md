@@ -52,9 +52,15 @@ call reads raw upstream fields rather than the CLI's normalized schema.
 Statistics and activity come from Control D's analytics origin
 (`<region>.analytics.controld.com`), a different host than the REST API and so out of reach of
 `cdctl api`. `scripts/stats.py` and `scripts/activity.py` make those calls through
-`scripts/controld_api.py`: it takes the token from `CONTROLD_API_TOKEN` or `cdctl`'s own config,
-sends it in a request header, and never places it in a process argument or its output. Analytics
-has to be on for the endpoint (`none` reports nothing); the section says so when it is off.
+`scripts/controld_api.py`, which resolves the token the way `cdctl` does — `CONTROLD_API_TOKEN`
+first, otherwise the token for the current context in `cdctl`'s own config (honouring
+`XDG_CONFIG_HOME`) — and sends it in a request header. The token never reaches a process
+argument, which is world readable on Linux, and never appears in output. The region comes from
+`cdctl auth status`; the helpers refuse to guess it. Analytics has to be on for the endpoint
+(`none` reports nothing); the section says so when it is off.
+
+With `cdctl` installed but not signed in, the panel shows what to do and a link to this guide
+rather than an empty shell.
 
 ## Requirements
 

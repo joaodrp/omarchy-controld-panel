@@ -128,7 +128,7 @@ Item {
   }
 
   function loadStats(force) {
-    if (!statsEnabled || !statsAvailable) return
+    if (!statsEnabled || !statsAvailable || region === "") return
     var key = statsKey(statsHours, statsAction)
     var cached = statsCache[key]
     if (cached && force !== true) {
@@ -144,7 +144,7 @@ Item {
     _statsKey = key
     statsProcess.command = ["python3", scriptPath("scripts/stats.py"),
       "--endpoint", endpoint.id,
-      "--region", region !== "" ? region : "europe",
+      "--region", region,
       "--hours", String(statsHours),
       "--action", String(statsAction),
       "--top", "5"]
@@ -152,11 +152,11 @@ Item {
   }
 
   function loadActivity() {
-    if (!activityEnabled || !statsAvailable || activityProcess.running) return
+    if (!activityEnabled || !statsAvailable || region === "" || activityProcess.running) return
     activityLoading = true
     activityProcess.command = ["python3", scriptPath("scripts/activity.py"),
       "--endpoint", endpoint.id,
-      "--region", region !== "" ? region : "europe",
+      "--region", region,
       "--rows", String(activityRows)]
     activityProcess.running = true
   }
@@ -279,6 +279,7 @@ Item {
     if (statsWanted) loadStats()
   }
 
+  onRegionChanged: if (statsWanted) { loadStats(); loadActivity() }
   onStatsAvailableChanged: if (statsWanted && statsAvailable) { loadStats(); loadActivity() }
   onStatsWantedChanged: if (statsWanted) { loadStats(); loadActivity() }
 

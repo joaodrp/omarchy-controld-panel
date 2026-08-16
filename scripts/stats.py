@@ -75,7 +75,7 @@ def series(body, now):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--endpoint", required=True, help="device id to report on")
-    parser.add_argument("--region", default="europe", help="account region, as `cdctl auth status` reports it")
+    parser.add_argument("--region", required=True, help="account region, as `cdctl auth status` reports it")
     parser.add_argument("--hours", type=int, default=24, help="window size, ending now")
     parser.add_argument("--action", type=int, default=0, help="verdict the lists describe: 0 blocked, 1 bypassed, 2 redirected")
     parser.add_argument("--top", type=int, default=5, help="rows per list")
@@ -83,11 +83,11 @@ def main():
 
     try:
         token = api.read_token()
+        host = api.host_for(args.region)
     except RuntimeError as exc:
         json.dump({"ok": False, "error": str(exc)}, sys.stdout)
         return 1
 
-    host = api.host_for(args.region)
     now = datetime.now(timezone.utc).replace(microsecond=0)
     hours = max(1, min(args.hours, 24 * 30))
     action = args.action if args.action in ACTIONS.values() else 0

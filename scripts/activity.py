@@ -66,7 +66,7 @@ def collapse(rows, limit):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--endpoint", required=True, help="device id to report on")
-    parser.add_argument("--region", default="europe", help="account region, as `cdctl auth status` reports it")
+    parser.add_argument("--region", required=True, help="account region, as `cdctl auth status` reports it")
     parser.add_argument("--rows", type=int, default=8, help="how many queries to keep after collapsing")
     parser.add_argument("--hours", type=int, default=6, help="how far back to look for them")
     args = parser.parse_args()

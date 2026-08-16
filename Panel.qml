@@ -34,6 +34,10 @@ Panel {
   readonly property bool showProfiles: controld.ready && !machineMode && controld.profiles.length > 0
   readonly property bool showRules: controld.ready && controld.activeProfile !== null
   readonly property bool unprotected: controld.ready && controld.resolverChecked && !controld.usingControld
+  // Where to send someone who has neither the CLI nor an account set up.
+  readonly property string guideUrl: "https://github.com/joaodrp/omarchy-controld-panel#readme"
+  readonly property bool showEmptyState: controld.checkedInstall
+    && (!controld.installed || controld.needsAuth)
   readonly property bool showActivity: controld.ready && machineMode && controld.activityEnabled
     && (controld.activity.length > 0 || controld.activityError !== "")
   readonly property bool showStats: controld.ready && machineMode && controld.statsEnabled
@@ -392,7 +396,7 @@ Panel {
           }
 
           Text {
-            visible: controld.lastHint !== ""
+            visible: controld.lastHint !== "" && !root.showEmptyState
             width: parent.width
             text: controld.lastHint
             color: root.dim
@@ -401,24 +405,20 @@ Panel {
             wrapMode: Text.WordWrap
           }
 
-          CursorSurface {
-            visible: controld.checkedInstall && !controld.installed
+          // Nothing to show until the CLI is installed and signed in, so the
+          // panel spends its space saying how to get there.
+          EmptyState {
             width: parent.width
-            implicitHeight: missingText.implicitHeight + Style.spacing.rowPaddingX
-            foreground: root.foreground
+            visible: controld.checkedInstall && !controld.installed
+            title: "Install the Control D CLI"
+            message: "This panel reads your account through cdctl. Install it, then sign in."
+          }
 
-            Text {
-              id: missingText
-              anchors.left: parent.left
-              anchors.right: parent.right
-              anchors.verticalCenter: parent.verticalCenter
-              anchors.margins: Style.space(12)
-              text: "cdctl is not installed or not on PATH."
-              color: root.dim
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.body
-              wrapMode: Text.WordWrap
-            }
+          EmptyState {
+            width: parent.width
+            visible: controld.installed && controld.needsAuth
+            title: "Sign in to Control D"
+            message: "Run cdctl auth login --token-stdin with a token from the Control D dashboard, then reopen this panel."
           }
 
           // Machine facts, in the built-in panels' key/value idiom: attributes
@@ -1221,6 +1221,45 @@ Panel {
       visible: meterRow.hot
       text: "Copy " + meterRow.copyValue
       fontFamily: root.fontFamily
+    }
+  }
+
+  // A dead end with a way out: what is missing, what to do, and a link to
+  // the guide for anything longer than one line.
+  component EmptyState: Column {
+    id: emptyState
+    property string title: ""
+    property string message: ""
+
+    spacing: Style.space(6)
+
+    Text {
+      width: emptyState.width
+      text: emptyState.title
+      color: root.foreground
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.subtitle
+      wrapMode: Text.WordWrap
+    }
+
+    Text {
+      width: emptyState.width
+      text: emptyState.message
+      color: root.dim
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.bodySmall
+      wrapMode: Text.WordWrap
+    }
+
+    Button {
+      text: "Open setup guide"
+      bordered: true
+      foreground: root.foreground
+      accent: Color.accent
+      fontFamily: root.fontFamily
+      fontSize: Style.font.bodySmall
+      topPadding: Style.space(4)
+      onClicked: Quickshell.execDetached(["omarchy-launch-browser", root.guideUrl])
     }
   }
 
