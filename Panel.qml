@@ -553,14 +553,27 @@ Panel {
               spacing: Style.space(10)
               topPadding: Style.space(4)
 
-              ButtonGroup {
-                options: Model.actionOptions()
-                value: String(controld.statsAction)
-                foreground: root.foreground
-                accent: Color.accent
-                fontFamily: root.fontFamily
-                fontSize: Style.font.caption
-                onChanged: function(v) { controld.setStatsAction(v) }
+              RowLayout {
+                width: parent.width
+                spacing: Style.space(8)
+
+                PanelSectionHeader {
+                  text: "BREAKDOWN"
+                  foreground: root.foreground
+                  fontFamily: root.fontFamily
+                }
+
+                Item { Layout.fillWidth: true }
+
+                ButtonGroup {
+                  options: Model.actionOptions()
+                  value: String(controld.statsAction)
+                  foreground: root.foreground
+                  accent: Color.accent
+                  fontFamily: root.fontFamily
+                  fontSize: Style.font.caption
+                  onChanged: function(v) { controld.setStatsAction(v) }
+                }
               }
 
               Text {
