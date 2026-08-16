@@ -30,7 +30,8 @@ Read-only for now: it lists, it does not write.
   action, spoof/redirect target, and disabled state. Capped like every other list; the caption
   says how many are hidden
 - ACTIVITY: this endpoint's most recent lookups, refreshed every 15s while the panel is open.
-  The A/AAAA pair of one lookup collapses into a single row
+  The A/AAAA pair of one lookup collapses into a single row. Drawn short with a `+N` at the
+  foot: one poll already holds up to 50, so expanding costs no extra request
 - Copy a rule's hostname to the clipboard
 - Every section needs an identified endpoint. Without one the panel shows nothing but the
   reason: no Control D resolver here, a resolver whose endpoint is not in this account, or a
@@ -131,7 +132,7 @@ Set through the bar's widget settings, or inline on the widget's `shell.json` en
 | `refreshIntervalSec` | `120` | Poll interval, 15-3600 seconds |
 | `showStatistics` | `true` | Whether to query analytics at all |
 | `showActivity` | `true` | Whether to poll the activity log while open |
-| `activityRows` | `8` | Rows in the activity list, 3-25 |
+| `activityRows` | `10` | Rows in the activity list before the expander, 3-25 |
 | `statsWindowHours` | `24` | Statistics window the panel opens on, 1-720 hours |
 | `statsRows` | `5` | Rows per statistics list: domains, filters, destinations, 3-20 |
 | `ruleRows` | `15` | Rules shown before the list is cut, 5-100 |

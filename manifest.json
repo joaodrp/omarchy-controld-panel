@@ -24,7 +24,7 @@
       "showStatistics": true,
       "statsRows": 5,
       "showActivity": true,
-      "activityRows": 8,
+      "activityRows": 10,
       "ruleRows": 15
     },
     "schema": [
@@ -74,7 +74,7 @@
         "min": 3,
         "max": 25,
         "step": 1,
-        "defaultValue": 8
+        "defaultValue": 10
       },
       {
         "key": "ruleRows",

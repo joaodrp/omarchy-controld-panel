@@ -68,6 +68,17 @@ Panel {
     return keys
   }
 
+  // The log is drawn short and expands in place. Rows past the fold are
+  // already fetched, so this costs nothing but the space.
+  property bool activityExpanded: false
+  readonly property var visibleActivity: {
+    var all = controld.activity
+    if (activityExpanded || all.length <= controld.activityRows) return all
+    return all.slice(0, controld.activityRows)
+  }
+  readonly property int hiddenActivity: controld.activity.length - visibleActivity.length
+  readonly property bool activityExpandable: hiddenActivity > 0 || activityExpanded
+
   property string destinationView: "networks"
   readonly property var destinationRows: {
     if (!controld.stats) return []
@@ -142,8 +153,9 @@ Panel {
         items.push({ key: "rule:" + r, kind: "rule", index: r, value: cursorRules[r].hostname })
     }
     if (showActivity) {
-      for (var a = 0; a < controld.activity.length; a++)
-        items.push({ key: "activity:" + a, kind: "activity", index: a, value: controld.activity[a].question })
+      for (var a = 0; a < visibleActivity.length; a++)
+        items.push({ key: "activity:" + a, kind: "activity", index: a, value: visibleActivity[a].question })
+      if (activityExpandable) items.push({ key: "activity:more", kind: "more", value: "" })
     }
     return items
   }
@@ -189,7 +201,7 @@ Panel {
   // the endpoint id is the one value on screen worth taking.
   function yank() {
     var entry = cursorActive ? currentCursor() : null
-    if (entry && entry.kind === "reading") return
+    if (entry && (entry.kind === "reading" || entry.kind === "more")) return
     if (entry && entry.kind !== "header" && String(entry.value || "") !== "") {
       controld.copyToClipboard(entry.value)
       return
@@ -203,6 +215,7 @@ Panel {
     var entry = currentCursor()
     if (!entry) return
     if (entry.kind === "header") { controld.refresh(); return }
+    if (entry.kind === "more") { root.activityExpanded = !root.activityExpanded; return }
     if (entry.kind === "reading") return
     if (String(entry.value || "") !== "") controld.copyToClipboard(entry.value)
   }
@@ -327,6 +340,7 @@ Panel {
     if (!opened) return
     cursorActive = false
     cursorKey = "header"
+    activityExpanded = false
     pointerGate.reset()
     if (panelFlick) panelFlick.contentY = 0
     controld.refresh()
@@ -885,7 +899,7 @@ Panel {
               spacing: Style.space(6)
 
               Repeater {
-                model: controld.activity
+                model: root.visibleActivity
                 ActivityRow {
                   required property var modelData
                   required property int index
@@ -893,6 +907,14 @@ Panel {
                   query: modelData
                   cursorKey: "activity:" + index
                 }
+              }
+
+              MoreRow {
+                width: parent.width
+                visible: root.activityExpandable
+                cursorKey: "activity:more"
+                text: root.activityExpanded ? "Show less" : "+" + root.hiddenActivity
+                onActivated: root.activityExpanded = !root.activityExpanded
               }
             }
           }
@@ -1352,6 +1374,44 @@ Panel {
 
   // One lookup: what was asked, what happened to it, and when. The A/AAAA
   // pair of a single lookup arrives already collapsed.
+  // The foot of a list that draws short: what is left, and a way to see it.
+  // Reads as a control rather than a row, since it is the one thing there that
+  // acts on the list instead of belonging to it.
+  component MoreRow: Item {
+    id: moreRow
+    property string text: ""
+    property string cursorKey: ""
+    signal activated()
+    readonly property bool hasCursor: cursorKey !== "" && root.cursorActive && root.cursorKey === cursorKey
+    readonly property bool hot: moreMouse.containsMouse || hasCursor
+
+    implicitHeight: moreLabel.implicitHeight + Style.spacing.sm * 2
+
+    Text {
+      id: moreLabel
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      text: moreRow.text
+      color: moreRow.hot ? root.foreground : root.dim
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
+
+      Behavior on color {
+        ColorAnimation { duration: 120; easing.type: Easing.OutQuad }
+      }
+    }
+
+    MouseArea {
+      id: moreMouse
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onEntered: root.setCursorFromPointer(moreRow.cursorKey, moreRow, { x: moreMouse.mouseX, y: moreMouse.mouseY })
+      onPositionChanged: function(mouse) { root.setCursorFromPointer(moreRow.cursorKey, moreRow, mouse) }
+      onClicked: moreRow.activated()
+    }
+  }
+
   component ActivityRow: Item {
     id: activityRow
     property var query: null
