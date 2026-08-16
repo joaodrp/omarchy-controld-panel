@@ -1389,7 +1389,7 @@ Panel {
       text: meterRow.label
       color: meterRow.hot ? root.foreground : Qt.darker(root.foreground, 1.25)
       font.family: root.fontFamily
-      font.pixelSize: Style.font.bodySmall
+      font.pixelSize: Style.font.body
       elide: Text.ElideMiddle
     }
 
@@ -1398,7 +1398,9 @@ Panel {
       anchors.right: rowValue.left
       anchors.rightMargin: Style.space(10)
       anchors.verticalCenter: parent.verticalCenter
-      width: parent.width * 0.28
+      // The label carries the identity, so the bar takes only what it needs
+      // to stay readable as a comparison.
+      width: parent.width * 0.22
       height: Math.max(Style.space(3), Math.round(Style.spacing.controlHeight * 0.10))
       radius: height / 2
       color: Qt.rgba(root.foreground.r, root.foreground.g, root.foreground.b, 0.10)
@@ -1426,7 +1428,7 @@ Panel {
       text: Model.formatCount(meterRow.hits)
       color: root.dim
       font.family: root.fontFamily
-      font.pixelSize: Style.font.bodySmall
+      font.pixelSize: Style.font.body
     }
 
     MouseArea {
@@ -1470,7 +1472,7 @@ Panel {
       text: emptyState.message
       color: root.dim
       font.family: root.fontFamily
-      font.pixelSize: Style.font.bodySmall
+      font.pixelSize: Style.font.body
       wrapMode: Text.WordWrap
     }
 
@@ -1480,7 +1482,7 @@ Panel {
       foreground: root.foreground
       accent: Color.accent
       fontFamily: root.fontFamily
-      fontSize: Style.font.bodySmall
+      fontSize: Style.font.body
       topPadding: Style.space(4)
       onClicked: Quickshell.execDetached(["omarchy-launch-browser", root.guideUrl])
     }
@@ -1523,7 +1525,7 @@ Panel {
           text: activityRow.question
           color: activityRow.hot ? root.foreground : Qt.darker(root.foreground, 1.25)
           font.family: root.fontFamily
-          font.pixelSize: Style.font.bodySmall
+          font.pixelSize: Style.font.body
           elide: Text.ElideMiddle
         }
 
