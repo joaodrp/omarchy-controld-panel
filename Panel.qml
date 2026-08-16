@@ -342,6 +342,7 @@ Panel {
     cursorKey = "header"
     activityExpanded = false
     controld.setActivityFilter("blocked")
+    controld.setActivityGrouped(true)
     pointerGate.reset()
     if (panelFlick) panelFlick.contentY = 0
     controld.refresh()
@@ -901,7 +902,32 @@ Panel {
 
               Item { Layout.fillWidth: true }
 
+              Text {
+                Layout.alignment: Qt.AlignVCenter
+                text: "Grouped"
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+              }
+
+              ToggleSwitch {
+                id: groupSwitch
+                Layout.alignment: Qt.AlignVCenter
+                checked: controld.activityGrouped
+                foreground: root.foreground
+                onToggled: controld.setActivityGrouped(!controld.activityGrouped)
+
+                PanelToolTip {
+                  visible: groupSwitch.containsMouse
+                  text: "One row per host, with a repeat count"
+                  fontFamily: root.fontFamily
+                }
+              }
+
               ButtonGroup {
+                // The switch and the chips govern different things, so they sit
+                // further apart than the chips do from each other.
+                Layout.leftMargin: Style.space(6)
                 options: Model.activityFilterOptions()
                 value: controld.activityFilter
                 foreground: root.foreground

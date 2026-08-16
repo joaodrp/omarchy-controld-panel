@@ -89,6 +89,9 @@ Item {
   property bool activityLoading: false
   property string activityError: ""
   property string activityFilter: "blocked"
+  // Fold every row for a host into one with a tally, rather than keeping each
+  // lookup. On by default: which hosts were blocked is what the section is for.
+  property bool activityGrouped: true
 
   property bool refreshing: false
   property bool loadingRules: false
@@ -187,6 +190,7 @@ Item {
       "--region", region]
     var action = Model.activityActionArg(activityFilter)
     if (action !== "") args = args.concat(["--action", action])
+    args = args.concat(["--group", activityGrouped ? "host" : "lookup"])
     activityProcess.command = args
     activityProcess.running = true
   }
@@ -198,6 +202,12 @@ Item {
     // Leave the rows on screen while the next page loads. Emptying the list
     // collapses the panel's content height, which drags the scroll to the top
     // and loses the reader's place.
+    loadActivity()
+  }
+
+  function setActivityGrouped(value) {
+    if (value === activityGrouped) return
+    activityGrouped = value
     loadActivity()
   }
 

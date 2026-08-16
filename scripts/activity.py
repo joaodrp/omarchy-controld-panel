@@ -33,11 +33,16 @@ PAGE_SIZE = 500
 MAX_ROWS = 20
 
 
-def collapse(rows, limit):
-    """Fold the page to one entry per (question, verdict), newest kept.
+def collapse(rows, limit, by_host=True):
+    """Fold the page, newest kept, and tally what folded into each row.
 
-    The whole page is folded before truncating, so a host's tally counts every
-    lookup in the window rather than only those above the cut.
+    By host, every row for a question and verdict folds together wherever it
+    sits: which hosts were blocked is the question, and repetition is a count.
+    By lookup, only neighbours fold, which still spares the A/AAAA pair of one
+    lookup its own row but keeps the sequence intact.
+
+    The whole page is folded before truncating, so a tally counts every lookup
+    in the window rather than only those above the cut.
     """
     out = []
     seen = {}
@@ -47,7 +52,12 @@ def collapse(rows, limit):
             continue
         action = int(row.get("action") if row.get("action") is not None else -1)
         kind = str(row.get("rrType") or "")
-        entry = seen.get((question, action))
+        if by_host:
+            entry = seen.get((question, action))
+        else:
+            entry = out[-1] if out else None
+            if entry is not None and (entry["question"], entry["action"]) != (question, action):
+                entry = None
         if entry is not None:
             entry["repeats"] += 1
             if kind and kind not in entry["types"]:
@@ -73,6 +83,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--endpoint", required=True, help="device id to report on")
     parser.add_argument("--region", required=True, help="account region, as `cdctl auth status` reports it")
+    parser.add_argument("--group", choices=("host", "lookup"), default="host",
+                        help="fold rows by host anywhere in the page, or only where they neighbour")
     parser.add_argument("--action", type=int, default=None,
                         help="keep only this verdict: 0 blocked, 1 bypassed, 2 redirected. "
                              "Omit for every verdict")
@@ -98,7 +110,7 @@ def main():
         return 1
 
     queries = body.get("queries") or []
-    json.dump({"ok": True, "queries": collapse(queries, rows)}, sys.stdout)
+    json.dump({"ok": True, "queries": collapse(queries, rows, args.group == "host")}, sys.stdout)
     return 0
 
 
