@@ -8,9 +8,13 @@ Read-only for now: it lists, it does not write.
 
 ## Features
 
+- Hero names this machine's endpoint and the profile it enforces, identified from the DNS
+  resolver actually in use rather than the hostname; the account line is on hover
 - Bar icon shows account state: dimmed when unavailable, badge when `cdctl` needs a login
 - Left click opens a keyboard-friendly panel; middle click refreshes; right click cycles profiles
-- PROFILES: every profile with enabled rules, filters, and services; click one to browse it
+- PROFILES: every profile with enabled rules, filters, and services; click one to browse it.
+  The endpoint's own profile is marked, so what this machine enforces stays distinct from what
+  is being browsed
 - RULES: the selected profile's custom rules, root first, then one group per folder, with
   action, spoof/redirect target, and disabled state
 - Copy a rule's hostname to the clipboard
@@ -26,6 +30,12 @@ Inside the panel:
 - `p`: next profile
 - `r`: refresh
 - `esc`: close
+
+Endpoint detection reads `resolvectl status`, then `/etc/resolv.conf`, then a local `ctrld`
+config, looking for `<uid>.dns.controld.com` or `dns.controld.com/<uid>`: that id is the
+device id, so the match is exact. Legacy shared resolvers carry no id and fall back to the
+account line. Naming the endpoint needs `cdctl api /devices`, the escape hatch, so that one
+call reads raw upstream fields rather than the CLI's normalized schema.
 
 ## Requirements
 

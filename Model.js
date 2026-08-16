@@ -239,6 +239,72 @@ function countRules(rules) {
   return { total: total, enabled: enabled }
 }
 
+// This machine's Control D endpoint is identified by the resolver it is
+// actually using: every device's DoT hostname and DoH path carry its own
+// device id, so `<uid>.dns.controld.com` or `dns.controld.com/<uid>` in the
+// local DNS config names the endpoint exactly. Legacy shared resolvers
+// (p1/p2/family.freedns.controld.com) carry no id and match nothing.
+function resolverUid(text) {
+  var haystack = str(text)
+  var dot = haystack.match(/\b([a-z0-9]{6,})\.dns\.controld\.com\b/i)
+  if (dot) return { uid: dot[1].toLowerCase(), transport: "DNS-over-TLS" }
+  var doh = haystack.match(/dns\.controld\.com\/([a-z0-9]{6,})\b/i)
+  if (doh) return { uid: doh[1].toLowerCase(), transport: "DNS-over-HTTPS" }
+  return { uid: "", transport: "" }
+}
+
+function normalizeDevice(d) {
+  var profile = d && d.profile && typeof d.profile === "object" ? d.profile : {}
+  var resolvers = d && d.resolvers && typeof d.resolvers === "object" ? d.resolvers : {}
+  var ctrld = d && d.ctrld && typeof d.ctrld === "object" ? d.ctrld : null
+  return {
+    id: str(d.device_id) || str(d.PK),
+    name: str(d.name),
+    profileId: str(profile.PK),
+    profileName: str(profile.name),
+    enabled: num(d.status, 1) === 1,
+    icon: str(d.icon),
+    ctrldVersion: ctrld ? str(ctrld.version) : "",
+    dot: str(resolvers.dot),
+    doh: str(resolvers.doh)
+  }
+}
+
+// `cdctl api /devices` is the escape hatch, so this reads the upstream body
+// verbatim rather than the CLI's normalized schema.
+function parseDevices(raw) {
+  var parsed = parseJson(raw)
+  if (!parsed.ok) return { ok: false, devices: [], error: parsed.error }
+  var body = parsed.value && parsed.value.body ? parsed.value.body : null
+  var list = body && body.devices instanceof Array ? body.devices : null
+  if (!list) return { ok: false, devices: [], error: "no devices in response" }
+  var out = []
+  for (var i = 0; i < list.length; i++) {
+    var d = list[i]
+    if (!d || typeof d !== "object") continue
+    var device = normalizeDevice(d)
+    if (device.id !== "") out.push(device)
+  }
+  return { ok: true, devices: out, error: "" }
+}
+
+function findDevice(devices, uid) {
+  var want = str(uid).toLowerCase()
+  if (want === "") return null
+  var list = devices || []
+  for (var i = 0; i < list.length; i++) if (list[i].id.toLowerCase() === want) return list[i]
+  return null
+}
+
+// Hero meta when this machine's endpoint is known: what it enforces and how.
+function endpointLine(device, transport) {
+  if (!device) return ""
+  var parts = []
+  if (device.profileName !== "") parts.push(device.profileName)
+  if (str(transport) !== "") parts.push(str(transport))
+  return parts.length > 0 ? parts.join(" · ") : "Control D"
+}
+
 // Nerd Font glyphs, matching what the built-in panels use for their rows.
 function actionGlyph(action) {
   switch (str(action)) {

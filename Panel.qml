@@ -32,11 +32,17 @@ Panel {
   readonly property bool headerHasCursor: cursorActive && focusSection === "header" && controld.installed
   readonly property color iconColor: controld.ready ? foreground : dim
   readonly property color barIconColor: controld.ready ? barForeground : Qt.darker(barForeground, 1.55)
-  readonly property string heroTitle: controld.selectedProfile ? controld.selectedProfile.name : "Control D"
+  // The hero names this machine's endpoint and what it enforces; the account
+  // line is the fallback when no Control D resolver is in use here.
+  readonly property string heroTitle: {
+    if (controld.endpoint) return controld.endpoint.name
+    return controld.selectedProfile ? controld.selectedProfile.name : "Control D"
+  }
   readonly property string heroMeta: {
     if (!controld.installed) return "cdctl is not installed"
     if (controld.needsAuth) return "Not authenticated"
     if (controld.refreshing && !controld.authenticated) return "Checking…"
+    if (controld.endpoint) return Model.endpointLine(controld.endpoint, controld.endpointTransport)
     return controld.statusText
   }
   readonly property string rulesCaption: {
@@ -305,6 +311,14 @@ Panel {
                 }
               }
 
+              PanelToolTip {
+                visible: heroHover.hovered && controld.statusText !== ""
+                text: controld.statusText
+                fontFamily: root.fontFamily
+              }
+
+              HoverHandler { id: heroHover }
+
               trailingControl: Component {
                 PanelActionButton {
                   id: refreshButton
@@ -542,6 +556,7 @@ Panel {
     property int rowIndex: 0
     readonly property bool selectedProfile: profile && controld.selectedProfile && controld.selectedProfile.id === profile.id
     readonly property bool loading: selectedProfile && controld.loadingRules
+    readonly property bool enforcedHere: profile && controld.endpointProfileId !== "" && controld.endpointProfileId === profile.id
 
     hasCursor: root.cursorActive && root.focusSection === "profiles" && root.profileIndex === rowIndex
     current: selectedProfile
@@ -586,14 +601,29 @@ Panel {
         anchors.verticalCenter: parent.verticalCenter
         spacing: Style.space(1)
 
-        Text {
+        Row {
           width: parent.width
-          text: profileRow.profile ? profileRow.profile.name : ""
-          color: root.foreground
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.body
-          font.bold: profileRow.selectedProfile
-          elide: Text.ElideRight
+          spacing: Style.space(6)
+
+          Text {
+            anchors.verticalCenter: parent.verticalCenter
+            text: profileRow.profile ? profileRow.profile.name : ""
+            color: root.foreground
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.body
+            font.bold: profileRow.selectedProfile
+            elide: Text.ElideRight
+          }
+
+          // The profile this machine's endpoint actually enforces, which is
+          // not necessarily the one being browsed.
+          DashIcon {
+            anchors.verticalCenter: parent.verticalCenter
+            visible: profileRow.enforcedHere
+            name: "endpoints"
+            iconSize: Style.font.caption
+            color: root.dim
+          }
         }
 
         Row {

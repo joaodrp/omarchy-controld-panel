@@ -9,7 +9,7 @@ const vm = require("node:vm")
 
 const src = fs.readFileSync(path.join(__dirname, "..", "Model.js"), "utf8")
 const M = {}
-vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, nextProfile, groupRules, flattenGroups, countRules, actionGlyph, ruleDetail, profileDetail, accountLine, EXIT_AUTH };", M)
+vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, nextProfile, groupRules, flattenGroups, countRules, actionGlyph, ruleDetail, profileDetail, accountLine, resolverUid, parseDevices, findDevice, endpointLine, EXIT_AUTH };", M)
 const m = M.__exports
 
 // vm-realm arrays fail strict deepEqual on prototype identity; compare by value.
@@ -130,6 +130,46 @@ test("groupRules with no folders", () => {
   const rules = m.parseRules(rulesJson).rules.slice(0, 2)
   const rows = m.flattenGroups(m.groupRules(rules, []))
   same(rows.map(r => r.kind), ["rule", "rule"])
+})
+
+test("resolverUid reads the endpoint id from the local resolver", () => {
+  const resolved = "Current DNS Server: 76.76.2.22#dev0000001.dns.controld.com"
+  same(m.resolverUid(resolved), { uid: "dev0000001", transport: "DNS-over-TLS" })
+  same(m.resolverUid("https://dns.controld.com/dev0000001"), { uid: "dev0000001", transport: "DNS-over-HTTPS" })
+  // Legacy shared resolvers carry no endpoint id.
+  same(m.resolverUid("nameserver 76.76.2.11 p2.freedns.controld.com"), { uid: "", transport: "" })
+  same(m.resolverUid("nameserver 1.1.1.1"), { uid: "", transport: "" })
+})
+
+test("parseDevices reads the raw upstream body", () => {
+  const raw = JSON.stringify({ body: { devices: [
+    { PK: "abc123", device_id: "abc123", name: "laptop", status: 1, icon: "desktop-linux",
+      profile: { PK: "p1", name: "Home" }, ctrld: { version: "v1.5.5" },
+      resolvers: { uid: "abc123", dot: "abc123.dns.controld.com", doh: "https://dns.controld.com/abc123" } },
+    { device_id: "def456", name: "phone", status: 0, profile: { PK: "p2", name: "Kids" }, ctrld: null, resolvers: {} },
+    { name: "no id, dropped" }
+  ] } })
+  const r = m.parseDevices(raw)
+  assert.equal(r.ok, true)
+  assert.equal(r.devices.length, 2)
+  assert.equal(r.devices[0].profileName, "Home")
+  assert.equal(r.devices[0].ctrldVersion, "v1.5.5")
+  assert.equal(r.devices[1].enabled, false)
+  assert.equal(r.devices[1].ctrldVersion, "")
+  assert.equal(m.parseDevices("{}").ok, false)
+  assert.equal(m.parseDevices("nope").ok, false)
+})
+
+test("findDevice matches the endpoint id, and endpointLine reads it", () => {
+  const devices = m.parseDevices(JSON.stringify({ body: { devices: [
+    { device_id: "abc123", name: "laptop", profile: { PK: "p1", name: "Home" } }
+  ] } })).devices
+  assert.equal(m.findDevice(devices, "ABC123").name, "laptop")
+  assert.equal(m.findDevice(devices, "missing"), null)
+  assert.equal(m.findDevice(devices, ""), null)
+  assert.equal(m.endpointLine(devices[0], "DNS-over-TLS"), "Home · DNS-over-TLS")
+  assert.equal(m.endpointLine(devices[0], ""), "Home")
+  assert.equal(m.endpointLine(null, "DNS-over-TLS"), "")
 })
 
 test("actionGlyph has a fallback", () => {

@@ -30,6 +30,14 @@ Item {
   readonly property var ruleRows: Model.flattenGroups(groups)
   readonly property var ruleCount: Model.countRules(rules)
 
+  // This machine as Control D sees it, resolved from the DNS resolver it is
+  // actually using rather than from its hostname.
+  property string endpointUid: ""
+  property string endpointTransport: ""
+  property var devices: []
+  readonly property var endpoint: Model.findDevice(devices, endpointUid)
+  readonly property string endpointProfileId: endpoint ? endpoint.profileId : ""
+
   property bool refreshing: false
   property bool loadingRules: false
   property string lastError: ""
@@ -41,7 +49,7 @@ Item {
 
   readonly property int refreshIntervalSec: intSetting("refreshIntervalSec", 120, 15, 3600)
   readonly property string preferredProfile: String(setting("profile", "") || "")
-  readonly property bool busy: lookupProcess.running || authProcess.running || profilesProcess.running || rulesProcess.running || foldersProcess.running
+  readonly property bool busy: lookupProcess.running || authProcess.running || profilesProcess.running || rulesProcess.running || foldersProcess.running || resolverProcess.running || devicesProcess.running
   readonly property bool ready: installed && authenticated && !needsAuth
 
   // Which profile a rules/folders fetch was launched for, so a switch mid-flight
@@ -72,6 +80,11 @@ Item {
     return [cdctlPath, "--json", "-q", "--timeout", "15"].concat(args)
   }
 
+  // `cdctl api` emits the upstream body verbatim and rejects --json.
+  function cdctlApi(path) {
+    return [cdctlPath, "-q", "--timeout", "15", "api", path]
+  }
+
   function copyToClipboard(value) {
     var text = String(value || "")
     if (text === "") return
@@ -96,6 +109,7 @@ Item {
       profilesProcess.command = cdctl(["profile", "list"])
       profilesProcess.running = true
     }
+    if (!resolverProcess.running) resolverProcess.running = true
     if (!pollWatchdog.running) pollWatchdog.start()
   }
 
@@ -189,6 +203,8 @@ Item {
       if (profilesProcess.running) profilesProcess.running = false
       if (rulesProcess.running) rulesProcess.running = false
       if (foldersProcess.running) foldersProcess.running = false
+      if (resolverProcess.running) resolverProcess.running = false
+      if (devicesProcess.running) devicesProcess.running = false
       root.refreshing = false
       root.loadingRules = false
     }
@@ -214,6 +230,43 @@ Item {
         root.refreshing = false
         root.setUnavailable("cdctl not installed", "Install controld-cli and put cdctl on PATH")
       }
+    }
+  }
+
+  Process {
+    // Where this machine's DNS actually points. systemd-resolved first, then
+    // the resolv.conf stub, then a local ctrld config.
+    id: resolverProcess
+    running: false
+    command: ["sh", "-c",
+      "resolvectl status 2>/dev/null; cat /etc/resolv.conf 2>/dev/null; " +
+      "cat /etc/controld/ctrld.toml 2>/dev/null; cat /etc/ctrld.toml 2>/dev/null"]
+    stdout: StdioCollector { id: resolverStdout; waitForEnd: true }
+    onExited: {
+      var found = Model.resolverUid(resolverStdout.text)
+      root.endpointUid = found.uid
+      root.endpointTransport = found.transport
+      // No Control D resolver here, so there is no endpoint to name.
+      if (found.uid === "") root.devices = []
+      else if (!devicesProcess.running) {
+        devicesProcess.command = cdctlApi("/devices")
+        devicesProcess.running = true
+      }
+    }
+  }
+
+  Process {
+    // The escape hatch: `cdctl api` emits the upstream body verbatim, so this
+    // reads raw API field names. Failures stay silent — the endpoint line is
+    // an extra, and the panel falls back to the account line without it.
+    id: devicesProcess
+    running: false
+    command: []
+    stdout: StdioCollector { id: devicesStdout; waitForEnd: true }
+    onExited: function(exitCode) {
+      if (exitCode !== 0) { root.devices = []; return }
+      var parsed = Model.parseDevices(devicesStdout.text)
+      root.devices = parsed.ok ? parsed.devices : []
     }
   }
 
