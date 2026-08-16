@@ -119,10 +119,6 @@ Move it with `omarchy bar move io.github.joaodrp.controld --section right`.
 The bar and hero mark is the Control D logo, drawn natively from its paths in
 `ControldIcon.qml`.
 
-`assets/` carries the Control D dashboard's own icon set as single-color SVGs, tinted to the
-active Omarchy theme at runtime by `DashIcon.qml`, so one file serves every theme. Nothing
-draws them today: they were used by the profile rows the machine-centric panel dropped.
-
 The artwork belongs to Control D; this project is not affiliated with them.
 
 ## Settings

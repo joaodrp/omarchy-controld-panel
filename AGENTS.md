@@ -31,7 +31,6 @@ process argument**: `/proc/*/cmdline` is world readable.
 | `Service.qml` | Every process the panel runs, and the state they produce |
 | `Model.js` | Pure parsing and shaping. Qt-free, so `node` can test it |
 | `ControldIcon.qml` | The Control D mark, drawn from its SVG paths |
-| `DashIcon.qml`, `assets/` | Dashboard icons, tinted to the theme at runtime |
 | `scripts/controld_api.py` | Token resolution and HTTP for the analytics origin |
 | `scripts/stats.py` | One (window, verdict) pair of statistics, nine requests folded into one document |
 | `scripts/activity.py` | Recent lookups, with the A/AAAA pair of one lookup collapsed |
@@ -49,7 +48,7 @@ python3 -m py_compile scripts/*.py && rm -rf scripts/__pycache__
 
 # QML lint needs an import dir holding a `qs` symlink to the shell
 mkdir -p /tmp/qslint && ln -sfn "$OMARCHY_PATH/shell" /tmp/qslint/qs
-/usr/lib/qt6/bin/qmllint -I /tmp/qslint Panel.qml Service.qml ControldIcon.qml DashIcon.qml
+/usr/lib/qt6/bin/qmllint -I /tmp/qslint Panel.qml Service.qml ControldIcon.qml
 ```
 
 `qmllint` reports `unqualified`, `missing-property` and `signal-handler-parameters` warnings for

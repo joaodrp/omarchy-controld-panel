@@ -1,2 +1,6 @@
 __pycache__/
 *.pyc
+
+# Kept on this machine, never shipped: the Control D dashboard icon set and
+# the component that tinted it, unused since the panel became machine-centric.
+_local/
