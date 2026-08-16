@@ -386,7 +386,8 @@ Panel {
       Item {
         ControldIcon {
           anchors.centerIn: parent
-          iconSize: Style.space(12)
+          // The height the rest of the bar's marks paint at.
+          iconSize: Style.space(11)
           color: root.barIconColor
           badgeColor: root.urgent
           crossed: (controld.checkedInstall && !controld.installed) || root.unprotected

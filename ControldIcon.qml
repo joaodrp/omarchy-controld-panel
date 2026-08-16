@@ -9,6 +9,8 @@ import qs.Ui
 Item {
   id: root
 
+  // The mark's painted height, which is what lines it up with its neighbours.
+  // Width follows the mark's own aspect: it is a wide silhouette, not a square.
   property real iconSize: Style.font.icon
   property color color: Color.foreground
   property color badgeColor: Color.urgent
@@ -17,18 +19,27 @@ Item {
 
   readonly property real viewWidth: 42
   readonly property real viewHeight: 38
-  readonly property real markScale: iconSize / viewWidth
+  // The blades ink only x 1..42 and y 2..32 of that viewBox, and the slack is
+  // uneven: 2 above the mark, 6 below. Both the scale and the offset therefore
+  // come from the ink box. Driving them from the viewBox instead drew the mark
+  // at 71% of the height asked for, sitting 5% of it too high.
+  readonly property real inkX: 1
+  readonly property real inkY: 2
+  readonly property real inkWidth: 41
+  readonly property real inkHeight: 30
+  readonly property real markScale: iconSize / inkHeight
 
-  width: iconSize
+  width: inkWidth * markScale
   height: iconSize
-  implicitWidth: iconSize
-  implicitHeight: iconSize
+  implicitWidth: width
+  implicitHeight: height
 
   Shape {
     width: root.viewWidth
     height: root.viewHeight
-    x: (root.width - root.viewWidth * root.markScale) / 2
-    y: (root.height - root.viewHeight * root.markScale) / 2
+    // The item is the ink box, so the viewBox hangs off it by its own margins.
+    x: -root.inkX * root.markScale
+    y: -root.inkY * root.markScale
     transformOrigin: Item.TopLeft
     scale: root.markScale
     antialiasing: true
