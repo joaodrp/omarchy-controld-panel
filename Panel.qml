@@ -599,11 +599,6 @@ Panel {
               }
             }
 
-            PanelSeparator {
-              visible: root.destinationRows.length > 0
-              foreground: root.foreground
-            }
-
             Column {
               width: parent.width
               visible: root.destinationRows.length > 0
@@ -635,6 +630,9 @@ Panel {
               MeterList {
                 width: parent.width
                 rows: root.destinationRows
+                // Codes name nothing on their own; the copied value stays the
+                // code the API reports.
+                labelFor: root.destinationView === "countries" ? "country" : ""
               }
             }
           }
@@ -1071,18 +1069,23 @@ Panel {
     id: meterList
     property string title: ""
     property var rows: []
-    // Filter ids arrive as slugs and read badly raw.
+    // Filter ids arrive as slugs and country codes as two letters; both read
+    // badly raw. The copied value is always what the API reported.
     property bool pretty: false
+    property string labelFor: ""
 
     visible: rows.length > 0
     spacing: Style.space(1)
 
-    PanelSectionHeader {
+    // A level below the block headers above it: same shape, less weight.
+    Text {
       text: meterList.title
       visible: meterList.title !== ""
-      foreground: root.foreground
-      fontFamily: root.fontFamily
+      color: Qt.darker(root.foreground, 1.55)
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
       bottomPadding: Style.space(4)
+      topPadding: Math.ceil(Style.font.caption * 0.15)
     }
 
     Repeater {
@@ -1090,7 +1093,11 @@ Panel {
       MeterRow {
         required property var modelData
         width: meterList.width
-        label: meterList.pretty ? Model.filterLabel(modelData.value) : modelData.value
+        label: {
+          if (meterList.pretty) return Model.filterLabel(modelData.value)
+          if (meterList.labelFor === "country") return Model.countryName(modelData.value)
+          return modelData.value
+        }
         copyValue: modelData.value
         hits: modelData.count
         ratio: Model.meterRatio(modelData.count, meterList.rows)

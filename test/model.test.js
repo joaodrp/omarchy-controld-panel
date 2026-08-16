@@ -9,7 +9,7 @@ const vm = require("node:vm")
 
 const src = fs.readFileSync(path.join(__dirname, "..", "Model.js"), "utf8")
 const M = {}
-vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, nextProfile, groupRules, flattenGroups, countRules, actionGlyph, ruleDetail, profileDetail, accountLine, resolverUid, parseDevices, findDevice, endpointLine, activeProfile, defaultActionLine, parseStats, formatCount, blockedShare, windowLabel, meterRatio, sparkPoints, filterLabel, actionTotal, windowOptions, actionOptions, EXIT_AUTH };", M)
+vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, nextProfile, groupRules, flattenGroups, countRules, actionGlyph, ruleDetail, profileDetail, accountLine, resolverUid, parseDevices, findDevice, endpointLine, activeProfile, defaultActionLine, parseStats, formatCount, blockedShare, windowLabel, meterRatio, sparkPoints, filterLabel, countryName, actionTotal, windowOptions, actionOptions, EXIT_AUTH };", M)
 const m = M.__exports
 
 // vm-realm arrays fail strict deepEqual on prototype identity; compare by value.
@@ -231,6 +231,15 @@ test("sparkPoints normalizes and flips the y axis", () => {
   // One point cannot be a line, and an all-zero window must not divide by zero.
   same(m.sparkPoints([{ total: 4 }], "total"), [])
   same(m.sparkPoints([{ total: 0 }, { total: 0 }], "total"), [{ x: 0, y: 1 }, { x: 1, y: 1 }])
+})
+
+test("countryName spells codes out, keeping unknown ones", () => {
+  assert.equal(m.countryName("PT"), "Portugal")
+  assert.equal(m.countryName("us"), "United States")
+  assert.equal(m.countryName("GB"), "United Kingdom")
+  // An unmapped or empty code must not blank the row.
+  assert.equal(m.countryName("ZZ"), "ZZ")
+  assert.equal(m.countryName(""), "")
 })
 
 test("filterLabel makes a slug readable", () => {
