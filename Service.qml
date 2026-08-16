@@ -97,7 +97,7 @@ Item {
   readonly property int statsWindowHours: intSetting("statsWindowHours", 24, 1, 720)
   readonly property bool statsEnabled: setting("showStatistics", true) !== false
   readonly property bool activityEnabled: setting("showActivity", true) !== false
-  readonly property int activityRows: intSetting("activityRows", 10, 3, 25)
+  readonly property int activityRows: intSetting("activityRows", 10, 3, 20)
   // Rows per statistics list (domains, filters, destinations), and the cap on
   // the rules list. Every list in the panel is a top-N; these are the Ns.
   readonly property int statsRows: intSetting("statsRows", 5, 3, 20)

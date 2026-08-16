@@ -72,7 +72,7 @@
         "type": "integer",
         "label": "Activity rows",
         "min": 3,
-        "max": 25,
+        "max": 20,
         "step": 1,
         "defaultValue": 10
       },

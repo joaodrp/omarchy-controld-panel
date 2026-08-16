@@ -20,12 +20,14 @@ import controld_api as api
 # the space, so consecutive rows for the same question and verdict collapse
 # into one that keeps every record type it stood for.
 COLLAPSE_SECONDS = 5
-# One page of the log, and the most this hands back from it. The caller draws a
-# slice and expands into the rest, so keeping the whole page is what makes
-# expanding cost nothing. Raising the ceiling past a page would need paging,
-# which is a real request either way.
+# The most this hands back, and the page it reads to fill that. The caller
+# draws a slice and expands into the rest, so keeping them all is what makes
+# expanding cost nothing. The ceiling is small on purpose: past twenty or so a
+# bar panel is the wrong place to be reading a log. The page stays larger than
+# the ceiling because collapsing folds several raw rows into one, and a burst
+# of repeats would otherwise leave the list short of what it could show.
 PAGE_SIZE = 100
-MAX_ROWS = 50
+MAX_ROWS = 20
 
 
 def parse_time(value):
