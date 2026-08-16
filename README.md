@@ -35,13 +35,20 @@ Read-only for now: it lists, it does not write.
 
 Inside the panel:
 
-- `j` / `k` or arrows: move cursor
-- `enter` / `space`: select profile, or copy the selected rule's hostname
-- `c`: copy selected rule hostname
-- `p`: next profile (browse mode only)
-- `y`: copy the endpoint ID
-- `r`: refresh
-- `esc`: close
+| Key | Does |
+| --- | --- |
+| `?` | Show or hide the key legend |
+| `m` / `s` / `a` / `r` | Jump to machine, statistics, activity, rules |
+| `g` / `G` | Jump to the top or the bottom |
+| `j` / `k` or arrows | Move the cursor |
+| `enter` / `space` | Select profile, or copy the selected rule's hostname |
+| `c` | Copy the selected rule's hostname |
+| `y` | Copy the endpoint ID |
+| `p` | Next profile (browse mode only) |
+| `R` | Refresh |
+| `esc` | Close |
+
+`r` names the rules section, so refresh takes the shifted `R`.
 
 Endpoint detection reads `resolvectl status`, then `/etc/resolv.conf`, then a local `ctrld`
 config, looking for `<uid>.dns.controld.com` or `dns.controld.com/<uid>`: that id is the

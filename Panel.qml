@@ -42,6 +42,20 @@ Panel {
     && (controld.activity.length > 0 || controld.activityError !== "")
   readonly property bool showStats: controld.ready && machineMode && controld.statsEnabled
     && (controld.statsAvailable || controld.statsError !== "")
+  property bool legendOpen: false
+  // Only the keys that exist in the state being shown: a legend that lists
+  // what does nothing here is worse than none.
+  readonly property var legendKeys: {
+    var keys = [{ key: "j/k", what: "move" }, { key: "enter", what: "copy" }]
+    if (showStats) keys.push({ key: "s", what: "statistics" })
+    if (showActivity) keys.push({ key: "a", what: "activity" })
+    if (showRules) keys.push({ key: "r", what: "rules" })
+    if (showEndpoint) keys.push({ key: "m", what: "machine" }, { key: "y", what: "endpoint id" })
+    if (showProfiles) keys.push({ key: "p", what: "next profile" })
+    keys.push({ key: "g/G", what: "top/bottom" }, { key: "R", what: "refresh" }, { key: "esc", what: "close" })
+    return keys
+  }
+
   property string destinationView: "networks"
   readonly property var destinationRows: {
     if (!controld.stats) return []
@@ -180,6 +194,28 @@ Panel {
     })
   }
 
+  // Section jumps: pin the section to the top of the view rather than
+  // nudging it into sight, so the key lands somewhere predictable.
+  function jumpTo(section) {
+    if (!panelFlick || !section || !section.visible) return
+    cursorActive = section === rulesSection
+    if (section === rulesSection) {
+      focusSection = "rules"
+      ruleIndex = 0
+    }
+    var y = section.mapToItem(panelFlick.contentItem, 0, 0).y
+    var maxY = Math.max(0, panelFlick.contentHeight - panelFlick.height)
+    panelFlick.contentY = Math.max(0, Math.min(maxY, y - Style.space(8)))
+  }
+
+  function jumpToEdge(bottom) {
+    if (!panelFlick) return
+    cursorActive = false
+    panelFlick.contentY = bottom
+      ? Math.max(0, panelFlick.contentHeight - panelFlick.height)
+      : 0
+  }
+
   function scrollCursorIntoView() {
     if (focusSection === "rules") {
       var target = ruleRowItem(ruleIndex)
@@ -228,6 +264,7 @@ Panel {
 
   onOpenedChanged: {
     controld.statsWanted = opened
+    legendOpen = false
     if (!opened) return
     cursorActive = false
     if (panelFlick) panelFlick.contentY = 0
@@ -303,15 +340,27 @@ Panel {
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
       onTextKey: function(t) {
-        if (t === "r" || t === "R") controld.refresh()
-        else if ((t === "p" || t === "P") && !root.machineMode) controld.selectNextProfile(1)
+        if (t === "s") root.jumpTo(statsSection)
+        else if (t === "a") root.jumpTo(activitySection)
+        else if (t === "r") root.jumpTo(rulesSection)
+        else if (t === "m") root.jumpTo(machineSection)
+        else if (t === "g") root.jumpToEdge(false)
+        else if (t === "G") root.jumpToEdge(true)
+        else if (t === "?") root.legendOpen = !root.legendOpen
+        // Shift for the action, since the plain letter now names a section.
+        else if (t === "R") controld.refresh()
+        else if (t === "p" || t === "P") { if (!root.machineMode) controld.selectNextProfile(1) }
         else if (t === "c" || t === "C") controld.copyToClipboard(root.selectedRule() ? root.selectedRule().hostname : "")
         else if (t === "y" || t === "Y") controld.copyToClipboard(controld.endpoint ? controld.endpoint.id : "")
       }
 
       Flickable {
         id: panelFlick
-        anchors.fill: parent
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.bottom: legend.visible ? legend.top : parent.bottom
+        anchors.bottomMargin: legend.visible ? Style.space(8) : 0
         contentWidth: width
         contentHeight: column.implicitHeight
         clip: true
@@ -425,6 +474,7 @@ Panel {
           // sit under the hero without a header, and only the interactive
           // lists below get their own separated section.
           Column {
+            id: machineSection
             visible: root.showEndpoint
             width: parent.width
             spacing: Style.spacing.labelGap
@@ -472,6 +522,7 @@ Panel {
           }
 
           Column {
+            id: statsSection
             visible: root.showStats
             width: parent.width
             spacing: Style.space(10)
@@ -681,6 +732,7 @@ Panel {
           }
 
           Column {
+            id: activitySection
             visible: root.showActivity
             width: parent.width
             spacing: Style.space(8)
@@ -713,6 +765,7 @@ Panel {
           }
 
           Column {
+            id: rulesSection
             visible: root.showRules
             width: parent.width
             spacing: Style.space(10)
@@ -753,6 +806,55 @@ Panel {
                     rowIndex: rowSlot.isRuleRow ? root.ruleOrdinal(rowSlot.index) : -1
                   }
                 }
+              }
+            }
+          }
+        }
+      }
+
+      // Keys are invisible by nature, so ? reveals them without spending
+      // room on a legend nobody asked for.
+      Column {
+        id: legend
+        visible: root.legendOpen
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        spacing: Style.space(6)
+
+        PanelSeparator { foreground: root.foreground }
+
+        GridLayout {
+          width: parent.width
+          columns: 3
+          columnSpacing: Style.space(12)
+          rowSpacing: Style.space(3)
+
+          Repeater {
+            model: root.legendKeys
+
+            Row {
+              required property var modelData
+              spacing: Style.space(6)
+              // Equal thirds, so the keys line up as columns rather than
+              // drifting with the length of each description.
+              Layout.fillWidth: true
+              Layout.preferredWidth: 1
+
+              Text {
+                width: Style.space(30)
+                horizontalAlignment: Text.AlignRight
+                text: modelData.key
+                color: Qt.darker(root.foreground, 1.25)
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+              }
+
+              Text {
+                text: modelData.what
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
               }
             }
           }
