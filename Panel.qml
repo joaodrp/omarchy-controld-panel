@@ -39,6 +39,7 @@ Panel {
   readonly property bool unprotected: controld.ready && controld.resolverChecked && !controld.usingControld
   // Where to send someone who has neither the CLI nor an account set up.
   readonly property string guideUrl: "https://github.com/joaodrp/omarchy-controld-panel#readme"
+  readonly property string dashboardUrl: "https://controld.com/dashboard"
   readonly property bool showEmptyState: controld.checkedInstall
     && (!controld.installed || controld.needsAuth)
   readonly property bool showActivity: controld.ready && machineMode && controld.activityEnabled
@@ -55,7 +56,8 @@ Panel {
     if (showRules) keys.push({ key: "r", what: "rules" })
     if (showEndpoint) keys.push({ key: "m", what: "machine" })
     if (showProfiles) keys.push({ key: "p", what: "next profile" })
-    keys.push({ key: "g/G", what: "top/bottom" }, { key: "R", what: "refresh" }, { key: "esc", what: "close" })
+    keys.push({ key: "g/G", what: "top/bottom" }, { key: "o", what: "dashboard" },
+      { key: "R", what: "refresh" }, { key: "esc", what: "close" })
     return keys
   }
 
@@ -427,6 +429,7 @@ Panel {
         else if (t === "g") root.jumpToEdge(false)
         else if (t === "G") root.jumpToEdge(true)
         else if (t === "?") root.legendOpen = !root.legendOpen
+        else if (t === "o") Quickshell.execDetached(["omarchy-launch-browser", root.dashboardUrl])
         // Shift for the action, since the plain letter now names a section.
         else if (t === "R") controld.refresh()
         else if (t === "p" || t === "P") { if (!root.machineMode) controld.selectNextProfile(1) }
@@ -491,24 +494,40 @@ Panel {
               HoverHandler { id: heroHover }
 
               trailingControl: Component {
-                PanelActionButton {
-                  id: refreshButton
-                  visible: controld.installed
-                  iconText: "󰑐"
-                  tooltipText: "Refresh"
-                  foreground: hero.foreground
-                  fontFamily: hero.fontFamily
-                  hasCursor: header.ringVisible
-                  enabled: !controld.busy
-                  opacity: controld.busy ? 0.45 : 1.0
-                  onHovered: function(on) { if (on) header.focusHero() }
-                  onClicked: controld.refresh()
+                Row {
+                  spacing: Style.space(2)
 
-                  SequentialAnimation on opacity {
-                    running: controld.busy
-                    loops: Animation.Infinite
-                    NumberAnimation { to: 1.0; duration: 420; easing.type: Easing.InOutQuad }
-                    NumberAnimation { to: 0.45; duration: 420; easing.type: Easing.InOutQuad }
+                  // Everything this panel cannot do lives in the dashboard,
+                  // so it is one click away rather than a URL to remember.
+                  PanelActionButton {
+                    visible: controld.installed
+                    iconText: "󰏌"
+                    tooltipText: "Open Control D dashboard"
+                    foreground: hero.foreground
+                    fontFamily: hero.fontFamily
+                    onHovered: function(on) { if (on) header.focusHero() }
+                    onClicked: Quickshell.execDetached(["omarchy-launch-browser", root.dashboardUrl])
+                  }
+
+                  PanelActionButton {
+                    id: refreshButton
+                    visible: controld.installed
+                    iconText: "󰑐"
+                    tooltipText: "Refresh"
+                    foreground: hero.foreground
+                    fontFamily: hero.fontFamily
+                    hasCursor: header.ringVisible
+                    enabled: !controld.busy
+                    opacity: controld.busy ? 0.45 : 1.0
+                    onHovered: function(on) { if (on) header.focusHero() }
+                    onClicked: controld.refresh()
+
+                    SequentialAnimation on opacity {
+                      running: controld.busy
+                      loops: Animation.Infinite
+                      NumberAnimation { to: 1.0; duration: 420; easing.type: Easing.InOutQuad }
+                      NumberAnimation { to: 0.45; duration: 420; easing.type: Easing.InOutQuad }
+                    }
                   }
                 }
               }

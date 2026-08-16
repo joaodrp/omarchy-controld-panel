@@ -8,7 +8,8 @@ Read-only for now: it lists, it does not write.
 
 ## Features
 
-- Hero names this machine's endpoint and the profile it enforces, identified from the DNS
+- Hero names this machine's endpoint and the profile it enforces, and links to the Control D
+  dashboard for everything the panel does not do, identified from the DNS
   resolver actually in use rather than the hostname; the account line is on hover
 - Bar icon shows account state: dimmed when unavailable, badge when `cdctl` needs a login
 - Left click opens a keyboard-friendly panel; middle click refreshes; right click cycles profiles
@@ -38,6 +39,7 @@ Inside the panel:
 | Key | Does |
 | --- | --- |
 | `?` | Show or hide the key legend |
+| `o` | Open the Control D dashboard |
 | `m` / `s` / `a` / `r` | Jump to machine, statistics, activity, rules |
 | `g` / `G` | Jump to the top or the bottom |
 | `j` / `k` or arrows | Move the cursor through every actionable row, top to bottom |
