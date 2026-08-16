@@ -195,7 +195,9 @@ Item {
     var next = String(value || "")
     if (next === "" || next === activityFilter) return
     activityFilter = next
-    activity = []
+    // Leave the rows on screen while the next page loads. Emptying the list
+    // collapses the panel's content height, which drags the scroll to the top
+    // and loses the reader's place.
     loadActivity()
   }
 
