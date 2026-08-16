@@ -48,10 +48,12 @@ Panel {
     if (a === 2) return "redirected"
     return "blocked"
   }
+  // The window chips already name the range, so this says only what they
+  // cannot.
   readonly property string statsCaption: {
-    if (controld.statsLoading) return "loading…"
     if (!controld.statsAvailable) return "analytics off for this endpoint"
-    return Model.windowLabel(controld.stats ? controld.stats.hours : controld.statsWindowHours)
+    if (controld.statsLoading) return "loading…"
+    return ""
   }
   // Only rule rows take the cursor; folder headers are labels.
   readonly property var cursorRules: cursorRuleList()
@@ -472,21 +474,39 @@ Panel {
             width: parent.width
             spacing: Style.space(10)
 
-            SectionTitle {
+            // The window governs everything in this section, so it sits with
+            // the section's own title, as the destinations control sits with
+            // its list.
+            RowLayout {
               width: parent.width
-              text: "STATISTICS"
-              caption: root.statsCaption
+              spacing: Style.space(8)
+
+              PanelSectionHeader {
+                text: "STATISTICS"
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+              }
+
+              Item { Layout.fillWidth: true }
+
+              ButtonGroup {
+                options: Model.windowOptions()
+                value: String(controld.statsHours)
+                foreground: root.foreground
+                accent: Color.accent
+                fontFamily: root.fontFamily
+                fontSize: Style.font.caption
+                onChanged: function(v) { controld.setStatsWindow(v) }
+              }
             }
 
-            ButtonGroup {
+            Text {
               width: parent.width
-              options: Model.windowOptions()
-              value: String(controld.statsHours)
-              foreground: root.foreground
-              accent: Color.accent
-              fontFamily: root.fontFamily
-              fontSize: Style.font.caption
-              onChanged: function(v) { controld.setStatsWindow(v) }
+              visible: root.statsCaption !== ""
+              text: root.statsCaption
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
             }
 
             Sparkline {
@@ -525,40 +545,50 @@ Panel {
               wrapMode: Text.WordWrap
             }
 
-            // Which verdict the lists below describe, mirroring the
-            // dashboard's tabs.
-            ButtonGroup {
+            // The verdict governs the two lists directly beneath it, so it
+            // sits tight against them rather than floating under the chart.
+            Column {
               width: parent.width
               visible: controld.stats !== null
-              options: Model.actionOptions()
-              value: String(controld.statsAction)
+              spacing: Style.space(10)
+              topPadding: Style.space(4)
+
+              ButtonGroup {
+                options: Model.actionOptions()
+                value: String(controld.statsAction)
+                foreground: root.foreground
+                accent: Color.accent
+                fontFamily: root.fontFamily
+                fontSize: Style.font.caption
+                onChanged: function(v) { controld.setStatsAction(v) }
+              }
+
+              Text {
+                width: parent.width
+                visible: root.actionRows.length === 0 && controld.statsError === ""
+                text: "Nothing " + root.actionWord + " in this window."
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+              }
+
+              MeterList {
+                width: parent.width
+                title: "DOMAINS"
+                rows: controld.stats ? controld.stats.domains : []
+              }
+
+              MeterList {
+                width: parent.width
+                title: "FILTERS"
+                rows: controld.stats ? controld.stats.filters : []
+                pretty: true
+              }
+            }
+
+            PanelSeparator {
+              visible: root.destinationRows.length > 0
               foreground: root.foreground
-              accent: Color.accent
-              fontFamily: root.fontFamily
-              fontSize: Style.font.caption
-              onChanged: function(v) { controld.setStatsAction(v) }
-            }
-
-            Text {
-              width: parent.width
-              visible: controld.stats !== null && root.actionRows.length === 0 && controld.statsError === ""
-              text: "Nothing " + root.actionWord + " in this window."
-              color: root.dim
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
-            }
-
-            MeterList {
-              width: parent.width
-              title: "DOMAINS"
-              rows: controld.stats ? controld.stats.domains : []
-            }
-
-            MeterList {
-              width: parent.width
-              title: "FILTERS"
-              rows: controld.stats ? controld.stats.filters : []
-              pretty: true
             }
 
             Column {
