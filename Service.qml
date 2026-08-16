@@ -98,10 +98,6 @@ Item {
   readonly property bool statsEnabled: setting("showStatistics", true) !== false
   readonly property bool activityEnabled: setting("showActivity", true) !== false
   readonly property int activityRows: intSetting("activityRows", 10, 3, 25)
-  // Kept well past what the panel draws, so expanding the log reveals rows
-  // already in hand instead of costing another request. One page of the
-  // activity log collapses to roughly this many.
-  readonly property int activityCeiling: 50
   // Rows per statistics list (domains, filters, destinations), and the cap on
   // the rules list. Every list in the panel is a top-N; these are the Ns.
   readonly property int statsRows: intSetting("statsRows", 5, 3, 20)
@@ -183,8 +179,9 @@ Item {
     activityLoading = true
     activityProcess.command = ["python3", scriptPath("scripts/activity.py"),
       "--endpoint", endpoint.id,
-      "--region", region,
-      "--rows", String(activityCeiling)]
+      // How many to keep is the helper's business: it hands back a whole
+      // page so the panel can expand into it without asking again.
+      "--region", region]
     activityProcess.running = true
   }
 

@@ -20,6 +20,12 @@ import controld_api as api
 # the space, so consecutive rows for the same question and verdict collapse
 # into one that keeps every record type it stood for.
 COLLAPSE_SECONDS = 5
+# One page of the log, and the most this hands back from it. The caller draws a
+# slice and expands into the rest, so keeping the whole page is what makes
+# expanding cost nothing. Raising the ceiling past a page would need paging,
+# which is a real request either way.
+PAGE_SIZE = 100
+MAX_ROWS = 50
 
 
 def parse_time(value):
@@ -67,16 +73,17 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--endpoint", required=True, help="device id to report on")
     parser.add_argument("--region", required=True, help="account region, as `cdctl auth status` reports it")
-    parser.add_argument("--rows", type=int, default=8, help="how many queries to keep after collapsing")
+    parser.add_argument("--rows", type=int, default=MAX_ROWS,
+                        help=f"how many queries to keep after collapsing, at most {MAX_ROWS}")
     parser.add_argument("--hours", type=int, default=6, help="how far back to look for them")
     args = parser.parse_args()
 
     try:
         token = api.read_token()
-        rows = max(1, min(args.rows, 50))
+        rows = max(1, min(args.rows, MAX_ROWS))
         # Ask for more than we keep: collapsing several raw rows into one means
         # a page of 100 can be worth far fewer entries.
-        params = dict(api.window(args.hours, args.endpoint), pageSize=100)
+        params = dict(api.window(args.hours, args.endpoint), pageSize=PAGE_SIZE)
         body = api.get(api.host_for(args.region), "/v2/activity-log", params, token)
     except RuntimeError as exc:
         json.dump({"ok": False, "error": str(exc)}, sys.stdout)

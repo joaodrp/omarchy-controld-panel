@@ -33,7 +33,7 @@ process argument**: `/proc/*/cmdline` is world readable.
 | `ControldIcon.qml` | The Control D mark, drawn from its SVG paths |
 | `scripts/controld_api.py` | Token resolution and HTTP for the analytics origin |
 | `scripts/stats.py` | One (window, verdict) pair of statistics, nine requests folded into one document |
-| `scripts/activity.py` | Recent lookups, with the A/AAAA pair of one lookup collapsed |
+| `scripts/activity.py` | Recent lookups, A/AAAA collapsed. Returns a whole page; the panel draws a slice and expands into the rest |
 | `test/model.test.js` | Unit tests for `Model.js` |
 
 Logic that can live in `Model.js` belongs there rather than in QML: it is the only part with
