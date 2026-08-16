@@ -3,7 +3,7 @@
   "id": "io.github.joaodrp.controld",
   "name": "Control D",
   "version": "0.1.0",
-  "author": "João Pereira",
+  "author": "Jo\u00e3o Pereira",
   "license": "MIT",
   "description": "Control D account status, profiles, and DNS rules in the Omarchy bar, powered by cdctl.",
   "kinds": [
@@ -20,7 +20,9 @@
     "defaultSection": "right",
     "defaults": {
       "refreshIntervalSec": 120,
-      "profile": ""
+      "profile": "",
+      "statsWindowHours": 24,
+      "showStatistics": true
     },
     "schema": [
       {
@@ -37,6 +39,21 @@
         "type": "string",
         "label": "Profile id (empty = first profile)",
         "defaultValue": ""
+      },
+      {
+        "key": "showStatistics",
+        "type": "boolean",
+        "label": "Show statistics",
+        "defaultValue": true
+      },
+      {
+        "key": "statsWindowHours",
+        "type": "integer",
+        "label": "Statistics window (hours)",
+        "min": 1,
+        "max": 720,
+        "step": 1,
+        "defaultValue": 24
       }
     ]
   }

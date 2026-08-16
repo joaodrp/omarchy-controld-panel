@@ -16,6 +16,8 @@ Read-only for now: it lists, it does not write.
   action, protocol, ctrld version, filter and service counts, and the endpoint ID (click to copy)
 - PROFILES: the browse-mode fallback for a machine that is not on Control D DNS — every profile
   with its enabled rules, filters, and services; click one to browse it
+- STATISTICS: queries and blocks for this endpoint over the last 24h, with the top blocked
+  domains (click one to copy it). Fetched only while the panel is open
 - RULES: the enforced profile's custom rules, root first, then one group per folder, with
   action, spoof/redirect target, and disabled state
 - Copy a rule's hostname to the clipboard
@@ -39,11 +41,18 @@ device id, so the match is exact. Legacy shared resolvers carry no id and fall b
 account line. Naming the endpoint needs `cdctl api /devices`, the escape hatch, so that one
 call reads raw upstream fields rather than the CLI's normalized schema.
 
+Statistics come from Control D's analytics origin (`<region>.analytics.controld.com`), which is
+a different host than the REST API and so out of reach of `cdctl api`. `scripts/stats.py` makes
+those calls: it takes the token from `CONTROLD_API_TOKEN` or `cdctl`'s own config, sends it in a
+request header, and never places it in a process argument or its output. Analytics has to be on
+for the endpoint (`none` reports nothing); the section says so when it is off.
+
 ## Requirements
 
 - `cdctl` installed and authenticated (`cdctl auth login --token-stdin`). The panel looks on
   `PATH`, then in `~/.cargo/bin`, `~/.local/bin`, `/usr/local/bin`, `/usr/bin`
 - `wl-copy` for clipboard copy actions
+- `python3` for the statistics helper (standard library only)
 
 The panel always passes `--profile <id>` explicitly, so `cdctl`'s `default_profile` does not
 have to be set.
@@ -74,6 +83,8 @@ Set through the bar's widget settings, or inline on the widget's `shell.json` en
 | --- | --- | --- |
 | `refreshIntervalSec` | `120` | Poll interval, 15-3600 seconds |
 | `profile` | `""` | Profile id (or name) to show; empty picks the first profile |
+| `showStatistics` | `true` | Whether to query analytics at all |
+| `statsWindowHours` | `24` | Statistics window, 1-720 hours |
 
 ## IPC
 

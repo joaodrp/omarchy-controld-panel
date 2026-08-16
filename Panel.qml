@@ -33,6 +33,13 @@ Panel {
   readonly property bool showProfiles: controld.ready && !machineMode && controld.profiles.length > 0
   readonly property bool showRules: controld.ready && controld.activeProfile !== null
   readonly property bool unprotected: controld.ready && controld.resolverChecked && !controld.usingControld
+  readonly property bool showStats: controld.ready && machineMode && controld.statsEnabled
+    && (controld.statsAvailable || controld.statsError !== "")
+  readonly property string statsCaption: {
+    if (controld.statsLoading && controld.stats === null) return "loading…"
+    if (!controld.statsAvailable) return "analytics off for this endpoint"
+    return Model.windowLabel(controld.stats ? controld.stats.hours : controld.statsWindowHours)
+  }
   // Only rule rows take the cursor; folder headers are labels.
   readonly property var cursorRules: cursorRuleList()
   readonly property bool headerHasCursor: cursorActive && focusSection === "header" && controld.installed
@@ -198,7 +205,9 @@ Panel {
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
-  onOpenedChanged: if (opened) {
+  onOpenedChanged: {
+    controld.statsWanted = opened
+    if (!opened) return
     cursorActive = false
     if (panelFlick) panelFlick.contentY = 0
     controld.refresh()
@@ -437,6 +446,85 @@ Panel {
               }
               Item { Layout.fillWidth: true }
               Item { Layout.fillWidth: true }
+            }
+          }
+
+          PanelSeparator {
+            visible: root.showStats
+            foreground: root.foreground
+          }
+
+          Column {
+            visible: root.showStats
+            width: parent.width
+            spacing: Style.space(10)
+
+            SectionTitle {
+              width: parent.width
+              icon: "statistics"
+              text: "STATISTICS"
+              caption: root.statsCaption
+            }
+
+            GridLayout {
+              width: parent.width
+              visible: controld.stats !== null
+              columns: 4
+              columnSpacing: Style.space(20)
+              rowSpacing: Style.spacing.labelGap
+
+              InfoLabel { text: "Queries" }
+              DetailValue { text: controld.stats ? Model.formatCount(controld.stats.total) : "--" }
+              InfoLabel { text: "Blocked" }
+              DetailValue {
+                text: {
+                  if (!controld.stats) return "--"
+                  var share = Model.blockedShare(controld.stats.total, controld.stats.blocked)
+                  var count = Model.formatCount(controld.stats.blocked)
+                  return share !== "" ? count + " (" + share + ")" : count
+                }
+              }
+            }
+
+            Text {
+              width: parent.width
+              visible: controld.statsError !== ""
+              text: controld.statsError
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+              wrapMode: Text.WordWrap
+            }
+
+            Text {
+              width: parent.width
+              visible: controld.statsError === "" && controld.stats !== null && controld.stats.topBlocked.length === 0
+              text: "Nothing blocked in this window."
+              color: root.dim
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.caption
+            }
+
+            Column {
+              width: parent.width
+              visible: controld.stats !== null && controld.stats.topBlocked.length > 0
+              spacing: Style.space(6)
+
+              PanelSectionHeader {
+                text: "TOP BLOCKED"
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+              }
+
+              Repeater {
+                model: controld.stats ? controld.stats.topBlocked : []
+                TopBlockedRow {
+                  required property var modelData
+                  width: parent.width
+                  domain: modelData.value
+                  hits: modelData.count
+                }
+              }
             }
           }
 
@@ -824,6 +912,54 @@ Panel {
     PanelToolTip {
       visible: valueMouse.enabled && valueMouse.containsMouse
       text: detailValue.tooltipText
+      fontFamily: root.fontFamily
+    }
+  }
+
+  // Informational, like the key/value pairs above it: click to copy the
+  // domain, no cursor.
+  component TopBlockedRow: Item {
+    id: blockedRow
+    property string domain: ""
+    property int hits: 0
+
+    implicitHeight: blockedInner.implicitHeight
+
+    RowLayout {
+      id: blockedInner
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      spacing: Style.space(10)
+
+      Text {
+        Layout.fillWidth: true
+        text: blockedRow.domain
+        color: blockedMouse.containsMouse ? root.foreground : Qt.darker(root.foreground, 1.25)
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.bodySmall
+        elide: Text.ElideMiddle
+      }
+
+      Text {
+        text: Model.formatCount(blockedRow.hits)
+        color: root.dim
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.bodySmall
+      }
+    }
+
+    MouseArea {
+      id: blockedMouse
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onClicked: controld.copyToClipboard(blockedRow.domain)
+    }
+
+    PanelToolTip {
+      visible: blockedMouse.containsMouse
+      text: "Copy domain"
       fontFamily: root.fontFamily
     }
   }

@@ -46,6 +46,15 @@ Item {
   readonly property bool resolverChecked: _resolverChecked
   property bool _resolverChecked: false
 
+  // Analytics for this endpoint. Fetched only while the panel is open: the
+  // numbers are not visible otherwise, and they cost three requests.
+  property bool statsWanted: false
+  property var stats: null
+  property bool statsLoading: false
+  property string statsError: ""
+  readonly property int endpointAnalytics: endpoint ? endpoint.analytics : 0
+  readonly property bool statsAvailable: endpoint !== null && endpointAnalytics > 0
+
   property bool refreshing: false
   property bool loadingRules: false
   property string lastError: ""
@@ -56,6 +65,8 @@ Item {
   signal profileSelected(string id)
 
   readonly property int refreshIntervalSec: intSetting("refreshIntervalSec", 120, 15, 3600)
+  readonly property int statsWindowHours: intSetting("statsWindowHours", 24, 1, 720)
+  readonly property bool statsEnabled: setting("showStatistics", true) !== false
   readonly property string preferredProfile: String(setting("profile", "") || "")
   readonly property bool busy: lookupProcess.running || authProcess.running || profilesProcess.running || rulesProcess.running || foldersProcess.running || resolverProcess.running || devicesProcess.running
   readonly property bool ready: installed && authenticated && !needsAuth
@@ -93,6 +104,21 @@ Item {
     return [cdctlPath, "-q", "--timeout", "15", "api", path]
   }
 
+  // The helper lives beside this file in the plugin directory.
+  function scriptPath(name) {
+    return String(Qt.resolvedUrl(name)).replace(/^file:\/\//, "")
+  }
+
+  function loadStats() {
+    if (!statsEnabled || !statsAvailable || statsProcess.running) return
+    statsLoading = true
+    statsProcess.command = ["python3", scriptPath("scripts/stats.py"),
+      "--endpoint", endpoint.id,
+      "--region", region !== "" ? region : "europe",
+      "--hours", String(statsWindowHours)]
+    statsProcess.running = true
+  }
+
   function copyToClipboard(value) {
     var text = String(value || "")
     if (text === "") return
@@ -118,6 +144,7 @@ Item {
       profilesProcess.running = true
     }
     if (!resolverProcess.running) resolverProcess.running = true
+    if (statsWanted) loadStats()
     if (!pollWatchdog.running) pollWatchdog.start()
   }
 
@@ -185,6 +212,11 @@ Item {
 
   // The endpoint resolves after the first rules fetch, so the rules follow it
   // once it lands rather than staying on the browsed profile.
+  // The endpoint lands after the panel has already opened, so the first fetch
+  // usually happens here rather than on open.
+  onStatsAvailableChanged: if (statsWanted && statsAvailable) loadStats()
+  onStatsWantedChanged: if (statsWanted) loadStats()
+
   onActiveProfileChanged: {
     if (activeProfile && activeProfile.id !== _rulesForProfile) loadRules(activeProfile.id)
   }
@@ -219,8 +251,10 @@ Item {
       if (foldersProcess.running) foldersProcess.running = false
       if (resolverProcess.running) resolverProcess.running = false
       if (devicesProcess.running) devicesProcess.running = false
+      if (statsProcess.running) statsProcess.running = false
       root.refreshing = false
       root.loadingRules = false
+      root.statsLoading = false
     }
   }
 
@@ -282,6 +316,29 @@ Item {
       if (exitCode !== 0) { root.devices = []; return }
       var parsed = Model.parseDevices(devicesStdout.text)
       root.devices = parsed.ok ? parsed.devices : []
+    }
+  }
+
+  Process {
+    // Analytics is a different origin than the REST API, so this goes through
+    // the plugin's own helper rather than cdctl. Failures are reported in the
+    // section itself, never as a panel-wide error.
+    id: statsProcess
+    running: false
+    command: []
+    stdout: StdioCollector { id: statsStdout; waitForEnd: true }
+    stderr: StdioCollector { id: statsStderr; waitForEnd: true }
+    onExited: function(exitCode) {
+      root.statsLoading = false
+      var parsed = Model.parseStats(statsStdout.text)
+      if (parsed.ok) {
+        root.stats = parsed
+        root.statsError = ""
+        return
+      }
+      root.stats = null
+      var stderr = String(statsStderr.text || "").trim()
+      root.statsError = Model.elide(parsed.error !== "" ? parsed.error : (stderr !== "" ? stderr : "statistics unavailable"), 120)
     }
   }
 

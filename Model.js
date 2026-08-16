@@ -265,6 +265,8 @@ function normalizeDevice(d) {
     enabled: num(d.status, 1) === 1,
     icon: str(d.icon),
     ctrldVersion: ctrld ? str(ctrld.version) : "",
+    // 0 none, 1 some, 2 full — analytics is off for this endpoint at 0.
+    analytics: num(d.stats, 0),
     dot: str(resolvers.dot),
     doh: str(resolvers.doh)
   }
@@ -323,6 +325,62 @@ function endpointLine(device, transport) {
   if (device.profileName !== "") parts.push(device.profileName)
   if (str(transport) !== "") parts.push(str(transport))
   return parts.length > 0 ? parts.join(" · ") : "Control D"
+}
+
+// scripts/stats.py already fans the analytics calls into one document, so
+// this only has to validate it.
+function parseStats(raw) {
+  var parsed = parseJson(raw)
+  if (!parsed.ok || !parsed.value || typeof parsed.value !== "object") {
+    return { ok: false, hours: 0, total: 0, blocked: 0, topBlocked: [], error: parsed.error || "bad stats output" }
+  }
+  var v = parsed.value
+  if (v.ok !== true) {
+    return { ok: false, hours: 0, total: 0, blocked: 0, topBlocked: [], error: str(v.error) || "analytics failed" }
+  }
+  var top = []
+  var list = v.top_blocked instanceof Array ? v.top_blocked : []
+  for (var i = 0; i < list.length; i++) {
+    var entry = list[i]
+    if (!entry || str(entry.value) === "") continue
+    top.push({ value: str(entry.value), count: num(entry.count) })
+  }
+  return {
+    ok: true,
+    hours: num(v.hours, 24),
+    total: num(v.total),
+    blocked: num(v.blocked),
+    topBlocked: top,
+    error: ""
+  }
+}
+
+// Query counts run to five and six digits, and the panel has one column for
+// them: 21432 -> "21.4K".
+function formatCount(value) {
+  var n = num(value)
+  if (n < 1000) return String(n)
+  if (n < 1000000) {
+    var thousands = n / 1000
+    return (thousands < 10 ? thousands.toFixed(1) : Math.round(thousands)) + "K"
+  }
+  var millions = n / 1000000
+  return (millions < 10 ? millions.toFixed(1) : Math.round(millions)) + "M"
+}
+
+function blockedShare(total, blocked) {
+  var t = num(total)
+  if (t <= 0) return ""
+  return Math.round((num(blocked) / t) * 100) + "%"
+}
+
+// Caption for the statistics section: the window it covers.
+function windowLabel(hours) {
+  var h = num(hours, 24)
+  if (h <= 1) return "last hour"
+  if (h < 48) return "last " + h + "h"
+  var days = Math.round(h / 24)
+  return "last " + days + "d"
 }
 
 // Nerd Font glyphs, matching what the built-in panels use for their rows.

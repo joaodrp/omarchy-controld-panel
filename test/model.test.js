@@ -9,7 +9,7 @@ const vm = require("node:vm")
 
 const src = fs.readFileSync(path.join(__dirname, "..", "Model.js"), "utf8")
 const M = {}
-vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, nextProfile, groupRules, flattenGroups, countRules, actionGlyph, ruleDetail, profileDetail, accountLine, resolverUid, parseDevices, findDevice, endpointLine, activeProfile, defaultActionLine, EXIT_AUTH };", M)
+vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, nextProfile, groupRules, flattenGroups, countRules, actionGlyph, ruleDetail, profileDetail, accountLine, resolverUid, parseDevices, findDevice, endpointLine, activeProfile, defaultActionLine, parseStats, formatCount, blockedShare, windowLabel, EXIT_AUTH };", M)
 const m = M.__exports
 
 // vm-realm arrays fail strict deepEqual on prototype identity; compare by value.
@@ -188,6 +188,35 @@ test("defaultActionLine", () => {
   assert.equal(m.defaultActionLine(profiles[0]), "default: bypass")
   assert.equal(m.defaultActionLine(profiles[1]), "default: bypass · profile disabled")
   assert.equal(m.defaultActionLine(null), "")
+})
+
+test("parseStats validates the helper's document", () => {
+  const raw = JSON.stringify({ ok: true, hours: 24, total: 21432, blocked: 6302,
+    top_blocked: [{ value: "d.dropbox.com", count: 2112 }, { value: "", count: 9 }, { count: 3 }] })
+  const r = m.parseStats(raw)
+  assert.equal(r.ok, true)
+  assert.equal(r.total, 21432)
+  same(r.topBlocked, [{ value: "d.dropbox.com", count: 2112 }])
+  // The helper reports its own failures in the same envelope.
+  const failed = m.parseStats(JSON.stringify({ ok: false, error: "analytics unreachable: timed out" }))
+  assert.equal(failed.ok, false)
+  assert.equal(failed.error, "analytics unreachable: timed out")
+  assert.equal(m.parseStats("").ok, false)
+  assert.equal(m.parseStats("not json").ok, false)
+})
+
+test("formatCount, blockedShare, windowLabel", () => {
+  assert.equal(m.formatCount(0), "0")
+  assert.equal(m.formatCount(999), "999")
+  assert.equal(m.formatCount(1000), "1.0K")
+  assert.equal(m.formatCount(6302), "6.3K")
+  assert.equal(m.formatCount(21432), "21K")
+  assert.equal(m.formatCount(1250000), "1.3M")
+  assert.equal(m.blockedShare(21432, 6302), "29%")
+  assert.equal(m.blockedShare(0, 0), "")
+  assert.equal(m.windowLabel(24), "last 24h")
+  assert.equal(m.windowLabel(1), "last hour")
+  assert.equal(m.windowLabel(168), "last 7d")
 })
 
 test("actionGlyph has a fallback", () => {
