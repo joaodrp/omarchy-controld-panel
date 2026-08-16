@@ -126,6 +126,13 @@ Panel {
     if (showStats && controld.stats) {
       for (var d = 0; d < controld.stats.domains.length; d++)
         items.push({ key: "domain:" + d, kind: "domain", index: d, value: controld.stats.domains[d].value })
+      // Filters, networks and countries are read, not acted on: the cursor
+      // still visits them so j/k walks the panel continuously, but they
+      // carry no value, so yank passes over them.
+      for (var f = 0; f < controld.stats.filters.length; f++)
+        items.push({ key: "filter:" + f, kind: "reading", index: f, value: "" })
+      for (var t = 0; t < destinationRows.length; t++)
+        items.push({ key: "destination:" + t, kind: "reading", index: t, value: "" })
     }
     if (showActivity) {
       for (var a = 0; a < controld.activity.length; a++)
@@ -193,6 +200,7 @@ Panel {
   // the endpoint id is the one value on screen worth taking.
   function yank() {
     var entry = cursorActive ? currentCursor() : null
+    if (entry && entry.kind === "reading") return
     if (entry && entry.kind !== "header" && String(entry.value || "") !== "") {
       controld.copyToClipboard(entry.value)
       return
@@ -206,6 +214,7 @@ Panel {
     var entry = currentCursor()
     if (!entry) return
     if (entry.kind === "header") { controld.refresh(); return }
+    if (entry.kind === "reading") return
     if (entry.kind === "profile") {
       var profile = selectedProfileRow()
       if (profile) controld.selectProfile(profile.id)
@@ -273,7 +282,7 @@ Panel {
     if (!entry) return null
     if (entry.kind === "rule") return ruleRowItem(entry.index)
     if (entry.kind === "endpoint") return machineSection
-    return findByCursorKey([profileColumn, domainList, activityColumn], entry.key)
+    return findByCursorKey([profileColumn, domainList, filterList, destinationList, activityColumn], entry.key)
   }
 
   function findByCursorKey(containers, key) {
@@ -722,10 +731,12 @@ Panel {
               }
 
               MeterList {
+                id: filterList
                 width: parent.width
                 title: "FILTERS"
                 rows: controld.stats ? controld.stats.filters : []
                 pretty: true
+                cursorPrefix: "filter:"
               }
             }
 
@@ -758,8 +769,10 @@ Panel {
               }
 
               MeterList {
+                id: destinationList
                 width: parent.width
                 rows: root.destinationRows
+                cursorPrefix: "destination:"
                 // Codes name nothing on their own; the copied value stays the
                 // code the API reports.
                 labelFor: root.destinationView === "countries" ? "country" : ""
@@ -1344,7 +1357,9 @@ Panel {
 
     readonly property bool interactive: copyValue !== ""
     readonly property bool hasCursor: cursorKey !== "" && root.cursorActive && root.cursorKey === cursorKey
-    readonly property bool hot: interactive && (rowMouse.containsMouse || hasCursor)
+    // The cursor marks where you are reading, so it shows on every row it can
+    // reach. Hover still lights up only what can be acted on.
+    readonly property bool hot: hasCursor || (interactive && rowMouse.containsMouse)
 
     Text {
       id: rowLabel
@@ -1398,16 +1413,16 @@ Panel {
     MouseArea {
       id: rowMouse
       anchors.fill: parent
-      enabled: meterRow.interactive
-      hoverEnabled: enabled
-      cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+      hoverEnabled: true
+      cursorShape: meterRow.interactive ? Qt.PointingHandCursor : Qt.ArrowCursor
+      acceptedButtons: meterRow.interactive ? Qt.LeftButton : Qt.NoButton
       onEntered: if (meterRow.cursorKey !== "") root.setCursorFromPointer(meterRow.cursorKey, meterRow, { x: rowMouse.mouseX, y: rowMouse.mouseY })
       onPositionChanged: function(mouse) { if (meterRow.cursorKey !== "") root.setCursorFromPointer(meterRow.cursorKey, meterRow, mouse) }
       onClicked: controld.copyToClipboard(meterRow.copyValue)
     }
 
     PanelToolTip {
-      visible: meterRow.hot
+      visible: meterRow.interactive && rowMouse.containsMouse
       text: "Copy " + meterRow.copyValue
       fontFamily: root.fontFamily
     }
