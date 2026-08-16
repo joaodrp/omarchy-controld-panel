@@ -593,8 +593,10 @@ Panel {
 
               InfoLabel { text: "Protocol" }
               DetailValue { text: controld.endpointTransport !== "" ? controld.endpointTransport : "--" }
-              InfoLabel { text: "Daemon" }
-              DetailValue { text: controld.endpoint && controld.endpoint.ctrldVersion !== "" ? "ctrld " + controld.endpoint.ctrldVersion : "--" }
+              // What on this machine talks to Control D, probed here rather
+              // than taken from the account's record of the device.
+              InfoLabel { text: "Resolver" }
+              DetailValue { text: controld.resolverLine }
 
               InfoLabel { text: "Filters" }
               DetailValue { text: controld.activeProfile ? String(controld.activeProfile.enabledFilters) : "--" }

@@ -9,7 +9,7 @@ const vm = require("node:vm")
 
 const src = fs.readFileSync(path.join(__dirname, "..", "Model.js"), "utf8")
 const M = {}
-vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, nextProfile, groupRules, flattenGroups, countRules, actionGlyph, ruleDetail, profileDetail, accountLine, resolverUid, parseDevices, findDevice, endpointLine, endpointState, ENDPOINT_PENDING, ENDPOINT_NONE, ENDPOINT_UNKNOWN, ENDPOINT_MACHINE, activeProfile, defaultActionLine, parseStats, formatCount, blockedShare, windowLabel, meterRatio, sparkPoints, filterLabel, countryName, actionTotal, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
+vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, nextProfile, groupRules, flattenGroups, countRules, actionGlyph, ruleDetail, profileDetail, accountLine, resolverUid, ctrldActive, resolverLine, parseDevices, findDevice, endpointLine, endpointState, ENDPOINT_PENDING, ENDPOINT_NONE, ENDPOINT_UNKNOWN, ENDPOINT_MACHINE, activeProfile, defaultActionLine, parseStats, formatCount, blockedShare, windowLabel, meterRatio, sparkPoints, filterLabel, countryName, actionTotal, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
 const m = M.__exports
 
 // vm-realm arrays fail strict deepEqual on prototype identity; compare by value.
@@ -134,11 +134,60 @@ test("groupRules with no folders", () => {
 
 test("resolverUid reads the endpoint id from the local resolver", () => {
   const resolved = "Current DNS Server: 76.76.2.22#dev0000001.dns.controld.com"
-  same(m.resolverUid(resolved), { uid: "dev0000001", transport: "DNS-over-TLS" })
-  same(m.resolverUid("https://dns.controld.com/dev0000001"), { uid: "dev0000001", transport: "DNS-over-HTTPS" })
+  same(m.resolverUid(resolved), { uid: "dev0000001", transport: "DNS-over-TLS", source: "resolved" })
+  same(m.resolverUid("https://dns.controld.com/dev0000001"), { uid: "dev0000001", transport: "DNS-over-HTTPS", source: "resolved" })
   // Legacy shared resolvers carry no endpoint id.
-  same(m.resolverUid("nameserver 76.76.2.11 p2.freedns.controld.com"), { uid: "", transport: "" })
-  same(m.resolverUid("nameserver 1.1.1.1"), { uid: "", transport: "" })
+  same(m.resolverUid("nameserver 76.76.2.11 p2.freedns.controld.com"), { uid: "", transport: "", source: "" })
+  same(m.resolverUid("nameserver 1.1.1.1"), { uid: "", transport: "", source: "" })
+})
+
+const probe = (resolved, resolvconf, ctrld, daemon) =>
+  `@@resolved\n${resolved}\n@@resolvconf\n${resolvconf}\n@@ctrld\n${ctrld}\n@@daemon\n${daemon}\n`
+
+test("resolverUid attributes the endpoint to the config that carries it", () => {
+  // systemd-resolved pointed straight at the endpoint: no daemon in the path.
+  same(m.resolverUid(probe(
+    "Current DNS Server: 76.76.2.22#dev0000001.dns.controld.com",
+    "nameserver 127.0.0.53", "", "inactive")),
+    { uid: "dev0000001", transport: "DNS-over-TLS", source: "resolved" })
+
+  // ctrld owns the endpoint and resolved only points at its local listener, so
+  // the uid in ctrld's config is the one that counts.
+  same(m.resolverUid(probe(
+    "Current DNS Server: 127.0.0.1",
+    "nameserver 127.0.0.1",
+    'upstream = "https://dns.controld.com/dev0000001"',
+    "/usr/bin/ctrld\nactive")),
+    { uid: "dev0000001", transport: "DNS-over-HTTPS", source: "ctrld" })
+
+  // Only the stub file names it.
+  same(m.resolverUid(probe("Current DNS Server: 127.0.0.53",
+    "nameserver 76.76.2.22#dev0000001.dns.controld.com", "", "inactive")),
+    { uid: "dev0000001", transport: "DNS-over-TLS", source: "static" })
+
+  same(m.resolverUid(probe("Current DNS Server: 1.1.1.1", "nameserver 1.1.1.1", "", "inactive")),
+    { uid: "", transport: "", source: "" })
+})
+
+test("ctrldActive answers from the machine, not from the account", () => {
+  assert.equal(m.ctrldActive(probe("", "", "", "/usr/bin/ctrld\nactive")), true)
+  // Installed but not running is not in use.
+  assert.equal(m.ctrldActive(probe("", "", "", "/usr/bin/ctrld\ninactive")), false)
+  assert.equal(m.ctrldActive(probe("", "", "", "inactive")), false)
+  // "activating" is not yet answering queries.
+  assert.equal(m.ctrldActive(probe("", "", "", "activating")), false)
+  assert.equal(m.ctrldActive(""), false)
+})
+
+test("resolverLine names what talks to Control D", () => {
+  assert.equal(m.resolverLine("ctrld", true, "v1.5.5"), "ctrld v1.5.5")
+  // A running daemon with no version reported by the account.
+  assert.equal(m.resolverLine("ctrld", true, ""), "ctrld")
+  // The account still carries a ctrld version for a device that no longer runs
+  // one: the local probe wins, which is the whole point of this row.
+  assert.equal(m.resolverLine("resolved", false, "v1.5.5"), "systemd-resolved")
+  assert.equal(m.resolverLine("static", false, ""), "resolv.conf")
+  assert.equal(m.resolverLine("", false, ""), "--")
 })
 
 test("parseDevices reads the raw upstream body", () => {

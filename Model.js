@@ -244,13 +244,58 @@ function countRules(rules) {
 // device id, so `<uid>.dns.controld.com` or `dns.controld.com/<uid>` in the
 // local DNS config names the endpoint exactly. Legacy shared resolvers
 // (p1/p2/family.freedns.controld.com) carry no id and match nothing.
-function resolverUid(text) {
+// The resolver probe arrives in named sections, because the same uid means
+// different things depending on which config holds it: in ctrld's config a
+// daemon is doing the talking, in resolved's this machine talks to Control D
+// directly. An undelimited blob is read as resolved's, so the parser stays
+// usable on a plain chunk of config.
+function probeSections(text) {
+  var out = { resolved: "", resolvconf: "", ctrld: "", daemon: "" }
+  var raw = str(text)
+  var parts = raw.split(/^@@(resolved|resolvconf|ctrld|daemon)$/m)
+  if (parts.length < 3) { out.resolved = raw; return out }
+  for (var i = 1; i + 1 < parts.length; i += 2) out[parts[i]] = parts[i + 1]
+  return out
+}
+
+function matchUid(text) {
   var haystack = str(text)
   var dot = haystack.match(/\b([a-z0-9]{6,})\.dns\.controld\.com\b/i)
   if (dot) return { uid: dot[1].toLowerCase(), transport: "DNS-over-TLS" }
   var doh = haystack.match(/dns\.controld\.com\/([a-z0-9]{6,})\b/i)
   if (doh) return { uid: doh[1].toLowerCase(), transport: "DNS-over-HTTPS" }
   return { uid: "", transport: "" }
+}
+
+function resolverUid(text) {
+  var probe = probeSections(text)
+  // ctrld first: when it is running, resolved only points at its local
+  // listener, so resolved's config cannot name the endpoint and ctrld's can.
+  var order = [["ctrld", probe.ctrld], ["resolved", probe.resolved], ["static", probe.resolvconf]]
+  for (var i = 0; i < order.length; i++) {
+    var found = matchUid(order[i][1])
+    if (found.uid !== "") return { uid: found.uid, transport: found.transport, source: order[i][0] }
+  }
+  return { uid: "", transport: "", source: "" }
+}
+
+// Whether a ctrld daemon is actually running here. The account keeps a `ctrld`
+// block on a device long after the daemon is gone, so this question is only
+// answerable on the machine.
+function ctrldActive(text) {
+  return /^active$/m.test(str(probeSections(text).daemon).trim())
+}
+
+// What on this machine talks to Control D. "Daemon" would presuppose one:
+// systemd-resolved can hold the endpoint itself, with nothing in between.
+function resolverLine(source, daemonActive, ctrldVersion) {
+  if (source === "ctrld" || daemonActive) {
+    var version = str(ctrldVersion)
+    return version !== "" ? "ctrld " + version : "ctrld"
+  }
+  if (source === "resolved") return "systemd-resolved"
+  if (source === "static") return "resolv.conf"
+  return "--"
 }
 
 function normalizeDevice(d) {

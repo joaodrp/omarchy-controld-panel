@@ -15,7 +15,9 @@ Read-only for now: it lists, it does not write.
 - Bar icon shows account state: dimmed when unavailable, badge when `cdctl` needs a login
 - Left click opens a keyboard-friendly panel; middle click refreshes
 - Machine facts under the hero, in the built-in panels' key/value idiom: profile, unmatched
-  action, protocol, ctrld version, filter and service counts, and the endpoint ID (click to copy)
+  action, protocol, resolver, filter and service counts, and the endpoint ID (click to copy).
+  The resolver row is probed on the machine, so it says `ctrld v1.5.5` only when a daemon is
+  actually running, and `systemd-resolved` when this host holds the endpoint itself
 - STATISTICS for this endpoint: a queries-over-time chart with the blocked share shaded under
   it, totals, and top domains, filters and destinations as meter rows. Pick the window
   (1h/24h/7d/30d) and the verdict (blocked/bypassed/redirected); destinations switch between

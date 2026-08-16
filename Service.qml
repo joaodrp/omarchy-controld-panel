@@ -35,6 +35,13 @@ Item {
   // actually using rather than from its hostname.
   property string endpointUid: ""
   property string endpointTransport: ""
+  // Which local config named the endpoint, and whether a ctrld daemon is
+  // actually running. Both come from the machine: the account keeps a `ctrld`
+  // block on a device long after the daemon has gone.
+  property string resolverSource: ""
+  property bool ctrldActive: false
+  readonly property string resolverLine: Model.resolverLine(resolverSource, ctrldActive,
+    endpoint ? endpoint.ctrldVersion : "")
   property var devices: []
   readonly property var endpoint: Model.findDevice(devices, endpointUid)
   readonly property string endpointProfileId: endpoint ? endpoint.profileId : ""
@@ -327,19 +334,25 @@ Item {
   }
 
   Process {
-    // Where this machine's DNS actually points. systemd-resolved first, then
-    // the resolv.conf stub, then a local ctrld config.
+    // Where this machine's DNS actually points, and what is doing the pointing.
+    // Sections are labelled because the answer depends on which config holds
+    // the endpoint, and because a running ctrld is a fact about this machine
+    // that the account's device record outlives.
     id: resolverProcess
     running: false
     command: ["sh", "-c",
-      "resolvectl status 2>/dev/null; cat /etc/resolv.conf 2>/dev/null; " +
-      "cat /etc/controld/ctrld.toml 2>/dev/null; cat /etc/ctrld.toml 2>/dev/null"]
+      "echo @@resolved; resolvectl status 2>/dev/null; " +
+      "echo @@resolvconf; cat /etc/resolv.conf 2>/dev/null; " +
+      "echo @@ctrld; cat /etc/controld/ctrld.toml 2>/dev/null; cat /etc/ctrld.toml 2>/dev/null; " +
+      "echo @@daemon; systemctl is-active ctrld 2>/dev/null"]
     stdout: StdioCollector { id: resolverStdout; waitForEnd: true }
     onExited: {
       var found = Model.resolverUid(resolverStdout.text)
       root._resolverChecked = true
       root.endpointUid = found.uid
       root.endpointTransport = found.transport
+      root.resolverSource = found.source
+      root.ctrldActive = Model.ctrldActive(resolverStdout.text)
       // No Control D resolver here, so there is no endpoint to name.
       if (found.uid === "") {
         root.devices = []
