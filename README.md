@@ -29,7 +29,8 @@ Read-only for now: it lists, it does not write.
 - ACTIVITY: this endpoint's most recent lookups, refreshed every 15s while the panel is open.
   The A/AAAA pair of one lookup collapses into a single row
 - RULES: the enforced profile's custom rules, root first, then one group per folder, with
-  action, spoof/redirect target, and disabled state
+  action, spoof/redirect target, and disabled state. Capped like every other list; the caption
+  says how many are hidden
 - Copy a rule's hostname to the clipboard
 - Every section needs an identified endpoint. Without one the panel shows nothing but the
   reason: no Control D resolver here, a resolver whose endpoint is not in this account, or a
@@ -132,6 +133,8 @@ Set through the bar's widget settings, or inline on the widget's `shell.json` en
 | `showActivity` | `true` | Whether to poll the activity log while open |
 | `activityRows` | `8` | Rows in the activity list, 3-25 |
 | `statsWindowHours` | `24` | Statistics window the panel opens on, 1-720 hours |
+| `statsRows` | `5` | Rows per statistics list: domains, filters, destinations, 3-20 |
+| `ruleRows` | `15` | Rules shown before the list is cut, 5-100 |
 
 ## IPC
 

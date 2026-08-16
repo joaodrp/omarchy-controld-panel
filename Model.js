@@ -249,6 +249,38 @@ function countRules(rules) {
   return { total: total, enabled: enabled }
 }
 
+// The rules the panel draws. Every other list in the panel is a top-N, and a
+// profile with a few hundred rules would otherwise be the one section that
+// scrolls without end. The cap counts rules, not rows, so folder headers do
+// not eat into it; a header whose rules all fell outside the cut goes with
+// them, since a heading for nothing is worse than the rules being missing.
+function limitRuleRows(rows, maxRules) {
+  var list = rows || []
+  var limit = num(maxRules, 0)
+  if (limit <= 0) return list.slice()
+  var out = []
+  var kept = 0
+  var truncated = false
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].kind !== "rule") { out.push(list[i]); continue }
+    if (kept >= limit) { truncated = true; break }
+    kept++
+    out.push(list[i])
+  }
+  // Only when the list was cut: an empty folder that fits is shown on purpose.
+  if (truncated) while (out.length > 0 && out[out.length - 1].kind === "folder") out.pop()
+  return out
+}
+
+// What the RULES section says about itself. The hidden count only appears when
+// something is hidden, so the common case reads as it always did.
+function rulesCaption(count, shown) {
+  if (!count || count.total === 0) return "No custom rules in this profile."
+  if (num(shown, 0) < count.total)
+    return "showing " + num(shown, 0) + " of " + count.total + " · " + count.enabled + " enabled"
+  return count.enabled + " of " + count.total + " enabled"
+}
+
 // This machine's Control D endpoint is identified by the resolver it is
 // actually using: every device's DoT hostname and DoH path carry its own
 // device id, so `<uid>.dns.controld.com` or `dns.controld.com/<uid>` in the

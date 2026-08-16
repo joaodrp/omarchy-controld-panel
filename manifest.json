@@ -22,8 +22,10 @@
       "refreshIntervalSec": 120,
       "statsWindowHours": 24,
       "showStatistics": true,
+      "statsRows": 5,
       "showActivity": true,
-      "activityRows": 8
+      "activityRows": 8,
+      "ruleRows": 15
     },
     "schema": [
       {
@@ -51,6 +53,15 @@
         "defaultValue": 24
       },
       {
+        "key": "statsRows",
+        "type": "integer",
+        "label": "Rows per statistics list",
+        "min": 3,
+        "max": 20,
+        "step": 1,
+        "defaultValue": 5
+      },
+      {
         "key": "showActivity",
         "type": "boolean",
         "label": "Show recent activity",
@@ -64,6 +75,15 @@
         "max": 25,
         "step": 1,
         "defaultValue": 8
+      },
+      {
+        "key": "ruleRows",
+        "type": "integer",
+        "label": "Rules shown",
+        "min": 5,
+        "max": 100,
+        "step": 5,
+        "defaultValue": 15
       }
     ]
   }

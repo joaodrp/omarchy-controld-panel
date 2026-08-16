@@ -29,7 +29,13 @@ Item {
   property var folders: []
   readonly property var groups: Model.groupRules(rules, folders)
   readonly property var ruleRows: Model.flattenGroups(groups)
+  readonly property var visibleRuleRows: Model.limitRuleRows(ruleRows, ruleLimit)
   readonly property var ruleCount: Model.countRules(rules)
+  readonly property int shownRuleCount: {
+    var n = 0
+    for (var i = 0; i < visibleRuleRows.length; i++) if (visibleRuleRows[i].kind === "rule") n++
+    return n
+  }
 
   // This machine as Control D sees it, resolved from the DNS resolver it is
   // actually using rather than from its hostname. The probe text is kept whole
@@ -92,6 +98,10 @@ Item {
   readonly property bool statsEnabled: setting("showStatistics", true) !== false
   readonly property bool activityEnabled: setting("showActivity", true) !== false
   readonly property int activityRows: intSetting("activityRows", 8, 3, 25)
+  // Rows per statistics list (domains, filters, destinations), and the cap on
+  // the rules list. Every list in the panel is a top-N; these are the Ns.
+  readonly property int statsRows: intSetting("statsRows", 5, 3, 20)
+  readonly property int ruleLimit: intSetting("ruleRows", 15, 5, 100)
   readonly property bool busy: lookupProcess.running || authProcess.running || profilesProcess.running || rulesProcess.running || foldersProcess.running || resolverProcess.running || devicesProcess.running
   readonly property bool ready: installed && authenticated && !needsAuth
 
@@ -157,7 +167,7 @@ Item {
       "--region", region,
       "--hours", String(statsHours),
       "--action", String(statsAction),
-      "--top", "5"]
+      "--top", String(statsRows)]
     statsProcess.running = true
   }
 

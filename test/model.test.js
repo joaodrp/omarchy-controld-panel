@@ -9,7 +9,7 @@ const vm = require("node:vm")
 
 const src = fs.readFileSync(path.join(__dirname, "..", "Model.js"), "utf8")
 const M = {}
-vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, nextProfile, groupRules, flattenGroups, countRules, actionGlyph, ruleDetail, profileDetail, accountLine, matchEndpoint, controldPresent, ctrldActive, resolverLabel, resolverUnknown, parseDevices, findDevice, endpointLine, endpointState, ENDPOINT_PENDING, ENDPOINT_NONE, ENDPOINT_UNKNOWN, ENDPOINT_MACHINE, activeProfile, defaultActionLine, parseStats, formatCount, blockedShare, windowLabel, meterRatio, sparkPoints, filterLabel, countryName, actionTotal, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
+vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, nextProfile, groupRules, flattenGroups, countRules, limitRuleRows, rulesCaption, actionGlyph, ruleDetail, profileDetail, accountLine, matchEndpoint, controldPresent, ctrldActive, resolverLabel, resolverUnknown, parseDevices, findDevice, endpointLine, endpointState, ENDPOINT_PENDING, ENDPOINT_NONE, ENDPOINT_UNKNOWN, ENDPOINT_MACHINE, activeProfile, defaultActionLine, parseStats, formatCount, blockedShare, windowLabel, meterRatio, sparkPoints, filterLabel, countryName, actionTotal, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
 const m = M.__exports
 
 // vm-realm arrays fail strict deepEqual on prototype identity; compare by value.
@@ -124,6 +124,29 @@ test("groupRules: root first, then folders in cdctl order, unknown folders by na
   assert.equal(groups[3].folder, null)
   const rows = m.flattenGroups(groups)
   same(rows.map(r => r.kind), ["rule", "rule", "folder", "rule", "folder", "folder", "rule"])
+})
+
+test("limitRuleRows caps rules, not rows, and drops headers left with nothing", () => {
+  const rows = m.flattenGroups(m.groupRules(m.parseRules(rulesJson).rules, m.parseFolders(foldersJson).folders))
+  same(rows.map(r => r.kind), ["rule", "rule", "folder", "rule", "folder", "folder", "rule"])
+
+  // Two rules in, the "Ads" header has not earned its place yet.
+  same(m.limitRuleRows(rows, 2).map(r => r.kind), ["rule", "rule"])
+  // Three rules in, it has.
+  same(m.limitRuleRows(rows, 3).map(r => r.kind), ["rule", "rule", "folder", "rule"])
+  // Room for everything: the empty "Empty" folder keeps its header, which is
+  // the whole point of showing empty folders.
+  same(m.limitRuleRows(rows, 4).map(r => r.kind), rows.map(r => r.kind))
+  same(m.limitRuleRows(rows, 99).map(r => r.kind), rows.map(r => r.kind))
+  // No cap.
+  same(m.limitRuleRows(rows, 0).map(r => r.kind), rows.map(r => r.kind))
+  same(m.limitRuleRows(null, 3), [])
+})
+
+test("rulesCaption says what is hidden only when something is", () => {
+  assert.equal(m.rulesCaption({ total: 0, enabled: 0 }, 0), "No custom rules in this profile.")
+  assert.equal(m.rulesCaption({ total: 9, enabled: 8 }, 9), "8 of 9 enabled")
+  assert.equal(m.rulesCaption({ total: 40, enabled: 31 }, 15), "showing 15 of 40 · 31 enabled")
 })
 
 test("groupRules with no folders", () => {

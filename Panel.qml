@@ -107,15 +107,15 @@ Panel {
   }
   readonly property string rulesCaption: {
     if (controld.loadingRules && controld.rules.length === 0) return "Loading rules…"
-    var c = controld.ruleCount
-    if (c.total === 0) return "No custom rules in this profile."
-    return c.enabled + " of " + c.total + " enabled"
+    return Model.rulesCaption(controld.ruleCount, controld.shownRuleCount)
   }
   // The machine facts above already name the profile these rules belong to.
   readonly property string rulesTitle: "RULES"
 
+  // The cursor walks what is drawn, so a capped list does not leave keys
+  // pointing at rules nobody can see.
   function cursorRuleList() {
-    var rows = controld.ruleRows
+    var rows = controld.visibleRuleRows
     var out = []
     for (var i = 0; i < rows.length; i++) if (rows[i].kind === "rule") out.push(rows[i].rule)
     return out
@@ -869,7 +869,7 @@ Panel {
               spacing: Style.space(6)
 
               Repeater {
-                model: controld.ruleRows
+                model: controld.visibleRuleRows
                 Item {
                   id: rowSlot
                   required property var modelData
@@ -950,9 +950,9 @@ Panel {
     }
   }
 
-  // Position of a rule among rule rows only, given its index in ruleRows.
+  // Position of a rule among rule rows only, given its index in the drawn list.
   function ruleOrdinal(rowsIndex) {
-    var rows = controld.ruleRows
+    var rows = controld.visibleRuleRows
     var n = 0
     for (var i = 0; i < rowsIndex && i < rows.length; i++) if (rows[i].kind === "rule") n++
     return n
