@@ -113,8 +113,10 @@ Panel {
     if (controld.endpoint) return Model.endpointLine(controld.endpoint, "")
     // With no endpoint to name, the empty state below carries the reason. The
     // hero says which account is signed in instead, which is what the reader
-    // needs to act on it, and is short enough not to elide.
-    return controld.statusText
+    // needs to act on it. The address alone: the region belongs to the
+    // analytics host, answers nothing anyone asks here, and is what pushed
+    // this line past the trailing controls into an ellipsis.
+    return controld.email !== "" ? controld.email : controld.statusText
   }
   readonly property string rulesCaption: {
     if (controld.loadingRules && controld.rules.length === 0) return "Loading rules…"
