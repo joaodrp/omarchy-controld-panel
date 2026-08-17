@@ -543,13 +543,6 @@ Panel {
                 }
               }
 
-              PanelToolTip {
-                visible: heroHover.hovered && controld.statusText !== ""
-                text: controld.statusText
-                fontFamily: root.fontFamily
-              }
-
-              HoverHandler { id: heroHover }
 
               // The only control here, and the one that has to survive there
               // being no endpoint to describe: pausing is what removed it.
