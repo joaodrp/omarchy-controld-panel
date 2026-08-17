@@ -497,6 +497,33 @@ Panel {
                 Row {
                   spacing: Style.space(2)
 
+                  // The one control that stays when there is no endpoint to
+                  // describe: pausing is what removed it, so resuming has to
+                  // be reachable from the state pausing leaves behind.
+                  ToggleSwitch {
+                    id: protectionSwitch
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: controld.canPause && controld.installed
+                    checked: controld.protectionActive
+                    busy: controld.pauseBusy
+                    foreground: hero.foreground
+                    onHovered: function(on) { if (on) header.focusHero() }
+                    onToggled: controld.setProtection(!controld.protectionActive)
+
+                    PanelToolTip {
+                      visible: protectionSwitch.containsMouse
+                      text: controld.protectionActive ? "Pause Control D on this machine"
+                        : "Resume Control D on this machine"
+                      fontFamily: hero.fontFamily
+                    }
+                  }
+
+                  Item {
+                    visible: protectionSwitch.visible
+                    width: Style.space(6)
+                    height: 1
+                  }
+
                   // Everything this panel cannot do lives in the dashboard,
                   // so it is one click away rather than a URL to remember.
                   PanelActionButton {
@@ -545,6 +572,16 @@ Panel {
           }
 
           Text {
+            visible: controld.pauseError !== ""
+            width: parent.width
+            text: controld.pauseError
+            color: root.urgent
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.bodySmall
+            wrapMode: Text.WordWrap
+          }
+
+          Text {
             visible: controld.lastHint !== "" && !root.showEmptyState
             width: parent.width
             text: controld.lastHint
@@ -570,11 +607,22 @@ Panel {
             message: "Run cdctl auth login --token-stdin with a token from the Control D dashboard, then reopen this panel."
           }
 
+          // Paused on purpose looks identical to never set up, so the host
+          // having a way to turn it back on is what tells them apart. The
+          // action is the switch in the hero, so this state carries no button.
+          EmptyState {
+            width: parent.width
+            visible: root.unprotected && controld.canPause
+            title: "Control D is paused"
+            message: "This machine is resolving DNS without it, so there is nothing to report until it is back on. Use the switch above."
+            actionText: ""
+          }
+
           // Signed in, but this machine's DNS goes somewhere else, so there is
           // no endpoint for the sections below to describe.
           EmptyState {
             width: parent.width
-            visible: root.unprotected
+            visible: root.unprotected && !controld.canPause
             title: "No Control D resolver on this machine"
             message: "Nothing in this host's DNS config points at Control D, so there is no endpoint to report on. A router or network that filters upstream would not show up here either."
             actionText: "Open setup guide"
@@ -1421,6 +1469,7 @@ Panel {
     }
 
     Button {
+      visible: emptyState.actionText !== ""
       text: emptyState.actionText
       bordered: true
       foreground: root.foreground

@@ -5,7 +5,8 @@ on **this machine**: the endpoint it resolves through, the profile that endpoint
 that profile's statistics, recent lookups and custom DNS rules. Backed by
 [`cdctl`](https://github.com/joaodrp/controld-cli), the Control D CLI.
 
-Read-only for now: it lists, it does not write.
+Read-only, with one exception: if the host has a way to stand Control D down, the hero gets a
+switch for it (see `pauseCommand` below). Nothing else in the panel writes.
 
 ## Features
 
@@ -13,6 +14,10 @@ Read-only for now: it lists, it does not write.
   dashboard for everything the panel does not do, identified from the DNS
   resolver actually in use rather than the hostname; the account line is on hover
 - Bar icon shows account state: dimmed when unavailable, badge when `cdctl` needs a login
+- Hero switch pauses and resumes Control D, if `pauseCommand` and `resumeCommand` say how. There
+  is no one way to do it: `ctrld` has a service, a systemd-resolved setup has a drop-in, so the
+  panel runs what the host tells it rather than guessing. Paused, the panel says so instead of
+  reporting a missing resolver
 - Left click opens a keyboard-friendly panel; middle click refreshes
 - Machine facts under the hero, in the built-in panels' key/value idiom: profile, unmatched
   action, protocol, resolver, filter and service counts, and the endpoint ID (click to copy).
@@ -140,6 +145,8 @@ Set through the bar's widget settings, or inline on the widget's `shell.json` en
 | `statsWindowHours` | `24` | Statistics window the panel opens on, 1-720 hours |
 | `statsRows` | `5` | Rows per statistics list: domains, filters, destinations, 3-20 |
 | `ruleRows` | `15` | Rules shown before the list is cut, 5-100 |
+| `pauseCommand` | `""` | Command that stands Control D down. Empty means no switch |
+| `resumeCommand` | `""` | Command that brings it back. Both must be set for the switch to appear |
 
 ## IPC
 

@@ -106,6 +106,19 @@ Item {
   readonly property int activityRows: intSetting("activityRows", 10, 3, 20)
   // Rows per statistics list (domains, filters, destinations), and the cap on
   // the rules list. Every list in the panel is a top-N; these are the Ns.
+  // Pausing is host specific: there is no one way to stand Control D down, so
+  // the panel runs whatever the host says instead of guessing. Both empty, the
+  // hero shows no switch and the panel stays read-only.
+  readonly property string pauseCommand: String(setting("pauseCommand", "") || "").trim()
+  readonly property string resumeCommand: String(setting("resumeCommand", "") || "").trim()
+  readonly property bool canPause: pauseCommand !== "" && resumeCommand !== ""
+  property bool pauseBusy: false
+  property string pauseError: ""
+  // What the user just asked for, until the resolver probe agrees. The knob
+  // throws immediately rather than after a systemd restart settles.
+  property int _pauseDesired: -1
+  readonly property bool protectionActive: _pauseDesired >= 0 ? _pauseDesired === 1 : usingControld
+
   readonly property int statsRows: intSetting("statsRows", 5, 3, 20)
   readonly property int ruleLimit: intSetting("ruleRows", 15, 5, 100)
   readonly property bool busy: lookupProcess.running || authProcess.running || profilesProcess.running || rulesProcess.running || foldersProcess.running || resolverProcess.running || devicesProcess.running
@@ -203,6 +216,22 @@ Item {
     // collapses the panel's content height, which drags the scroll to the top
     // and loses the reader's place.
     loadActivity()
+  }
+
+  function setProtection(on) {
+    if (!canPause || pauseBusy) return
+    _pauseDesired = on ? 1 : 0
+    pauseBusy = true
+    pauseError = ""
+    // Through a shell, so the setting can be a real command line rather than a
+    // bare path. It is the user's own config, run as they wrote it.
+    pauseProcess.command = ["sh", "-c", on ? resumeCommand : pauseCommand]
+    pauseProcess.running = true
+  }
+
+  onUsingControldChanged: {
+    // The probe has caught up with what was asked for, so stop overriding it.
+    if (_pauseDesired >= 0 && usingControld === (_pauseDesired === 1)) _pauseDesired = -1
   }
 
   function setActivityGrouped(value) {
@@ -371,6 +400,25 @@ Item {
         root.refreshing = false
         root.setUnavailable("cdctl not installed", "Install controld-cli and put cdctl on PATH")
       }
+    }
+  }
+
+  Process {
+    // The host's own way of standing Control D down and bringing it back. It
+    // may need a password, so the command is expected to escalate itself.
+    id: pauseProcess
+    running: false
+    command: []
+    stderr: StdioCollector { id: pauseStderr; waitForEnd: true }
+    onExited: function(exitCode) {
+      root.pauseBusy = false
+      if (exitCode !== 0) {
+        root._pauseDesired = -1
+        root.pauseError = Model.errorLine(Model.parseError(pauseStderr.text, exitCode),
+          "The pause command failed")
+      }
+      // Re-probe: the resolver is the only thing that says whether it worked.
+      root.refresh()
     }
   }
 
