@@ -17,7 +17,9 @@ switch for it (see `pauseCommand` below). Nothing else in the panel writes.
 - Hero switch pauses and resumes Control D, if `pauseCommand` and `resumeCommand` say how. There
   is no one way to do it: `ctrld` has a service, a systemd-resolved setup has a drop-in, so the
   panel runs what the host tells it rather than guessing. Paused, the panel says so instead of
-  reporting a missing resolver
+  reporting a missing resolver. `statusCommand` answers whether it is on, which also inherits
+  any check the panel cannot make, such as a link carrying its own DNS. Without one the switch
+  falls back to the identified device or Control D on the live resolver
 - Left click opens a keyboard-friendly panel; middle click refreshes
 - Machine facts under the hero, in the built-in panels' key/value idiom: profile, unmatched
   action, protocol, resolver, filter and service counts, and the endpoint ID (click to copy).
@@ -145,6 +147,7 @@ Set through the bar's widget settings, or inline on the widget's `shell.json` en
 | `statsWindowHours` | `24` | Statistics window the panel opens on, 1-720 hours |
 | `statsRows` | `5` | Rows per statistics list: domains, filters, destinations, 3-20 |
 | `ruleRows` | `15` | Rules shown before the list is cut, 5-100 |
+| `statusCommand` | `""` | Command whose exit 0 means Control D is on. Empty falls back to what the panel can see |
 | `pauseCommand` | `""` | Command that stands Control D down. Empty means no switch |
 | `resumeCommand` | `""` | Command that brings it back. Both must be set for the switch to appear |
 
