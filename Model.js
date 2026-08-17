@@ -99,9 +99,6 @@ function normalizeProfile(p) {
   return {
     id: str(p.id),
     name: str(p.name) || str(p.id),
-    enabledRules: num(p.enabled_rules),
-    enabledFilters: num(p.enabled_filters),
-    enabledServices: num(p.enabled_services),
     folders: num(p.folders),
     enabled: p.enabled !== false,
     disabledUntil: p.disabled_until === undefined ? null : p.disabled_until,
@@ -846,17 +843,6 @@ function ruleDetail(rule) {
   if (rule.via !== "") parts.push(rule.via)
   if (rule.via6 !== "") parts.push(rule.via6)
   if (!rule.enabled) parts.push("disabled")
-  return parts.join(" · ")
-}
-
-// Second line of a profile row.
-function profileDetail(profile) {
-  if (!profile) return ""
-  var parts = []
-  parts.push(profile.enabledRules + (profile.enabledRules === 1 ? " rule" : " rules"))
-  parts.push(profile.enabledFilters + (profile.enabledFilters === 1 ? " filter" : " filters"))
-  parts.push(profile.enabledServices + (profile.enabledServices === 1 ? " service" : " services"))
-  if (!profile.enabled) parts.push("disabled")
   return parts.join(" · ")
 }
 
