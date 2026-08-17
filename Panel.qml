@@ -607,15 +607,23 @@ Panel {
             FactGrid {
               width: parent.width
 
-              InfoLabel { text: "Profile" }
-              DetailValue { text: controld.activeProfile ? controld.activeProfile.name : "--" }
-              // The profile's default action governs domains that match no
-              // rule, filter, or service.
-              InfoLabel { text: "Unmatched" }
-              DetailValue { text: controld.activeProfile ? Model.actionLabel(controld.activeProfile.defaultAction) : "--" }
-
+              // Read across, then down: this machine first (what it is, how
+              // it talks, what does the talking), then the profile it enforces
+              // (its fallback, its filters, its services). The two stay
+              // contiguous in reading order even though the second row
+              // straddles them. No Profile row: the hero's subtitle is that.
+              // The id is the whole content: every endpoint's resolver is that
+              // id plus a constant suffix, and Protocol already says which form
+              // it takes.
+              InfoLabel { text: "Endpoint" }
+              DetailValue {
+                text: controld.endpoint ? controld.endpoint.id : "--"
+                copyable: controld.endpoint !== null
+                tooltipText: "Copy endpoint ID"
+              }
               InfoLabel { text: "Protocol" }
               DetailValue { text: controld.endpointTransport !== "" ? controld.endpointTransport : "--" }
+
               // What on this machine talks to Control D, probed here rather
               // than taken from the account's record of the device. When the
               // probe names the endpoint but nothing that manages it, the row
@@ -626,23 +634,17 @@ Panel {
                 linkUrl: controld.resolverUnknown ? root.issuesUrl : ""
                 tooltipText: "Resolver not recognised. Report your setup on GitHub so it can be added."
               }
+              // The profile's default action: what happens to a domain that
+              // matches no rule, filter or service.
+              InfoLabel { text: "Unmatched" }
+              DetailValue { text: controld.activeProfile ? Model.actionLabel(controld.activeProfile.defaultAction) : "--" }
 
               InfoLabel { text: "Filters" }
               DetailValue { text: controld.activeProfile ? String(controld.activeProfile.enabledFilters) : "--" }
               InfoLabel { text: "Services" }
               DetailValue { text: controld.activeProfile ? String(controld.activeProfile.enabledServices) : "--" }
 
-              // The id is the whole content: every endpoint's resolver is that
-              // id plus a constant suffix, and Protocol already says which form
-              // it takes.
-              InfoLabel { text: "Endpoint" }
-              DetailValue {
-                text: controld.endpoint ? controld.endpoint.id : "--"
-                copyable: controld.endpoint !== null
-                tooltipText: "Copy endpoint ID"
-              }
-              Item { Layout.fillWidth: true }
-              Item { Layout.fillWidth: true }
+
             }
           }
 
