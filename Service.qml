@@ -194,7 +194,7 @@ Item {
     if (!activityEnabled || !statsAvailable || region === "") return
     // Still running when the next tick arrives means it is stuck; reaping it
     // here is what keeps a wedged poll from stalling the section for good.
-    if (activityProcess.running) activityProcess.running = false
+    reap(activityProcess)
     activityLoading = true
     // How many to keep is the helper's business: it hands back a whole page so
     // the panel can expand into it without asking again.
@@ -206,6 +206,14 @@ Item {
     args = args.concat(["--group", activityGrouped ? "host" : "lookup"])
     activityProcess.command = args
     activityProcess.running = true
+  }
+
+  // A process we stop is not a process that failed. Empty output is not proof
+  // of that: a kill or a crash before the first write looks identical.
+  function reap(proc) {
+    if (!proc.running) return
+    proc.expectedStop = true
+    proc.running = false
   }
 
   function setActivityFilter(value) {
@@ -367,13 +375,13 @@ Item {
     interval: 25000
     repeat: false
     onTriggered: {
-      if (authProcess.running) authProcess.running = false
-      if (profilesProcess.running) profilesProcess.running = false
-      if (rulesProcess.running) rulesProcess.running = false
-      if (foldersProcess.running) foldersProcess.running = false
-      if (resolverProcess.running) resolverProcess.running = false
-      if (devicesProcess.running) devicesProcess.running = false
-      if (statsProcess.running) statsProcess.running = false
+      root.reap(authProcess)
+      root.reap(profilesProcess)
+      root.reap(rulesProcess)
+      root.reap(foldersProcess)
+      root.reap(resolverProcess)
+      root.reap(devicesProcess)
+      root.reap(statsProcess)
       root.refreshing = false
       root.loadingRules = false
       root.statsLoading = false
@@ -428,6 +436,7 @@ Item {
     // the endpoint, and because a running ctrld is a fact about this machine
     // that the account's device record outlives.
     id: resolverProcess
+    property bool expectedStop: false
     running: false
     // One section per resolver the panel can read. The list is deliberately
     // short: these are the documented Linux setups, and an endpoint found
@@ -446,6 +455,9 @@ Item {
     stdout: StdioCollector { id: resolverStdout; waitForEnd: true }
     onExited: {
       root.resolverProbe = resolverStdout.text
+      var reaped = expectedStop
+      expectedStop = false
+      if (reaped) return
       root._resolverChecked = true
       // The device list is what turns the probe into an identity, so it is
       // fetched whether or not the probe looks like Control D: a device
@@ -463,11 +475,15 @@ Item {
     // reads raw API field names. A failure here costs the panel every
     // machine-specific section, so the reason is kept rather than swallowed.
     id: devicesProcess
+    property bool expectedStop: false
     running: false
     command: []
     stdout: StdioCollector { id: devicesStdout; waitForEnd: true }
     stderr: StdioCollector { id: devicesStderr; waitForEnd: true }
     onExited: function(exitCode) {
+      var reaped = expectedStop
+      expectedStop = false
+      if (reaped) return
       root.devicesChecked = true
       if (exitCode !== 0) {
         root.devices = []
@@ -491,12 +507,16 @@ Item {
 
   Process {
     id: activityProcess
+    property bool expectedStop: false
     running: false
     command: []
     stdout: StdioCollector { id: activityStdout; waitForEnd: true }
     stderr: StdioCollector { id: activityStderr; waitForEnd: true }
     onExited: function(exitCode) {
       root.activityLoading = false
+      var reaped = expectedStop
+      expectedStop = false
+      if (reaped) return
       var parsed = Model.parseActivity(activityStdout.text)
       if (parsed.ok) {
         root.activity = parsed.queries
@@ -506,9 +526,6 @@ Item {
       // Keep the rows already on screen: a failed poll should not blank a log
       // the user is reading.
       var stderr = String(activityStderr.text || "").trim()
-      var stdout = String(activityStdout.text || "").trim()
-      // Reaped mid-flight: no output on either stream, and nothing to say.
-      if (stdout === "" && stderr === "") return
       root.activityError = Model.elide(parsed.error !== "" ? parsed.error : (stderr !== "" ? stderr : "activity unavailable"), 120)
     }
   }
@@ -518,12 +535,16 @@ Item {
     // the plugin's own helper rather than cdctl. Failures are reported in the
     // section itself, never as a panel-wide error.
     id: statsProcess
+    property bool expectedStop: false
     running: false
     command: []
     stdout: StdioCollector { id: statsStdout; waitForEnd: true }
     stderr: StdioCollector { id: statsStderr; waitForEnd: true }
     onExited: function(exitCode) {
       root.statsLoading = false
+      var reaped = expectedStop
+      expectedStop = false
+      if (reaped) return
       var parsed = Model.parseStats(statsStdout.text)
       if (parsed.ok) {
         var next = ({})
@@ -546,11 +567,15 @@ Item {
 
   Process {
     id: authProcess
+    property bool expectedStop: false
     running: false
     command: []
     stdout: StdioCollector { id: authStdout; waitForEnd: true }
     stderr: StdioCollector { id: authStderr; waitForEnd: true }
     onExited: function(exitCode) {
+      var reaped = expectedStop
+      expectedStop = false
+      if (reaped) return
       if (exitCode === 0) {
         var parsed = Model.parseAuthStatus(authStdout.text)
         if (!parsed.ok) {
@@ -573,12 +598,16 @@ Item {
 
   Process {
     id: profilesProcess
+    property bool expectedStop: false
     running: false
     command: []
     stdout: StdioCollector { id: profilesStdout; waitForEnd: true }
     stderr: StdioCollector { id: profilesStderr; waitForEnd: true }
     onExited: function(exitCode) {
       root.refreshing = false
+      var reaped = expectedStop
+      expectedStop = false
+      if (reaped) return
       if (exitCode !== 0) {
         root.applyError(Model.parseError(profilesStderr.text, exitCode), "Could not list profiles")
         return
@@ -602,12 +631,16 @@ Item {
 
   Process {
     id: rulesProcess
+    property bool expectedStop: false
     running: false
     command: []
     stdout: StdioCollector { id: rulesStdout; waitForEnd: true }
     stderr: StdioCollector { id: rulesStderr; waitForEnd: true }
     onExited: function(exitCode) {
       root._rulesPending = false
+      var reaped = expectedStop
+      expectedStop = false
+      if (reaped) { root.commitRules(); return }
       if (!root.activeProfile || root._rulesForProfile !== root.activeProfile.id) { root.commitRules(); return }
       if (exitCode !== 0) {
         root.applyError(Model.parseError(rulesStderr.text, exitCode), "Could not list rules")
@@ -626,12 +659,16 @@ Item {
 
   Process {
     id: foldersProcess
+    property bool expectedStop: false
     running: false
     command: []
     stdout: StdioCollector { id: foldersStdout; waitForEnd: true }
     stderr: StdioCollector { id: foldersStderr; waitForEnd: true }
     onExited: function(exitCode) {
       root._foldersPending = false
+      var reaped = expectedStop
+      expectedStop = false
+      if (reaped) { root.commitRules(); return }
       if (!root.activeProfile || root._foldersForProfile !== root.activeProfile.id) { root.commitRules(); return }
       if (exitCode !== 0) {
         root.applyError(Model.parseError(foldersStderr.text, exitCode), "Could not list folders")
