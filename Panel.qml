@@ -216,7 +216,7 @@ Panel {
   function activateCursor() {
     var entry = currentCursor()
     if (!entry) return
-    if (entry.kind === "header") { controld.refresh(); return }
+    if (entry.kind === "header") { Quickshell.execDetached(["omarchy-launch-browser", root.dashboardUrl]); return }
     if (entry.kind === "more") { root.toggleActivityExpanded(cursorItem()); return }
     if (entry.kind === "reading") return
     if (String(entry.value || "") !== "") controld.copyToClipboard(entry.value)
@@ -503,13 +503,43 @@ Panel {
               foreground: root.foreground
               fontFamily: root.fontFamily
               iconOpacity: controld.ready ? 1.0 : 0.5
+              // The mark is the panel's identity and the dashboard is where
+              // everything it cannot do lives, so the mark is the way there.
               iconComponent: Component {
-                ControldIcon {
-                  iconSize: Style.font.display
-                  color: root.iconColor
-                  badgeColor: root.urgent
-                  crossed: (controld.checkedInstall && !controld.installed) || root.unprotected
-                  warning: controld.installed && controld.needsAuth
+                Item {
+                  implicitWidth: heroMark.implicitWidth + Style.space(10)
+                  implicitHeight: heroMark.implicitHeight + Style.space(10)
+
+                  Rectangle {
+                    anchors.fill: parent
+                    radius: Style.cornerRadius
+                    color: heroMarkMouse.containsMouse || root.headerHasCursor
+                      ? root.hoverFill : "transparent"
+                  }
+
+                  ControldIcon {
+                    id: heroMark
+                    anchors.centerIn: parent
+                    iconSize: Style.font.display
+                    color: root.iconColor
+                    badgeColor: root.urgent
+                    crossed: (controld.checkedInstall && !controld.installed) || root.unprotected
+                    warning: controld.installed && controld.needsAuth
+                  }
+
+                  MouseArea {
+                    id: heroMarkMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: Quickshell.execDetached(["omarchy-launch-browser", root.dashboardUrl])
+                  }
+
+                  PanelToolTip {
+                    visible: heroMarkMouse.containsMouse
+                    text: "Open Control D dashboard"
+                    fontFamily: root.fontFamily
+                  }
                 }
               }
 
@@ -521,68 +551,24 @@ Panel {
 
               HoverHandler { id: heroHover }
 
+              // The only control here, and the one that has to survive there
+              // being no endpoint to describe: pausing is what removed it.
+              // Everything else the hero used to carry has a key.
               trailingControl: Component {
-                Row {
-                  spacing: Style.space(2)
+                ToggleSwitch {
+                  id: protectionSwitch
+                  visible: controld.canPause && controld.installed
+                  checked: controld.protectionActive
+                  busy: controld.pauseBusy
+                  foreground: hero.foreground
+                  onHovered: function(on) { if (on) header.focusHero() }
+                  onToggled: controld.setProtection(!controld.protectionActive)
 
-                  // The one control that stays when there is no endpoint to
-                  // describe: pausing is what removed it, so resuming has to
-                  // be reachable from the state pausing leaves behind.
-                  ToggleSwitch {
-                    id: protectionSwitch
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: controld.canPause && controld.installed
-                    checked: controld.protectionActive
-                    busy: controld.pauseBusy
-                    foreground: hero.foreground
-                    onHovered: function(on) { if (on) header.focusHero() }
-                    onToggled: controld.setProtection(!controld.protectionActive)
-
-                    PanelToolTip {
-                      visible: protectionSwitch.containsMouse
-                      text: controld.protectionActive ? "Pause Control D on this machine"
-                        : "Resume Control D on this machine"
-                      fontFamily: hero.fontFamily
-                    }
-                  }
-
-                  Item {
-                    visible: protectionSwitch.visible
-                    width: Style.space(6)
-                    height: 1
-                  }
-
-                  // Everything this panel cannot do lives in the dashboard,
-                  // so it is one click away rather than a URL to remember.
-                  PanelActionButton {
-                    visible: controld.installed
-                    iconText: "󰏌"
-                    tooltipText: "Open Control D dashboard"
-                    foreground: hero.foreground
+                  PanelToolTip {
+                    visible: protectionSwitch.containsMouse
+                    text: controld.protectionActive ? "Pause Control D on this machine"
+                      : "Resume Control D on this machine"
                     fontFamily: hero.fontFamily
-                    onHovered: function(on) { if (on) header.focusHero() }
-                    onClicked: Quickshell.execDetached(["omarchy-launch-browser", root.dashboardUrl])
-                  }
-
-                  PanelActionButton {
-                    id: refreshButton
-                    visible: controld.installed
-                    iconText: "󰑐"
-                    tooltipText: "Refresh"
-                    foreground: hero.foreground
-                    fontFamily: hero.fontFamily
-                    hasCursor: header.ringVisible
-                    enabled: !controld.busy
-                    opacity: controld.busy ? 0.45 : 1.0
-                    onHovered: function(on) { if (on) header.focusHero() }
-                    onClicked: controld.refresh()
-
-                    SequentialAnimation on opacity {
-                      running: controld.busy
-                      loops: Animation.Infinite
-                      NumberAnimation { to: 1.0; duration: 420; easing.type: Easing.InOutQuad }
-                      NumberAnimation { to: 0.45; duration: 420; easing.type: Easing.InOutQuad }
-                    }
                   }
                 }
               }

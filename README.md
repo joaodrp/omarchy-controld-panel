@@ -14,6 +14,8 @@ switch for it (see `pauseCommand` below). Nothing else in the panel writes.
   dashboard for everything the panel does not do, identified from the DNS
   resolver actually in use rather than the hostname; the account line is on hover
 - Bar icon shows account state: dimmed when unavailable, badge when `cdctl` needs a login
+- The hero mark opens the Control D dashboard, which is where everything the panel cannot do
+  lives. `o` does the same, `R` refreshes
 - Hero switch pauses and resumes Control D, if `pauseCommand` and `resumeCommand` say how. There
   is no one way to do it: `ctrld` has a service, a systemd-resolved setup has a drop-in, so the
   panel runs what the host tells it rather than guessing. Paused, the panel says so instead of
