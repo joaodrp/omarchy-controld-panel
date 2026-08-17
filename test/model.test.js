@@ -9,7 +9,7 @@ const vm = require("node:vm")
 
 const src = fs.readFileSync(path.join(__dirname, "..", "Model.js"), "utf8")
 const M = {}
-vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, nextProfile, groupRules, flattenGroups, countRules, limitRuleRows, rulesCaption, activityFilterOptions, activityActionArg, actionGlyph, ruleDetail, profileDetail, accountLine, matchEndpoint, controldPresent, ctrldActive, resolverLabel, resolverUnknown, parseDevices, findDevice, endpointLine, endpointState, ENDPOINT_PENDING, ENDPOINT_NONE, ENDPOINT_UNKNOWN, ENDPOINT_MACHINE, activeProfile, defaultActionLine, parseStats, formatCount, blockedShare, windowLabel, meterRatio, sparkPoints, filterLabel, countryName, actionTotal, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
+vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, nextProfile, groupRules, flattenGroups, countRules, limitRuleRows, rulesCaption, activityFilterOptions, activityActionArg, actionGlyph, ruleDetail, profileDetail, accountLine, matchEndpoint, controldPresent, controldLive, ctrldActive, resolverLabel, resolverUnknown, parseDevices, findDevice, endpointLine, endpointState, ENDPOINT_PENDING, ENDPOINT_NONE, ENDPOINT_UNKNOWN, ENDPOINT_MACHINE, activeProfile, defaultActionLine, parseStats, formatCount, blockedShare, windowLabel, meterRatio, sparkPoints, filterLabel, countryName, actionTotal, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
 const m = M.__exports
 
 // vm-realm arrays fail strict deepEqual on prototype identity; compare by value.
@@ -235,6 +235,24 @@ test("controldPresent sees Control D even when no device matches", () => {
   assert.equal(m.controldPresent(probe({ resolvconf: "nameserver 76.76.2.22" })), true)
   assert.equal(m.controldPresent(probe({ resolvconf: "nameserver 2606:1a40:0:5:1:2:3:0" })), true)
   assert.equal(m.controldPresent(probe({ resolvconf: "nameserver 1.1.1.1" })), false)
+})
+
+test("comments never count, but a DoT hostname is not a comment", () => {
+  // `address#hostname` is how systemd-resolved writes DoT. Cutting at the hash
+  // would throw away the only thing that names the endpoint.
+  assert.equal(m.controldPresent(probe({ resolved: "Current DNS Server: 76.76.2.22#x.dns.controld.com" })), true)
+  assert.equal(m.controldPresent(probe({ resolvconf: "# nameserver 76.76.2.22" })), false)
+  assert.equal(m.controldPresent(probe({ nm: "; servers=76.76.2.22" })), false)
+})
+
+test("controldLive asks only what the machine resolves through", () => {
+  const live = probe({ resolved: "Current DNS Server: 76.76.2.22#x.dns.controld.com" })
+  assert.equal(m.controldLive(live), true)
+  assert.equal(m.controldLive(probe({ resolvconf: "nameserver 2606:1a40:0:5:1:2:3:0" })), true)
+  // The inert provider label: mentioned in a manager's config, not in use.
+  const inert = probe({ nm: "servers=76.76.2.22,76.76.10.22", resolved: "Current DNS Server: 8.8.8.8" })
+  assert.equal(m.controldPresent(inert), true)
+  assert.equal(m.controldLive(inert), false)
 })
 
 test("ctrldActive answers from the machine, not from the account", () => {

@@ -310,10 +310,20 @@ var CONTROLD_MARKER = /(dns\.controld\.com|\b2606:1a40:|\b76\.76\.(?:2|10)\.(?:2
 // different things depending on which config holds it. An undelimited blob is
 // read as the stub file's, the one source that claims nothing about who wrote
 // it.
+// Whole lines only. A trailing `#` is not a comment in what this reads:
+// systemd-resolved writes `76.76.2.22#hostname`, and the hostname is the
+// identity, so cutting at the hash would throw the endpoint away.
+function stripComments(text) {
+  var lines = str(text).split("\n")
+  var out = []
+  for (var i = 0; i < lines.length; i++) if (!/^\s*[#;]/.test(lines[i])) out.push(lines[i])
+  return out.join("\n")
+}
+
 function probeSections(text) {
   var out = { daemon: "" }
   for (var r = 0; r < RESOLVERS.length; r++) out[RESOLVERS[r].key] = ""
-  var raw = str(text)
+  var raw = stripComments(text)
   var parts = raw.split(/^@@([a-z]+)$/m)
   if (parts.length < 3) { out.resolvconf = raw; return out }
   for (var i = 1; i + 1 < parts.length; i += 2) {
@@ -363,7 +373,14 @@ function matchEndpoint(devices, text) {
 // resolver, an endpoint owned by another account, or a device list we could
 // not read. Distinct from Control D not being in the picture at all.
 function controldPresent(text) {
-  return CONTROLD_MARKER.test(str(text))
+  return CONTROLD_MARKER.test(stripComments(text))
+}
+
+// Whether Control D is what this machine resolves through now, rather than
+// something a config file mentions. What the pause switch is really asking.
+function controldLive(text) {
+  var probe = probeSections(text)
+  return CONTROLD_MARKER.test(probe.resolved) || CONTROLD_MARKER.test(probe.resolvconf)
 }
 
 // Whether a ctrld daemon is actually running here. The account keeps a `ctrld`

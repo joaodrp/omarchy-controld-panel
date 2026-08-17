@@ -111,13 +111,24 @@ Item {
   // hero shows no switch and the panel stays read-only.
   readonly property string pauseCommand: String(setting("pauseCommand", "") || "").trim()
   readonly property string resumeCommand: String(setting("resumeCommand", "") || "").trim()
+  // Whether Control D is on here. There is no one way to answer that either,
+  // so a host that knows says so; `dns-controld --status` is one. Without it
+  // the panel falls back to what it can see: a device it identified, or Control
+  // D on the live resolver. Not `usingControld`, which is true of a config file
+  // merely mentioning Control D and stays true through a pause.
+  readonly property string statusCommand: String(setting("statusCommand", "") || "").trim()
   readonly property bool canPause: pauseCommand !== "" && resumeCommand !== ""
   property bool pauseBusy: false
   property string pauseError: ""
-  // What the user just asked for, until the resolver probe agrees. The knob
-  // throws immediately rather than after a systemd restart settles.
+  property int _statusExit: -1
+  readonly property bool protectionObserved: statusCommand !== ""
+    ? _statusExit === 0
+    : (endpoint !== null || Model.controldLive(resolverProbe))
+  // What the user just asked for, until the machine agrees. The knob throws
+  // immediately rather than after a systemd restart settles.
   property int _pauseDesired: -1
-  readonly property bool protectionActive: _pauseDesired >= 0 ? _pauseDesired === 1 : usingControld
+  property int _pauseSettles: 0
+  readonly property bool protectionActive: _pauseDesired >= 0 ? _pauseDesired === 1 : protectionObserved
 
   readonly property int statsRows: intSetting("statsRows", 5, 3, 20)
   readonly property int ruleLimit: intSetting("ruleRows", 15, 5, 100)
@@ -229,6 +240,7 @@ Item {
   function setProtection(on) {
     if (!canPause || pauseBusy) return
     _pauseDesired = on ? 1 : 0
+    _pauseSettles = 0
     pauseBusy = true
     pauseError = ""
     // Through a shell, so the setting can be a real command line rather than a
@@ -237,9 +249,29 @@ Item {
     pauseProcess.running = true
   }
 
-  onUsingControldChanged: {
-    // The probe has caught up with what was asked for, so stop overriding it.
-    if (_pauseDesired >= 0 && usingControld === (_pauseDesired === 1)) _pauseDesired = -1
+  onProtectionObservedChanged: {
+    if (_pauseDesired >= 0 && protectionObserved === (_pauseDesired === 1)) {
+      _pauseDesired = -1
+      _pauseSettles = 0
+    }
+  }
+
+  // One tick per probe. A command can exit 0 and change nothing, so the knob
+  // is given a few rounds to be proved right and then dropped: showing what
+  // was asked for forever is worse than admitting it did not take.
+  function noteProtectionProbe() {
+    if (_pauseDesired < 0) return
+    if (protectionObserved === (_pauseDesired === 1)) {
+      _pauseDesired = -1
+      _pauseSettles = 0
+      return
+    }
+    _pauseSettles++
+    if (_pauseSettles < 3) return
+    var wanted = _pauseDesired === 1
+    _pauseDesired = -1
+    _pauseSettles = 0
+    pauseError = "The command ran, but Control D is still " + (wanted ? "off" : "on") + " here."
   }
 
   function setActivityGrouped(value) {
@@ -287,6 +319,10 @@ Item {
       profilesProcess.running = true
     }
     if (!resolverProcess.running) resolverProcess.running = true
+    if (statusCommand !== "" && !statusProcess.running) {
+      statusProcess.command = ["sh", "-c", statusCommand]
+      statusProcess.running = true
+    }
     if (statsWanted) { loadStats(true); loadActivity() }
     if (!pollWatchdog.running) pollWatchdog.start()
   }
@@ -382,6 +418,7 @@ Item {
       root.reap(resolverProcess)
       root.reap(devicesProcess)
       root.reap(statsProcess)
+      root.reap(statusProcess)
       root.refreshing = false
       root.loadingRules = false
       root.statsLoading = false
@@ -409,6 +446,32 @@ Item {
         root.setUnavailable("cdctl not installed", "Install controld-cli and put cdctl on PATH")
       }
     }
+  }
+
+  Process {
+    // The host's own answer to whether Control D is on. Exit code only; the
+    // output is the host's business.
+    id: statusProcess
+    property bool expectedStop: false
+    running: false
+    command: []
+    onExited: function(exitCode) {
+      var reaped = expectedStop
+      expectedStop = false
+      if (reaped) return
+      root._statusExit = exitCode
+      root.noteProtectionProbe()
+    }
+  }
+
+  Timer {
+    // A resolver takes a moment to settle after the command returns, so the
+    // panel re-probes rather than waiting for the next poll two minutes out.
+    id: pauseSettleTimer
+    interval: 3000
+    repeat: true
+    running: root._pauseDesired >= 0
+    onTriggered: root.refresh()
   }
 
   Process {
@@ -488,11 +551,13 @@ Item {
       if (exitCode !== 0) {
         root.devices = []
         root.devicesError = Model.errorLine(Model.parseError(devicesStderr.text, exitCode), "Could not read your devices")
-        return
+      } else {
+        var parsed = Model.parseDevices(devicesStdout.text)
+        root.devices = parsed.ok ? parsed.devices : []
+        root.devicesError = parsed.ok ? "" : "Could not read your devices"
       }
-      var parsed = Model.parseDevices(devicesStdout.text)
-      root.devices = parsed.ok ? parsed.devices : []
-      root.devicesError = parsed.ok ? "" : "Could not read your devices"
+      // The end of the probe chain. With a status command, that one ticks.
+      if (root.statusCommand === "") root.noteProtectionProbe()
     }
   }
 
