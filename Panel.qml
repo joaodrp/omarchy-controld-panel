@@ -665,14 +665,11 @@ Panel {
             FactGrid {
               width: parent.width
 
-              // Read across, then down: this machine first (what it is, how
-              // it talks, what does the talking), then the profile it enforces
-              // (its fallback, its filters, its services). The two stay
-              // contiguous in reading order even though the second row
-              // straddles them. No Profile row: the hero's subtitle is that.
-              // The id is the whole content: every endpoint's resolver is that
-              // id plus a constant suffix, and Protocol already says which form
-              // it takes.
+              // Read across, then down: what this machine is, how it talks,
+              // what does the talking, and what it does with a domain no rule
+              // covers. No Profile row: the hero's subtitle is that. The id is
+              // the whole endpoint: every resolver address is that id plus a
+              // constant suffix, and Protocol says which form it takes.
               InfoLabel { text: "Endpoint" }
               DetailValue {
                 text: controld.endpoint ? controld.endpoint.id : "--"
@@ -696,13 +693,6 @@ Panel {
               // matches no rule, filter or service.
               InfoLabel { text: "Unmatched" }
               DetailValue { text: controld.activeProfile ? Model.actionLabel(controld.activeProfile.defaultAction) : "--" }
-
-              InfoLabel { text: "Filters" }
-              DetailValue { text: controld.activeProfile ? String(controld.activeProfile.enabledFilters) : "--" }
-              InfoLabel { text: "Services" }
-              DetailValue { text: controld.activeProfile ? String(controld.activeProfile.enabledServices) : "--" }
-
-
             }
           }
 
