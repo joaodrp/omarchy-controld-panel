@@ -451,8 +451,12 @@ var ENDPOINT_MACHINE = "machine"
 
 function endpointState(resolverChecked, controldFound, devicesChecked, endpoint) {
   if (!resolverChecked) return ENDPOINT_PENDING
-  if (!controldFound) return ENDPOINT_NONE
+  // A matched device is proof and outranks the marker heuristic below it: a
+  // legacy v4 resolver names a device without looking like Control D anywhere
+  // in the config, and asking whether this looks like Control D first would
+  // deny an endpoint the account positively identified.
   if (endpoint) return ENDPOINT_MACHINE
+  if (!controldFound) return ENDPOINT_NONE
   // A resolver we cannot name. Either the device lookup has not answered yet,
   // or it answered and this endpoint is not in the account.
   return devicesChecked ? ENDPOINT_UNKNOWN : ENDPOINT_PENDING

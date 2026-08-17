@@ -310,6 +310,11 @@ test("endpointState says why this machine has no endpoint", () => {
   // Control D is answering but no device matched: the lookup failed, or the
   // endpoint is not in this account. Distinct from having no resolver at all.
   assert.equal(m.endpointState(true, true, true, null), m.ENDPOINT_UNKNOWN)
+  // A matched device outranks the marker heuristic. The legacy v4 resolvers
+  // name a device without looking like Control D anywhere in the config, so
+  // asking "does this look like Control D" first would deny an endpoint the
+  // account positively identified.
+  assert.equal(m.endpointState(true, false, true, device), m.ENDPOINT_MACHINE)
 })
 
 test("activeProfile prefers the endpoint's profile over the browsed one", () => {
