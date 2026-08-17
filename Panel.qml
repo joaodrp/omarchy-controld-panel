@@ -215,9 +215,35 @@ Panel {
     var entry = currentCursor()
     if (!entry) return
     if (entry.kind === "header") { controld.refresh(); return }
-    if (entry.kind === "more") { root.activityExpanded = !root.activityExpanded; return }
+    if (entry.kind === "more") { root.toggleActivityExpanded(cursorItem()); return }
     if (entry.kind === "reading") return
     if (String(entry.value || "") !== "") controld.copyToClipboard(entry.value)
+  }
+
+  // Collapsing the log takes rows out from above the row that did it, so
+  // everything below slides up while the scroll offset stays put and the
+  // reader lands in another section. Holding that row still is what makes the
+  // list shrink under it rather than the panel move around it. Expanding needs
+  // none of this: the new rows fill the space the row is pushed out of, which
+  // is exactly what wanted seeing.
+  function toggleActivityExpanded(anchor) {
+    if (!activityExpanded) { activityExpanded = true; return }
+    var before = -1
+    if (panelFlick && anchor) {
+      var y = anchor.mapToItem(panelFlick.contentItem, 0, 0).y
+      // Only worth holding still if it is on screen. Rows folding away below
+      // the fold move nothing the reader can see, and correcting for that is
+      // itself the jump.
+      if (y >= panelFlick.contentY && y <= panelFlick.contentY + panelFlick.height) before = y
+    }
+    activityExpanded = false
+    if (before < 0) return
+    Qt.callLater(function() {
+      if (!panelFlick || !anchor) return
+      var after = anchor.mapToItem(panelFlick.contentItem, 0, 0).y
+      var maxY = Math.max(0, panelFlick.contentHeight - panelFlick.height)
+      panelFlick.contentY = Math.max(0, Math.min(maxY, panelFlick.contentY + (after - before)))
+    })
   }
 
   function scrollItemIntoView(item) {
@@ -971,7 +997,7 @@ Panel {
                 visible: root.activityExpandable
                 cursorKey: "activity:more"
                 text: root.activityExpanded ? "Show less" : "+" + root.hiddenActivity
-                onActivated: root.activityExpanded = !root.activityExpanded
+                onActivated: root.toggleActivityExpanded(this)
               }
             }
           }
