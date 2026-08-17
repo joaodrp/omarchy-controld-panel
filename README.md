@@ -31,9 +31,6 @@ switch for it (see `pauseCommand` below). Nothing else in the panel writes.
   the panel is open.
   The verdict governs domains and filters, not destinations: a blocked query never reaches
   one, so destinations are the traffic that was allowed
-- RULES: the enforced profile's custom rules, root first, then one group per folder, with
-  action, spoof/redirect target, and disabled state. Capped like every other list; the caption
-  says how many are hidden
 - ACTIVITY: this endpoint's most recent lookups, refreshed every 15s while the panel is open.
   Filtered to **blocked** by default, which is the verdict worth acting on when a site will not
   load; `All` shows every verdict. Filtering happens server side, so a blocked list is a full
@@ -41,6 +38,9 @@ switch for it (see `pauseCommand` below). Nothing else in the panel writes.
   tally, which is what keeps a chatty telemetry endpoint from filling the section; turn it off
   to keep each lookup and read the sequence. Drawn short with a
   `+N` at the foot: one poll already holds up to 20, so expanding costs no extra request
+- RULES: the enforced profile's custom rules, root first, then one group per folder, with
+  action, spoof/redirect target, and disabled state. Capped like every other list; the caption
+  says how many are hidden
 - Copy a rule's hostname to the clipboard
 - Every section needs an identified endpoint. Without one the panel shows nothing but the
   reason: no Control D resolver here, a resolver whose endpoint is not in this account, or a
@@ -54,7 +54,7 @@ Inside the panel:
 | --- | --- |
 | `?` | Show or hide the key legend |
 | `o` | Open the Control D dashboard |
-| `m` / `s` / `r` / `a` | Jump to machine, statistics, rules, activity |
+| `m` / `s` / `a` / `r` | Jump to machine, statistics, activity, rules |
 | `g` / `G` | Jump to the top or the bottom |
 | `j` / `k` or arrows | Move the cursor through every actionable row, top to bottom |
 | `enter` / `space` | Activate the cursor row |

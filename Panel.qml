@@ -60,8 +60,8 @@ Panel {
   readonly property var legendKeys: {
     var keys = [{ key: "j/k", what: "move" }, { key: "enter", what: "activate" }, { key: "y", what: "copy" }]
     if (showStats) keys.push({ key: "s", what: "statistics" })
-    if (showRules) keys.push({ key: "r", what: "rules" })
     if (showActivity) keys.push({ key: "a", what: "activity" })
+    if (showRules) keys.push({ key: "r", what: "rules" })
     if (showEndpoint) keys.push({ key: "m", what: "machine" })
     keys.push({ key: "g/G", what: "top/bottom" }, { key: "o", what: "dashboard" },
       { key: "R", what: "refresh" }, { key: "esc", what: "close" })
@@ -148,14 +148,14 @@ Panel {
       for (var t = 0; t < destinationRows.length; t++)
         items.push({ key: "destination:" + t, kind: "reading", index: t, value: "" })
     }
-    if (showRules) {
-      for (var r = 0; r < cursorRules.length; r++)
-        items.push({ key: "rule:" + r, kind: "rule", index: r, value: cursorRules[r].hostname })
-    }
     if (showActivity) {
       for (var a = 0; a < visibleActivity.length; a++)
         items.push({ key: "activity:" + a, kind: "activity", index: a, value: visibleActivity[a].question })
       if (activityExpandable) items.push({ key: "activity:more", kind: "more", value: "" })
+    }
+    if (showRules) {
+      for (var r = 0; r < cursorRules.length; r++)
+        items.push({ key: "rule:" + r, kind: "rule", index: r, value: cursorRules[r].hostname })
     }
     return items
   }
@@ -877,57 +877,6 @@ Panel {
           }
 
           PanelSeparator {
-            visible: root.showRules
-            foreground: root.foreground
-          }
-
-          Column {
-            id: rulesSection
-            visible: root.showRules
-            width: parent.width
-            spacing: Style.space(10)
-
-            SectionTitle {
-              width: parent.width
-              text: root.rulesTitle
-              caption: root.rulesCaption
-            }
-
-            Column {
-              id: ruleColumn
-              width: parent.width
-              spacing: Style.space(6)
-
-              Repeater {
-                model: controld.visibleRuleRows
-                Item {
-                  id: rowSlot
-                  required property var modelData
-                  required property int index
-                  readonly property bool isRuleRow: modelData.kind === "rule"
-                  width: ruleColumn.width
-                  implicitHeight: isRuleRow ? ruleItem.implicitHeight : folderItem.implicitHeight
-
-                  FolderRow {
-                    id: folderItem
-                    visible: !rowSlot.isRuleRow
-                    width: parent.width
-                    group: rowSlot.modelData.group
-                  }
-
-                  RuleRow {
-                    id: ruleItem
-                    visible: rowSlot.isRuleRow
-                    width: parent.width
-                    rule: rowSlot.isRuleRow ? rowSlot.modelData.rule : null
-                    rowIndex: rowSlot.isRuleRow ? root.ruleOrdinal(rowSlot.index) : -1
-                  }
-                }
-              }
-            }
-          }
-
-          PanelSeparator {
             visible: root.showActivity
             foreground: root.foreground
           }
@@ -1023,6 +972,57 @@ Panel {
                 cursorKey: "activity:more"
                 text: root.activityExpanded ? "Show less" : "+" + root.hiddenActivity
                 onActivated: root.activityExpanded = !root.activityExpanded
+              }
+            }
+          }
+
+          PanelSeparator {
+            visible: root.showRules
+            foreground: root.foreground
+          }
+
+          Column {
+            id: rulesSection
+            visible: root.showRules
+            width: parent.width
+            spacing: Style.space(10)
+
+            SectionTitle {
+              width: parent.width
+              text: root.rulesTitle
+              caption: root.rulesCaption
+            }
+
+            Column {
+              id: ruleColumn
+              width: parent.width
+              spacing: Style.space(6)
+
+              Repeater {
+                model: controld.visibleRuleRows
+                Item {
+                  id: rowSlot
+                  required property var modelData
+                  required property int index
+                  readonly property bool isRuleRow: modelData.kind === "rule"
+                  width: ruleColumn.width
+                  implicitHeight: isRuleRow ? ruleItem.implicitHeight : folderItem.implicitHeight
+
+                  FolderRow {
+                    id: folderItem
+                    visible: !rowSlot.isRuleRow
+                    width: parent.width
+                    group: rowSlot.modelData.group
+                  }
+
+                  RuleRow {
+                    id: ruleItem
+                    visible: rowSlot.isRuleRow
+                    width: parent.width
+                    rule: rowSlot.isRuleRow ? rowSlot.modelData.rule : null
+                    rowIndex: rowSlot.isRuleRow ? root.ruleOrdinal(rowSlot.index) : -1
+                  }
+                }
               }
             }
           }
