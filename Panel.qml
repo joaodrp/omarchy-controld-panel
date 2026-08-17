@@ -589,8 +589,11 @@ Panel {
             }
           }
 
+          // Not while an empty state is up. Those say what happened and what
+          // to do about it; the error line underneath them is the same failure
+          // told worse, and in red.
           Text {
-            visible: controld.lastError !== ""
+            visible: controld.lastError !== "" && !root.showEmptyState
             width: parent.width
             text: controld.lastError
             color: root.urgent
