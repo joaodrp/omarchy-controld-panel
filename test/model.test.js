@@ -9,7 +9,7 @@ const vm = require("node:vm")
 
 const src = fs.readFileSync(path.join(__dirname, "..", "Model.js"), "utf8")
 const M = {}
-vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, nextProfile, groupRules, flattenGroups, countRules, limitRuleRows, rulesCaption, activityFilterOptions, activityActionArg, actionGlyph, ruleDetail, accountLine, matchEndpoint, controldPresent, controldLive, ctrldActive, resolverLabel, resolverUnknown, parseDevices, analyticsReadable, findDevice, endpointLine, endpointState, ENDPOINT_PENDING, ENDPOINT_NONE, ENDPOINT_UNKNOWN, ENDPOINT_MACHINE, activeProfile, defaultActionLine, parseStats, formatCount, blockedShare, windowLabel, meterRatio, sparkPoints, filterLabel, countryName, actionTotal, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
+vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, groupRules, flattenGroups, countRules, limitRuleRows, rulesCaption, activityFilterOptions, activityActionArg, actionGlyph, ruleDetail, accountLine, matchEndpoint, controldPresent, controldLive, ctrldActive, resolverLabel, resolverUnknown, parseDevices, analyticsReadable, endpointLine, endpointState, ENDPOINT_PENDING, ENDPOINT_NONE, ENDPOINT_UNKNOWN, ENDPOINT_MACHINE, activeProfile, parseStats, formatCount, blockedShare, meterRatio, filterLabel, countryName, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
 const m = M.__exports
 
 // vm-realm arrays fail strict deepEqual on prototype identity; compare by value.
@@ -77,15 +77,6 @@ test("resolveProfile prefers id, then name, then first", () => {
   assert.equal(m.resolveProfile(profiles, "missing").id, "p1")
   assert.equal(m.resolveProfile(profiles, "").id, "p1")
   assert.equal(m.resolveProfile([], "p1"), null)
-})
-
-test("nextProfile wraps around", () => {
-  const { profiles } = m.parseProfiles(profilesJson)
-  assert.equal(m.nextProfile(profiles, "p1", 1).id, "p2")
-  assert.equal(m.nextProfile(profiles, "p2", 1).id, "p1")
-  assert.equal(m.nextProfile(profiles, "p1", -1).id, "p2")
-  assert.equal(m.nextProfile(profiles, "unknown", 1).id, "p1")
-  assert.equal(m.nextProfile([], "p1", 1), null)
 })
 
 const rulesJson = JSON.stringify([
@@ -318,13 +309,10 @@ test("analyticsReadable treats an unreported level as unknown, not off", () => {
   assert.equal(m.analyticsReadable(null), false)
 })
 
-test("findDevice matches the endpoint id, and endpointLine reads it", () => {
+test("endpointLine reads the matched device", () => {
   const devices = m.parseDevices(JSON.stringify([
     { id: "abc123", name: "laptop", profile: { id: "p1", name: "Home" } }
   ])).devices
-  assert.equal(m.findDevice(devices, "ABC123").name, "laptop")
-  assert.equal(m.findDevice(devices, "missing"), null)
-  assert.equal(m.findDevice(devices, ""), null)
   assert.equal(m.endpointLine(devices[0], "DNS-over-TLS"), "Home · DNS-over-TLS")
   assert.equal(m.endpointLine(devices[0], ""), "Home")
   assert.equal(m.endpointLine(null, "DNS-over-TLS"), "")
@@ -361,13 +349,6 @@ test("activeProfile prefers the endpoint's profile over the browsed one", () => 
   assert.equal(m.activeProfile([], "p1", "p1"), null)
 })
 
-test("defaultActionLine", () => {
-  const { profiles } = m.parseProfiles(profilesJson)
-  assert.equal(m.defaultActionLine(profiles[0]), "default: bypass")
-  assert.equal(m.defaultActionLine(profiles[1]), "default: bypass · profile disabled")
-  assert.equal(m.defaultActionLine(null), "")
-})
-
 test("parseStats validates the helper's document", () => {
   const raw = JSON.stringify({
     ok: true, hours: 24, action: 0,
@@ -385,8 +366,6 @@ test("parseStats validates the helper's document", () => {
   // Entries without a value are dropped rather than rendered blank.
   same(r.domains, [{ value: "d.dropbox.com", count: 2112 }])
   assert.equal(r.series.length, 2)
-  assert.equal(m.actionTotal(r, 1), 14709)
-  assert.equal(m.actionTotal(r, 0), 6302)
   // The helper reports its own failures in the same envelope.
   const failed = m.parseStats(JSON.stringify({ ok: false, error: "analytics unreachable: timed out" }))
   assert.equal(failed.ok, false)
@@ -401,14 +380,6 @@ test("meterRatio scales against the biggest row", () => {
   assert.equal(m.meterRatio(25, rows), 0.25)
   assert.equal(m.meterRatio(5, []), 0)
   assert.equal(m.meterRatio(5, [{ count: 0 }]), 0)
-})
-
-test("sparkPoints normalizes and flips the y axis", () => {
-  same(m.sparkPoints([{ total: 10 }, { total: 5 }, { total: 0 }], "total"),
-       [{ x: 0, y: 0 }, { x: 0.5, y: 0.5 }, { x: 1, y: 1 }])
-  // One point cannot be a line, and an all-zero window must not divide by zero.
-  same(m.sparkPoints([{ total: 4 }], "total"), [])
-  same(m.sparkPoints([{ total: 0 }, { total: 0 }], "total"), [{ x: 0, y: 1 }, { x: 1, y: 1 }])
 })
 
 test("countryName spells codes out, keeping unknown ones", () => {
@@ -426,7 +397,7 @@ test("filterLabel makes a slug readable", () => {
   assert.equal(m.filterLabel(""), "unknown")
 })
 
-test("formatCount, blockedShare, windowLabel", () => {
+test("formatCount and blockedShare", () => {
   assert.equal(m.formatCount(0), "0")
   assert.equal(m.formatCount(999), "999")
   assert.equal(m.formatCount(1000), "1.0K")
@@ -435,9 +406,6 @@ test("formatCount, blockedShare, windowLabel", () => {
   assert.equal(m.formatCount(1250000), "1.3M")
   assert.equal(m.blockedShare(21432, 6302), "29%")
   assert.equal(m.blockedShare(0, 0), "")
-  assert.equal(m.windowLabel(24), "last 24h")
-  assert.equal(m.windowLabel(1), "last hour")
-  assert.equal(m.windowLabel(168), "last 7d")
 })
 
 test("parseActivity reads the collapsed log", () => {

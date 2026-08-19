@@ -187,16 +187,6 @@ function resolveProfile(profiles, preferred) {
   return list[0]
 }
 
-function nextProfile(profiles, currentId, delta) {
-  var list = profiles || []
-  if (list.length === 0) return null
-  var index = -1
-  for (var i = 0; i < list.length; i++) if (list[i].id === str(currentId)) { index = i; break }
-  if (index === -1) return list[0]
-  var step = delta === undefined ? 1 : delta
-  return list[((index + step) % list.length + list.length) % list.length]
-}
-
 // Rules as the panel lists them: root rules first, then one group per folder
 // (in cdctl's folder order), each sorted by `order`. Folders with no rules
 // still get a group so an empty folder is visible; rules whose folder id is
@@ -237,13 +227,8 @@ function flattenGroups(groups) {
 }
 
 function countRules(rules) {
-  var total = 0, enabled = 0
   var list = rules || []
-  for (var i = 0; i < list.length; i++) {
-    total++
-    if (list[i].enabled) enabled++
-  }
-  return { total: total, enabled: enabled }
+  return { total: list.length, enabled: list.filter(function(r) { return r.enabled }).length }
 }
 
 // The rules the panel draws. Every other list in the panel is a top-N, and a
@@ -447,14 +432,6 @@ function analyticsReadable(device) {
   return !!device && device.analytics !== "none"
 }
 
-function findDevice(devices, uid) {
-  var want = str(uid).toLowerCase()
-  if (want === "") return null
-  var list = devices || []
-  for (var i = 0; i < list.length; i++) if (list[i].id.toLowerCase() === want) return list[i]
-  return null
-}
-
 // Which machine this panel can describe. Everything it shows hangs off an
 // identified endpoint, so the reason there is none has to survive: a machine
 // with no Control D resolver at all is a different story to one whose resolver
@@ -487,14 +464,6 @@ function activeProfile(profiles, endpointProfileId, selectedId) {
     for (var i = 0; i < list.length; i++) if (list[i].id === enforced) return list[i]
   }
   return resolveProfile(profiles, selectedId)
-}
-
-// Second line of the endpoint's profile row.
-function defaultActionLine(profile) {
-  if (!profile) return ""
-  var parts = ["default: " + actionLabel(profile.defaultAction)]
-  if (!profile.enabled) parts.push("profile disabled")
-  return parts.join(" · ")
 }
 
 // Hero meta when this machine's endpoint is known: what it enforces and how.
@@ -598,14 +567,6 @@ function activityActionArg(filter) {
   return str(filter) === "all" ? "" : String(ACTION_BLOCKED)
 }
 
-function actionTotal(stats, action) {
-  if (!stats) return 0
-  var a = num(action)
-  if (a === ACTION_BYPASSED) return stats.totals.bypassed
-  if (a === ACTION_REDIRECTED) return stats.totals.redirected
-  return stats.totals.blocked
-}
-
 // The windows the dashboard offers, minus Real-Time and Custom.
 function windowOptions() {
   return [
@@ -626,24 +587,6 @@ function meterRatio(count, rows) {
   return Math.max(0, Math.min(1, num(count) / max))
 }
 
-// Sparkline geometry: normalized 0..1 points, y already flipped for QML's
-// downward axis, so the caller only scales by width and height.
-function sparkPoints(series, key) {
-  var items = series || []
-  if (items.length < 2) return []
-  var field = key || "total"
-  var max = 0
-  for (var i = 0; i < items.length; i++) max = Math.max(max, num(items[i][field]))
-  var points = []
-  for (var j = 0; j < items.length; j++) {
-    points.push({
-      x: j / (items.length - 1),
-      y: max > 0 ? 1 - (num(items[j][field]) / max) : 1
-    })
-  }
-  return points
-}
-
 // Query counts run to five and six digits, and the panel has one column for
 // them: 21432 -> "21.4K".
 function formatCount(value) {
@@ -661,15 +604,6 @@ function blockedShare(total, blocked) {
   var t = num(total)
   if (t <= 0) return ""
   return Math.round((num(blocked) / t) * 100) + "%"
-}
-
-// Caption for the statistics section: the window it covers.
-function windowLabel(hours) {
-  var h = num(hours, 24)
-  if (h <= 1) return "last hour"
-  if (h < 48) return "last " + h + "h"
-  var days = Math.round(h / 24)
-  return "last " + days + "d"
 }
 
 // ISO 3166-1 alpha-2 to everyday country name, generated from the iso-codes
