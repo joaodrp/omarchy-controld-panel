@@ -31,6 +31,9 @@ import controld_api as api
 # worth reading, and it is still one request.
 PAGE_SIZE = 500
 MAX_ROWS = 20
+# How far back the log reaches. Recent is the whole point, and the panel polls
+# every fifteen seconds, so a wide window only buys rows nobody scrolls to.
+WINDOW_HOURS = 6
 
 
 def collapse(rows, limit, by_host=True):
@@ -88,17 +91,13 @@ def main():
     parser.add_argument("--action", type=int, default=None,
                         help="keep only this verdict: 0 blocked, 1 bypassed, 2 redirected. "
                              "Omit for every verdict")
-    parser.add_argument("--rows", type=int, default=MAX_ROWS,
-                        help=f"how many queries to keep after collapsing, at most {MAX_ROWS}")
-    parser.add_argument("--hours", type=int, default=6, help="how far back to look for them")
     args = parser.parse_args()
 
     try:
         token = api.read_token()
-        rows = max(1, min(args.rows, MAX_ROWS))
         # Ask for more than we keep: collapsing several raw rows into one means
         # a page of 100 can be worth far fewer entries.
-        params = dict(api.window(args.hours, args.endpoint), pageSize=PAGE_SIZE)
+        params = dict(api.window(WINDOW_HOURS, args.endpoint), pageSize=PAGE_SIZE)
         # Narrowing server side is what keeps the list full: a page filtered to
         # blocked is a page of blocked, not the handful that survive a client
         # side filter.
@@ -110,7 +109,7 @@ def main():
         return 1
 
     queries = body.get("queries") or []
-    json.dump({"ok": True, "queries": collapse(queries, rows, args.group == "host")}, sys.stdout)
+    json.dump({"ok": True, "queries": collapse(queries, MAX_ROWS, args.group == "host")}, sys.stdout)
     return 0
 
 

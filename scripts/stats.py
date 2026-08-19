@@ -121,8 +121,6 @@ def main():
         "ok": True,
         "hours": hours,
         "action": action,
-        "start": window["startTime"],
-        "end": window["endTime"],
         "totals": {name: int(bodies[name].get("count") or 0)
                    for name in ("all", "blocked", "bypassed", "redirected")},
         "series": series(bodies["series"], now),
