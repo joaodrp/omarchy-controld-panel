@@ -9,7 +9,7 @@ const vm = require("node:vm")
 
 const src = fs.readFileSync(path.join(__dirname, "..", "Model.js"), "utf8")
 const M = {}
-vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, nextProfile, groupRules, flattenGroups, countRules, limitRuleRows, rulesCaption, activityFilterOptions, activityActionArg, actionGlyph, ruleDetail, accountLine, matchEndpoint, controldPresent, controldLive, ctrldActive, resolverLabel, resolverUnknown, parseDevices, findDevice, endpointLine, endpointState, ENDPOINT_PENDING, ENDPOINT_NONE, ENDPOINT_UNKNOWN, ENDPOINT_MACHINE, activeProfile, defaultActionLine, parseStats, formatCount, blockedShare, windowLabel, meterRatio, sparkPoints, filterLabel, countryName, actionTotal, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
+vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, nextProfile, groupRules, flattenGroups, countRules, limitRuleRows, rulesCaption, activityFilterOptions, activityActionArg, actionGlyph, ruleDetail, accountLine, matchEndpoint, controldPresent, controldLive, ctrldActive, resolverLabel, resolverUnknown, parseDevices, analyticsReadable, findDevice, endpointLine, endpointState, ENDPOINT_PENDING, ENDPOINT_NONE, ENDPOINT_UNKNOWN, ENDPOINT_MACHINE, activeProfile, defaultActionLine, parseStats, formatCount, blockedShare, windowLabel, meterRatio, sparkPoints, filterLabel, countryName, actionTotal, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
 const m = M.__exports
 
 // vm-realm arrays fail strict deepEqual on prototype identity; compare by value.
@@ -165,16 +165,16 @@ test("groupRules with no folders", () => {
 // resolver we know how to read.
 const probe = (s) => Object.keys(s).map(k => `@@${k}\n${s[k]}\n`).join("")
 
-const probedDevices = m.parseDevices(JSON.stringify({ body: { devices: [
-  { device_id: "dev0000001", name: "laptop", status: 1, profile: { PK: "p1", name: "Home" },
-    resolvers: { uid: "dev0000001", doh: "https://dns.controld.com/dev0000001",
-      dot: "dev0000001.dns.controld.com",
+const probedDevices = m.parseDevices(JSON.stringify([
+  { id: "dev0000001", name: "laptop", status: "active", profile: { id: "p1", name: "Home" },
+    resolvers: { doh: "https://dns.controld.com/dev0000001",
+      dot: "dev0000001.dns.controld.com", v4: [],
       v6: ["2606:1a40:0:19:1111:2222:3333:0", "2606:1a40:1:19:1111:2222:3333:0"] } },
-  { device_id: "dev0000002", name: "desktop", status: 1, profile: { PK: "p1", name: "Home" },
-    resolvers: { uid: "dev0000002", doh: "https://dns.controld.com/dev0000002",
+  { id: "dev0000002", name: "desktop", status: "active", profile: { id: "p1", name: "Home" },
+    resolvers: { doh: "https://dns.controld.com/dev0000002",
       dot: "dev0000002.dns.controld.com", v4: ["76.76.20.20"],
       v6: ["2606:1a40:0:9:4444:5555:6666:0"] } }
-] } })).devices
+])).devices
 
 function matched(text, devices) {
   const r = m.matchEndpoint(devices === undefined ? probedDevices : devices, text)
@@ -281,29 +281,47 @@ test("resolverLabel names what talks to Control D, or admits it cannot", () => {
   assert.equal(m.resolverUnknown("resolved"), false)
 })
 
-test("parseDevices reads the raw upstream body", () => {
-  const raw = JSON.stringify({ body: { devices: [
-    { PK: "abc123", device_id: "abc123", name: "laptop", status: 1, icon: "desktop-linux",
-      profile: { PK: "p1", name: "Home" }, ctrld: { version: "v1.5.5" },
-      resolvers: { uid: "abc123", dot: "abc123.dns.controld.com", doh: "https://dns.controld.com/abc123" } },
-    { device_id: "def456", name: "phone", status: 0, profile: { PK: "p2", name: "Kids" }, ctrld: null, resolvers: {} },
+test("parseDevices reads cdctl's normalized device list", () => {
+  const raw = JSON.stringify([
+    { id: "abc123", name: "laptop", status: "active", analytics: "full",
+      profile: { id: "p1", name: "Home" }, ctrld: { version: "v1.5.5", last_fetch: "2026-08-15T12:32:13Z" },
+      resolvers: { dot: "abc123.dns.controld.com", doh: "https://dns.controld.com/abc123", v4: [], v6: [] } },
+    // Every optional field null at once: cdctl sends nulls, not absences.
+    { id: "def456", name: "phone", status: "pending", analytics: null, clients: null,
+      profile: { id: "p2", name: "Kids" }, ctrld: null, resolvers: { v4: [], v6: [] } },
     { name: "no id, dropped" }
-  ] } })
+  ])
   const r = m.parseDevices(raw)
   assert.equal(r.ok, true)
   assert.equal(r.devices.length, 2)
+  assert.equal(r.devices[0].id, "abc123")
+  assert.equal(r.devices[0].profileId, "p1")
   assert.equal(r.devices[0].profileName, "Home")
   assert.equal(r.devices[0].ctrldVersion, "v1.5.5")
-  assert.equal(r.devices[1].enabled, false)
   assert.equal(r.devices[1].ctrldVersion, "")
   assert.equal(m.parseDevices("{}").ok, false)
   assert.equal(m.parseDevices("nope").ok, false)
 })
 
+// "none" is the only answer that hides the analytics sections. An unreported
+// level is unknown, and the fetch is what settles it.
+test("analyticsReadable treats an unreported level as unknown, not off", () => {
+  const devices = m.parseDevices(JSON.stringify([
+    { id: "a", analytics: "full" }, { id: "b", analytics: "some" },
+    { id: "c", analytics: "none" }, { id: "d", analytics: null }, { id: "e" }
+  ])).devices
+  assert.equal(m.analyticsReadable(devices[0]), true)
+  assert.equal(m.analyticsReadable(devices[1]), true)
+  assert.equal(m.analyticsReadable(devices[2]), false)
+  assert.equal(m.analyticsReadable(devices[3]), true)
+  assert.equal(m.analyticsReadable(devices[4]), true)
+  assert.equal(m.analyticsReadable(null), false)
+})
+
 test("findDevice matches the endpoint id, and endpointLine reads it", () => {
-  const devices = m.parseDevices(JSON.stringify({ body: { devices: [
-    { device_id: "abc123", name: "laptop", profile: { PK: "p1", name: "Home" } }
-  ] } })).devices
+  const devices = m.parseDevices(JSON.stringify([
+    { id: "abc123", name: "laptop", profile: { id: "p1", name: "Home" } }
+  ])).devices
   assert.equal(m.findDevice(devices, "ABC123").name, "laptop")
   assert.equal(m.findDevice(devices, "missing"), null)
   assert.equal(m.findDevice(devices, ""), null)

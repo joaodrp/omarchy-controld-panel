@@ -410,40 +410,41 @@ function normalizeDevice(d) {
   var resolvers = d && d.resolvers && typeof d.resolvers === "object" ? d.resolvers : {}
   var ctrld = d && d.ctrld && typeof d.ctrld === "object" ? d.ctrld : null
   return {
-    id: str(d.device_id) || str(d.PK),
+    id: str(d.id),
     name: str(d.name),
-    profileId: str(profile.PK),
+    profileId: str(profile.id),
     profileName: str(profile.name),
-    enabled: num(d.status, 1) === 1,
-    icon: str(d.icon),
     ctrldVersion: ctrld ? str(ctrld.version) : "",
-    // 0 none, 1 some, 2 full — analytics is off for this endpoint at 0.
-    analytics: num(d.stats, 0),
+    // "none" is analytics reported as off. An absent level is unreported,
+    // which is not the same answer, so it keeps its own empty value.
+    analytics: d.analytics === undefined || d.analytics === null ? "" : str(d.analytics),
     dot: str(resolvers.dot),
     doh: str(resolvers.doh),
     // Device-specific addresses, which name the endpoint with no proxy in the
-    // way. Optional per the API contract, so both default to empty.
+    // way. Always arrays per cdctl's contract, empty when the API omits them.
     v4: strList(resolvers.v4),
     v6: strList(resolvers.v6)
   }
 }
 
-// `cdctl api /devices` is the escape hatch, so this reads the upstream body
-// verbatim rather than the CLI's normalized schema.
 function parseDevices(raw) {
   var parsed = parseJson(raw)
   if (!parsed.ok) return { ok: false, devices: [], error: parsed.error }
-  var body = parsed.value && parsed.value.body ? parsed.value.body : null
-  var list = body && body.devices instanceof Array ? body.devices : null
-  if (!list) return { ok: false, devices: [], error: "no devices in response" }
+  if (!(parsed.value instanceof Array)) return { ok: false, devices: [], error: "device list is not an array" }
   var out = []
-  for (var i = 0; i < list.length; i++) {
-    var d = list[i]
+  for (var i = 0; i < parsed.value.length; i++) {
+    var d = parsed.value[i]
     if (!d || typeof d !== "object") continue
     var device = normalizeDevice(d)
     if (device.id !== "") out.push(device)
   }
   return { ok: true, devices: out, error: "" }
+}
+
+// Whether this endpoint's analytics can be read. "none" is the only answer
+// that means no: an unreported level is unknown, and the fetch settles it.
+function analyticsReadable(device) {
+  return !!device && device.analytics !== "none"
 }
 
 function findDevice(devices, uid) {

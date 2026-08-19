@@ -78,8 +78,7 @@ Item {
   // Answers are cached per window and action so flipping a tab back is free.
   property var statsCache: ({})
   property string _statsKey: ""
-  readonly property int endpointAnalytics: endpoint ? endpoint.analytics : 0
-  readonly property bool statsAvailable: endpoint !== null && endpointAnalytics > 0
+  readonly property bool statsAvailable: Model.analyticsReadable(endpoint)
 
   // The endpoint's most recent lookups. Polled only while the panel is open,
   // and faster than the rest, since "recent" is the whole point. Filtered to
@@ -161,11 +160,6 @@ Item {
     // -q keeps info lines off stderr so a failure's stderr is only the JSON
     // envelope; --timeout bounds each request well inside the watchdog.
     return [cdctlPath, "--json", "-q", "--timeout", "15"].concat(args)
-  }
-
-  // `cdctl api` emits the upstream body verbatim and rejects --json.
-  function cdctlApi(path) {
-    return [cdctlPath, "-q", "--timeout", "15", "api", path]
   }
 
   // The helper lives beside this file in the plugin directory.
@@ -527,16 +521,15 @@ Item {
       // publishes itself as addresses too, and only the account knows them.
       if (!devicesProcess.running) {
         root.devicesChecked = false
-        devicesProcess.command = cdctlApi("/devices")
+        devicesProcess.command = cdctl(["device", "list"])
         devicesProcess.running = true
       }
     }
   }
 
   Process {
-    // The escape hatch: `cdctl api` emits the upstream body verbatim, so this
-    // reads raw API field names. A failure here costs the panel every
-    // machine-specific section, so the reason is kept rather than swallowed.
+    // A failure here costs the panel every machine-specific section, so the
+    // reason is kept rather than swallowed.
     id: devicesProcess
     property bool expectedStop: false
     running: false
