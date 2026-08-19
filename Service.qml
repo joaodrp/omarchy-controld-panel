@@ -31,11 +31,7 @@ Item {
   readonly property var ruleRows: Model.flattenGroups(groups)
   readonly property var visibleRuleRows: Model.limitRuleRows(ruleRows, ruleLimit)
   readonly property var ruleCount: Model.countRules(rules)
-  readonly property int shownRuleCount: {
-    var n = 0
-    for (var i = 0; i < visibleRuleRows.length; i++) if (visibleRuleRows[i].kind === "rule") n++
-    return n
-  }
+  readonly property int shownRuleCount: visibleRuleRows.filter(function(r) { return r.kind === "rule" }).length
 
   // This machine as Control D sees it, resolved from the DNS resolver it is
   // actually using rather than from its hostname. The probe text is kept whole
@@ -58,8 +54,7 @@ Item {
   // resolver, an endpoint owned by another account, or a device list we could
   // not read.
   readonly property bool usingControld: Model.controldPresent(resolverProbe)
-  readonly property bool resolverChecked: _resolverChecked
-  property bool _resolverChecked: false
+  property bool resolverChecked: false
   // Whether the device lookup has answered, which is what separates "still
   // loading" from "asked, and this endpoint is not one of ours".
   property bool devicesChecked: false
@@ -214,11 +209,25 @@ Item {
   }
 
   // A process we stop is not a process that failed. Empty output is not proof
-  // of that: a kill or a crash before the first write looks identical.
+  // of that: a kill or a crash before the first write looks identical, so the
+  // stop is recorded here and every handler asks `reaped` before trusting what
+  // it collected.
   function reap(proc) {
     if (!proc.running) return
     proc.expectedStop = true
     proc.running = false
+  }
+
+  function reaped(proc) {
+    var stopped = proc.expectedStop
+    proc.expectedStop = false
+    return stopped
+  }
+
+  component Reapable: Process {
+    property bool expectedStop: false
+    running: false
+    command: []
   }
 
   function setActivityFilter(value) {
@@ -368,10 +377,6 @@ Item {
     if (_pendingFolders) folders = _pendingFolders
   }
 
-  // The endpoint resolves after the first rules fetch, so the rules follow it
-  // once it lands rather than staying on the browsed profile.
-  // The endpoint lands after the panel has already opened, so the first fetch
-  // usually happens here rather than on open.
   Component.onCompleted: statsHours = statsWindowHours
 
   // A fresh window setting resets the runtime choice and everything cached.
@@ -442,17 +447,12 @@ Item {
     }
   }
 
-  Process {
+  Reapable {
     // The host's own answer to whether Control D is on. Exit code only; the
     // output is the host's business.
     id: statusProcess
-    property bool expectedStop: false
-    running: false
-    command: []
     onExited: function(exitCode) {
-      var reaped = expectedStop
-      expectedStop = false
-      if (reaped) return
+      if (root.reaped(statusProcess)) return
       root._statusExit = exitCode
       root.noteProtectionProbe()
     }
@@ -487,14 +487,12 @@ Item {
     }
   }
 
-  Process {
+  Reapable {
     // Where this machine's DNS actually points, and what is doing the pointing.
     // Sections are labelled because the answer depends on which config holds
     // the endpoint, and because a running ctrld is a fact about this machine
     // that the account's device record outlives.
     id: resolverProcess
-    property bool expectedStop: false
-    running: false
     // One section per resolver the panel can read. The list is deliberately
     // short: these are the documented Linux setups, and an endpoint found
     // anywhere else still shows up under `resolvconf`, which reports itself as
@@ -512,34 +510,27 @@ Item {
     stdout: StdioCollector { id: resolverStdout; waitForEnd: true }
     onExited: {
       root.resolverProbe = resolverStdout.text
-      var reaped = expectedStop
-      expectedStop = false
-      if (reaped) return
-      root._resolverChecked = true
+      if (root.reaped(resolverProcess)) return
+      root.resolverChecked = true
       // The device list is what turns the probe into an identity, so it is
       // fetched whether or not the probe looks like Control D: a device
       // publishes itself as addresses too, and only the account knows them.
       if (!devicesProcess.running) {
         root.devicesChecked = false
-        devicesProcess.command = cdctl(["device", "list"])
+        devicesProcess.command = root.cdctl(["device", "list"])
         devicesProcess.running = true
       }
     }
   }
 
-  Process {
+  Reapable {
     // A failure here costs the panel every machine-specific section, so the
     // reason is kept rather than swallowed.
     id: devicesProcess
-    property bool expectedStop: false
-    running: false
-    command: []
     stdout: StdioCollector { id: devicesStdout; waitForEnd: true }
     stderr: StdioCollector { id: devicesStderr; waitForEnd: true }
     onExited: function(exitCode) {
-      var reaped = expectedStop
-      expectedStop = false
-      if (reaped) return
+      if (root.reaped(devicesProcess)) return
       root.devicesChecked = true
       if (exitCode !== 0) {
         root.devices = []
@@ -563,18 +554,13 @@ Item {
     onTriggered: root.loadActivity()
   }
 
-  Process {
+  Reapable {
     id: activityProcess
-    property bool expectedStop: false
-    running: false
-    command: []
     stdout: StdioCollector { id: activityStdout; waitForEnd: true }
     stderr: StdioCollector { id: activityStderr; waitForEnd: true }
     onExited: function(exitCode) {
       root.activityLoading = false
-      var reaped = expectedStop
-      expectedStop = false
-      if (reaped) return
+      if (root.reaped(activityProcess)) return
       var parsed = Model.parseActivity(activityStdout.text)
       if (parsed.ok) {
         root.activity = parsed.queries
@@ -588,25 +574,19 @@ Item {
     }
   }
 
-  Process {
+  Reapable {
     // Analytics is a different origin than the REST API, so this goes through
     // the plugin's own helper rather than cdctl. Failures are reported in the
     // section itself, never as a panel-wide error.
     id: statsProcess
-    property bool expectedStop: false
-    running: false
-    command: []
     stdout: StdioCollector { id: statsStdout; waitForEnd: true }
     stderr: StdioCollector { id: statsStderr; waitForEnd: true }
     onExited: function(exitCode) {
       root.statsLoading = false
-      var reaped = expectedStop
-      expectedStop = false
-      if (reaped) return
+      if (root.reaped(statsProcess)) return
       var parsed = Model.parseStats(statsStdout.text)
       if (parsed.ok) {
-        var next = ({})
-        for (var key in root.statsCache) next[key] = root.statsCache[key]
+        var next = Object.assign({}, root.statsCache)
         next[root._statsKey] = parsed
         root.statsCache = next
         // A slow answer for a window the user has already left must not
@@ -623,17 +603,12 @@ Item {
     }
   }
 
-  Process {
+  Reapable {
     id: authProcess
-    property bool expectedStop: false
-    running: false
-    command: []
     stdout: StdioCollector { id: authStdout; waitForEnd: true }
     stderr: StdioCollector { id: authStderr; waitForEnd: true }
     onExited: function(exitCode) {
-      var reaped = expectedStop
-      expectedStop = false
-      if (reaped) return
+      if (root.reaped(authProcess)) return
       if (exitCode === 0) {
         var parsed = Model.parseAuthStatus(authStdout.text)
         if (!parsed.ok) {
@@ -654,18 +629,13 @@ Item {
     }
   }
 
-  Process {
+  Reapable {
     id: profilesProcess
-    property bool expectedStop: false
-    running: false
-    command: []
     stdout: StdioCollector { id: profilesStdout; waitForEnd: true }
     stderr: StdioCollector { id: profilesStderr; waitForEnd: true }
     onExited: function(exitCode) {
       root.refreshing = false
-      var reaped = expectedStop
-      expectedStop = false
-      if (reaped) return
+      if (root.reaped(profilesProcess)) return
       if (exitCode !== 0) {
         root.applyError(Model.parseError(profilesStderr.text, exitCode), "Could not list profiles")
         return
@@ -687,18 +657,13 @@ Item {
     }
   }
 
-  Process {
+  Reapable {
     id: rulesProcess
-    property bool expectedStop: false
-    running: false
-    command: []
     stdout: StdioCollector { id: rulesStdout; waitForEnd: true }
     stderr: StdioCollector { id: rulesStderr; waitForEnd: true }
     onExited: function(exitCode) {
       root._rulesPending = false
-      var reaped = expectedStop
-      expectedStop = false
-      if (reaped) { root.commitRules(); return }
+      if (root.reaped(rulesProcess)) { root.commitRules(); return }
       if (!root.activeProfile || root._rulesForProfile !== root.activeProfile.id) { root.commitRules(); return }
       if (exitCode !== 0) {
         root.applyError(Model.parseError(rulesStderr.text, exitCode), "Could not list rules")
@@ -715,18 +680,13 @@ Item {
     }
   }
 
-  Process {
+  Reapable {
     id: foldersProcess
-    property bool expectedStop: false
-    running: false
-    command: []
     stdout: StdioCollector { id: foldersStdout; waitForEnd: true }
     stderr: StdioCollector { id: foldersStderr; waitForEnd: true }
     onExited: function(exitCode) {
       root._foldersPending = false
-      var reaped = expectedStop
-      expectedStop = false
-      if (reaped) { root.commitRules(); return }
+      if (root.reaped(foldersProcess)) { root.commitRules(); return }
       if (!root.activeProfile || root._foldersForProfile !== root.activeProfile.id) { root.commitRules(); return }
       if (exitCode !== 0) {
         root.applyError(Model.parseError(foldersStderr.text, exitCode), "Could not list folders")
