@@ -27,7 +27,6 @@ Panel {
   readonly property color dim: Qt.darker(foreground, 1.55)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property color hoverFill: bar ? Style.hoverFillFor(bar.foreground, Color.accent) : "transparent"
-  readonly property color selectedFill: bar ? Style.selectedFillFor(bar.foreground, Color.accent) : "transparent"
 
   // This panel describes one machine: the endpoint it resolves through and the
   // profile that endpoint enforces. Every section hangs off that, so without an
@@ -169,12 +168,6 @@ Panel {
 
   function currentCursor() {
     return cursorIndex >= 0 ? cursorItems[cursorIndex] : null
-  }
-
-  function selectedRule() {
-    var entry = currentCursor()
-    if (!entry || entry.kind !== "rule") return null
-    return cursorRules[entry.index] || null
   }
 
   function ensureCursor() {
@@ -488,9 +481,6 @@ Panel {
             id: header
             width: parent.width
             implicitHeight: hero.implicitHeight
-            // Reached from the hero's trailingControl, whose `root` is the
-            // PanelHero rather than this Panel.
-            readonly property bool ringVisible: root.headerHasCursor
             function focusHero() { root.setCursor("header") }
             // The hero switch is a control, not a row: its hover is a
             // deliberate pointer act, so it does not need the gate.
@@ -1183,14 +1173,11 @@ Panel {
     Layout.preferredWidth: 3
   }
 
-  component InfoValue: Text {
+  component DetailValue: Text {
+    id: detailValue
     color: root.foreground
     font.family: root.fontFamily
     font.pixelSize: Style.font.bodySmall
-  }
-
-  component DetailValue: InfoValue {
-    id: detailValue
     property bool copyable: false
     // Set instead of `copyable` when the value is worth acting on rather than
     // taking: the glyph and the click follow.
