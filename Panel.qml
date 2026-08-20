@@ -124,7 +124,7 @@ Panel {
     if (controld.endpoint) {
       var name = controld.activeProfile ? controld.activeProfile.name : ""
       if (controld.enforceBusy) return name + "…"
-      return name + (controld.canEnforce ? (profilePickerOpen ? "  \udb80\udd43" : "  \udb80\udd40") : "")
+      return name + (controld.canEnforce ? (profilePickerOpen ? " \udb80\udd43" : " \udb80\udd40") : "")
     }
     // With no endpoint to name, the empty state below carries the reason. The
     // hero says which account is signed in instead, which is what the reader
