@@ -399,6 +399,9 @@ function normalizeDevice(d) {
     name: str(d.name),
     profileId: str(profile.id),
     profileName: str(profile.name),
+    // "active" is protected; the two disabled states are a stood-down device.
+    // "pending" means it has never made a query, which is not a pause.
+    status: str(d.status),
     ctrldVersion: ctrld ? str(ctrld.version) : "",
     // "none" is analytics reported as off. An absent level is unreported,
     // which is not the same answer, so it keeps its own empty value.
@@ -424,6 +427,35 @@ function parseDevices(raw) {
     if (device.id !== "") out.push(device)
   }
   return { ok: true, devices: out, error: "" }
+}
+
+// One device, as `cdctl device update` prints it back after verifying the
+// write. The same shape as a list entry, so it can replace one outright.
+function parseDevice(raw) {
+  var parsed = parseJson(raw)
+  if (!parsed.ok) return { ok: false, device: null, error: parsed.error }
+  if (!parsed.value || typeof parsed.value !== "object" || parsed.value instanceof Array)
+    return { ok: false, device: null, error: "not a device" }
+  var device = normalizeDevice(parsed.value)
+  if (device.id === "") return { ok: false, device: null, error: "device has no id" }
+  return { ok: true, device: device, error: "" }
+}
+
+// The device list with one entry replaced by a newer read of it.
+function replaceDevice(devices, device) {
+  var list = devices || []
+  if (!device) return list
+  var out = []
+  for (var i = 0; i < list.length; i++) out.push(list[i].id === device.id ? device : list[i])
+  return out
+}
+
+// Whether Control D is filtering for this device, as the account sees it.
+// Only the two disabled states are a pause: "pending" is a device that has
+// never made a query, which is not the same as one stood down.
+function deviceProtected(device) {
+  if (!device) return false
+  return device.status !== "soft-disabled" && device.status !== "hard-disabled"
 }
 
 // Whether this endpoint's analytics can be read. "none" is the only answer

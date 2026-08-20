@@ -9,7 +9,7 @@ const vm = require("node:vm")
 
 const src = fs.readFileSync(path.join(__dirname, "..", "Model.js"), "utf8")
 const M = {}
-vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, groupRules, flattenGroups, countRules, limitRuleRows, rulesCaption, activityFilterOptions, activityActionArg, actionGlyph, ruleDetail, accountLine, matchEndpoint, controldPresent, controldLive, ctrldActive, resolverLabel, resolverUnknown, parseDevices, analyticsReadable, endpointLine, endpointState, ENDPOINT_PENDING, ENDPOINT_NONE, ENDPOINT_UNKNOWN, ENDPOINT_MACHINE, activeProfile, parseStats, formatCount, blockedShare, meterRatio, filterLabel, countryName, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
+vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, groupRules, flattenGroups, countRules, limitRuleRows, rulesCaption, activityFilterOptions, activityActionArg, actionGlyph, ruleDetail, accountLine, matchEndpoint, controldPresent, controldLive, ctrldActive, resolverLabel, resolverUnknown, parseDevices, parseDevice, replaceDevice, deviceProtected, analyticsReadable, endpointLine, endpointState, ENDPOINT_PENDING, ENDPOINT_NONE, ENDPOINT_UNKNOWN, ENDPOINT_MACHINE, activeProfile, parseStats, formatCount, blockedShare, meterRatio, filterLabel, countryName, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
 const m = M.__exports
 
 // vm-realm arrays fail strict deepEqual on prototype identity; compare by value.
@@ -292,6 +292,37 @@ test("parseDevices reads cdctl's normalized device list", () => {
   assert.equal(r.devices[1].ctrldVersion, "")
   assert.equal(m.parseDevices("{}").ok, false)
   assert.equal(m.parseDevices("nope").ok, false)
+})
+
+// `device update` answers with the device it verified, so the switch settles on
+// that rather than waiting for the next list fetch to agree.
+test("parseDevice and replaceDevice fold a verified write back into the list", () => {
+  const devices = m.parseDevices(JSON.stringify([
+    { id: "a", name: "one", status: "active" }, { id: "b", name: "two", status: "active" }
+  ])).devices
+  const written = m.parseDevice(JSON.stringify({ id: "b", name: "two", status: "soft-disabled" }))
+  assert.equal(written.ok, true)
+  assert.equal(written.device.status, "soft-disabled")
+  const next = m.replaceDevice(devices, written.device)
+  same(next.map(d => d.status), ["active", "soft-disabled"])
+  // An id that is not in the list changes nothing rather than appending.
+  same(m.replaceDevice(devices, m.parseDevice('{"id":"zz"}').device).map(d => d.id), ["a", "b"])
+  same(m.replaceDevice(devices, null).map(d => d.id), ["a", "b"])
+  // A list is a list, not a device.
+  assert.equal(m.parseDevice("[]").ok, false)
+  assert.equal(m.parseDevice('{"name":"no id"}').ok, false)
+  assert.equal(m.parseDevice("nope").ok, false)
+})
+
+// Only the two disabled states are a pause. "pending" is a device that has
+// never made a query, which reads as protected rather than stood down.
+test("deviceProtected reads the account's view of the device", () => {
+  const devices = m.parseDevices(JSON.stringify([
+    { id: "a", status: "active" }, { id: "b", status: "soft-disabled" },
+    { id: "c", status: "hard-disabled" }, { id: "d", status: "pending" }, { id: "e" }
+  ])).devices
+  same(devices.map(d => m.deviceProtected(d)), [true, false, false, true, true])
+  assert.equal(m.deviceProtected(null), false)
 })
 
 // "none" is the only answer that hides the analytics sections. An unreported

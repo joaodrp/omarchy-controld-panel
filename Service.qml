@@ -100,24 +100,33 @@ Item {
   readonly property int activityRows: intSetting("activityRows", 10, 3, 20)
   // Rows per statistics list (domains, filters, destinations), and the cap on
   // the rules list. Every list in the panel is a top-N; these are the Ns.
-  // Pausing is host specific: there is no one way to stand Control D down, so
-  // the panel runs whatever the host says instead of guessing. Both empty, the
-  // hero shows no switch and the panel stays read-only.
+  // Standing Control D down has two answers, and the host's wins. A machine
+  // with its own way of doing it says so through these settings and the panel
+  // runs that; anything else goes through the account, which needs no setup
+  // and is why every user gets the switch rather than only those who configure
+  // one. The two are not equivalent: the host command changes what this
+  // machine resolves through, the account changes what Control D does with
+  // what it is asked.
   readonly property string pauseCommand: String(setting("pauseCommand", "") || "").trim()
   readonly property string resumeCommand: String(setting("resumeCommand", "") || "").trim()
-  // Whether Control D is on here. There is no one way to answer that either,
-  // so a host that knows says so; `dns-controld --status` is one. Without it
-  // the panel falls back to what it can see: a device it identified, or Control
-  // D on the live resolver. Not `usingControld`, which is true of a config file
-  // merely mentioning Control D and stays true through a pause.
+  readonly property bool hostPause: pauseCommand !== "" && resumeCommand !== ""
+  // Whether Control D is on here. A host that knows says so; `dns-controld
+  // --status` is one. Without it the panel reads what it can see, and which
+  // that is follows whichever way the switch acts. Never `usingControld`,
+  // which is true of a config file merely mentioning Control D and stays true
+  // through a pause.
   readonly property string statusCommand: String(setting("statusCommand", "") || "").trim()
-  readonly property bool canPause: pauseCommand !== "" && resumeCommand !== ""
+  readonly property bool canPause: hostPause || endpoint !== null
   property bool pauseBusy: false
   property string pauseError: ""
   property int _statusExit: -1
-  readonly property bool protectionObserved: statusCommand !== ""
-    ? _statusExit === 0
-    : (endpoint !== null || Model.controldLive(resolverProbe))
+  readonly property bool protectionObserved: {
+    if (statusCommand !== "") return _statusExit === 0
+    // The account cannot see a machine-local pause, so it only answers when
+    // the account is also what the switch acts on.
+    if (hostPause) return endpoint !== null || Model.controldLive(resolverProbe)
+    return Model.deviceProtected(endpoint)
+  }
   // What the user just asked for, until the machine agrees. The knob throws
   // immediately rather than after a systemd restart settles.
   property int _pauseDesired: -1
@@ -246,10 +255,19 @@ Item {
     _pauseSettles = 0
     pauseBusy = true
     pauseError = ""
-    // Through a shell, so the setting can be a real command line rather than a
-    // bare path. It is the user's own config, run as they wrote it.
-    pauseProcess.command = ["sh", "-c", on ? resumeCommand : pauseCommand]
-    pauseProcess.running = true
+    if (hostPause) {
+      // Through a shell, so the setting can be a real command line rather than
+      // a bare path. It is the user's own config, run as they wrote it.
+      pauseProcess.command = ["sh", "-c", on ? resumeCommand : pauseCommand]
+      pauseProcess.running = true
+      return
+    }
+    // `device update` re-reads the device after writing and prints what it
+    // verified, so this needs no settling: the answer is in the output. `-y`
+    // because there is no terminal here to answer a prompt.
+    devicePauseProcess.command = cdctl(["-y", "device", "update", endpoint.id,
+      "--status", on ? "active" : "soft-disabled"])
+    devicePauseProcess.running = true
   }
 
   onProtectionObservedChanged: {
@@ -263,7 +281,7 @@ Item {
   // is given a few rounds to be proved right and then dropped: showing what
   // was asked for forever is worse than admitting it did not take.
   function noteProtectionProbe() {
-    if (_pauseDesired < 0) return
+    if (_pauseDesired < 0 || !hostPause) return
     if (protectionObserved === (_pauseDesired === 1)) {
       _pauseDesired = -1
       _pauseSettles = 0
@@ -464,8 +482,34 @@ Item {
     id: pauseSettleTimer
     interval: 3000
     repeat: true
-    running: root._pauseDesired >= 0
+    running: root._pauseDesired >= 0 && root.hostPause
     onTriggered: root.refresh()
+  }
+
+  Process {
+    // Standing the device down through the account. cdctl verifies the write
+    // by re-reading the device, so what it prints replaces what the list
+    // fetched and the switch settles on that rather than on a re-probe.
+    id: devicePauseProcess
+    running: false
+    command: []
+    stdout: StdioCollector { id: devicePauseStdout; waitForEnd: true }
+    stderr: StdioCollector { id: devicePauseStderr; waitForEnd: true }
+    onExited: function(exitCode) {
+      root.pauseBusy = false
+      root._pauseDesired = -1
+      if (exitCode !== 0) {
+        root.pauseError = Model.errorLine(Model.parseError(devicePauseStderr.text, exitCode),
+          "Could not change this device")
+        return
+      }
+      var parsed = Model.parseDevice(devicePauseStdout.text)
+      if (!parsed.ok) {
+        root.pauseError = "Could not read this device back"
+        return
+      }
+      root.devices = Model.replaceDevice(root.devices, parsed.device)
+    }
   }
 
   Process {
