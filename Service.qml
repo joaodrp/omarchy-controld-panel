@@ -119,6 +119,12 @@ Item {
   readonly property bool canPause: hostPause || endpoint !== null
   property bool pauseBusy: false
   property string pauseError: ""
+  // Overriding one host's verdict from the activity log, which is the panel's
+  // reason to exist: a page fails, you find what was blocked, you allow it.
+  property string pendingRuleHost: ""
+  property bool ruleBusy: false
+  property string ruleError: ""
+
   // Switching which profile this endpoint enforces. Only offered when the
   // account has somewhere else to switch to.
   readonly property bool canEnforce: endpoint !== null && profiles.length > 1
@@ -270,6 +276,22 @@ Item {
     pendingProfileId = id
     enforceProcess.command = cdctl(["-y", "device", "update", endpoint.id, "--enforce", id])
     enforceProcess.running = true
+  }
+
+  // Apply the override an activity row offers, or take it away again. cdctl
+  // verifies every rule write by reading the profile back, so a successful
+  // exit is the profile agreeing; the list is refetched rather than patched
+  // because a rule carries an order and a folder the panel does not choose.
+  function applyRuleIntent(intent) {
+    if (!activeProfile || ruleBusy) return
+    if (!intent || intent.verb === "" || intent.hostname === "") return
+    ruleBusy = true
+    ruleError = ""
+    pendingRuleHost = intent.hostname
+    var args = ["rule", intent.verb, intent.hostname, "--profile", activeProfile.id]
+    if (intent.verb !== "delete") args = args.concat(["--action", intent.action])
+    ruleProcess.command = cdctl(["-y"].concat(args))
+    ruleProcess.running = true
   }
 
   function setProtection(on) {
@@ -507,6 +529,26 @@ Item {
     repeat: true
     running: root._pauseDesired >= 0 && root.hostPause
     onTriggered: root.refresh()
+  }
+
+  Process {
+    id: ruleProcess
+    running: false
+    command: []
+    stderr: StdioCollector { id: ruleStderr; waitForEnd: true }
+    onExited: function(exitCode) {
+      root.ruleBusy = false
+      root.pendingRuleHost = ""
+      if (exitCode !== 0) {
+        root.ruleError = Model.errorLine(Model.parseError(ruleStderr.text, exitCode),
+          "Could not change this rule")
+        return
+      }
+      root.ruleError = ""
+      // The rules the panel draws come from the list, so the list is what has
+      // to agree before the row stops offering what it just did.
+      root.loadRules(root.activeProfile.id)
+    }
   }
 
   Process {

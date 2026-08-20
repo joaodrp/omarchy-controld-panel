@@ -67,6 +67,7 @@ Panel {
     var keys = [{ key: "j/k", what: "move" }, { key: "enter", what: "activate" }, { key: "y", what: "copy" }]
     if (showStats) keys.push({ key: "s", what: "statistics" })
     if (showActivity) keys.push({ key: "a", what: "activity" })
+    if (showActivity) keys.push({ key: "b/B", what: "bypass/block" })
     if (showRules) keys.push({ key: "r", what: "rules" })
     if (showEndpoint) keys.push({ key: "m", what: "machine" })
     if (controld.canEnforce) keys.push({ key: "p", what: "profile" })
@@ -245,6 +246,18 @@ Panel {
     if (entry.kind === "more") { root.toggleActivityExpanded(cursorItem()); return }
     if (entry.kind === "reading") return
     if (String(entry.value || "") !== "") controld.copyToClipboard(entry.value)
+  }
+
+  // `b` and `B` act on the row under the cursor. The row already knows what
+  // its override is, so the key only has to say which verdict it meant: asking
+  // to bypass a host the log never blocked does nothing rather than writing a
+  // rule the row was not offering.
+  function applyRuleKey(action) {
+    var entry = cursorActive ? currentCursor() : null
+    if (!entry || entry.kind !== "activity") return
+    var intent = Model.ruleIntent(visibleActivity[entry.index], controld.rules)
+    if (intent.action !== action) return
+    controld.applyRuleIntent(intent)
   }
 
   // Opening lands the cursor on the profile in force, so enter twice is a
@@ -510,6 +523,9 @@ Panel {
         // Shift for the action, since the plain letter now names a section.
         else if (t === "R") controld.refresh()
         else if (t === "y" || t === "Y") root.yank()
+        // Shift for the heavier verdict, as `r`/`R` already reads here.
+        else if (t === "b") root.applyRuleKey("bypass")
+        else if (t === "B") root.applyRuleKey("block")
       }
 
       Flickable {
@@ -1087,11 +1103,14 @@ Panel {
             Text {
               width: parent.width
               visible: text !== ""
-              text: controld.activityError !== "" ? controld.activityError
-                : (controld.activity.length === 0
-                  ? (controld.activityFilter === "blocked" ? "nothing blocked in this window" : "no queries yet")
-                  : "")
-              color: controld.activityError !== "" ? root.urgent : root.dim
+              // A refused write outranks both: it is the one thing here the
+              // reader just did, rather than something the window reports.
+              text: controld.ruleError !== "" ? controld.ruleError
+                : (controld.activityError !== "" ? controld.activityError
+                  : (controld.activity.length === 0
+                    ? (controld.activityFilter === "blocked" ? "nothing blocked in this window" : "no queries yet")
+                    : ""))
+              color: controld.ruleError !== "" || controld.activityError !== "" ? root.urgent : root.dim
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
               wrapMode: Text.WordWrap
@@ -1673,6 +1692,11 @@ Panel {
     readonly property bool blocked: query && query.action === 0
     readonly property bool hasCursor: cursorKey !== "" && root.cursorActive && root.cursorKey === cursorKey
     readonly property bool hot: activityMouse.containsMouse || hasCursor
+    // The override this row offers, given what the profile already says.
+    readonly property var intent: Model.ruleIntent(query, controld.rules)
+    readonly property bool actionable: intent.verb !== "" && controld.activeProfile !== null
+    readonly property bool applied: intent.verb === "delete"
+    readonly property bool pending: controld.ruleBusy && controld.pendingRuleHost === question
 
     implicitHeight: activityText.implicitHeight + Style.spacing.sm * 2
 
@@ -1711,6 +1735,37 @@ Panel {
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
           elide: Text.ElideRight
+        }
+      }
+
+      // Reserved whether or not it is showing, so the hostname beside it does
+      // not re-elide as the pointer crosses the row.
+      Item {
+        Layout.preferredWidth: ruleButton.size
+        Layout.preferredHeight: ruleButton.size
+        Layout.alignment: Qt.AlignVCenter
+        visible: activityRow.actionable
+
+        PanelActionButton {
+          id: ruleButton
+          anchors.centerIn: parent
+          // Shown once the row is under the pointer or the cursor, and kept
+          // shown while this profile holds the rule: an override that only
+          // appears on hover is one nobody knows they left behind.
+          visible: activityRow.hot || activityRow.applied
+          enabled: !controld.ruleBusy
+          opacity: activityRow.pending ? 0.4 : 1.0
+          // The glyph is the verdict the button makes, and the border says the
+          // profile already says so.
+          iconText: Model.actionGlyph(activityRow.intent.action)
+          bordered: activityRow.applied
+          tooltipText: (activityRow.applied ? "Remove this " : "")
+            + activityRow.intent.action + (activityRow.applied ? " rule" : " this host")
+          foreground: root.foreground
+          fontFamily: root.fontFamily
+          fontSize: Style.font.caption
+          hasCursor: activityRow.hasCursor
+          onClicked: controld.applyRuleIntent(activityRow.intent)
         }
       }
 

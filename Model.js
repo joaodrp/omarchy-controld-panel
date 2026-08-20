@@ -787,6 +787,40 @@ function activityDetail(query) {
   return parts.join(" · ")
 }
 
+// The override an activity row offers: the opposite of what happened to it.
+// Only the two verdicts a custom rule can reverse. A redirect or a spoof is
+// already somebody's deliberate rule, and unmatched means nothing decided.
+function overrideAction(query) {
+  if (!query) return ""
+  if (query.action === 0) return "bypass"
+  if (query.action === 1) return "block"
+  return ""
+}
+
+// The rule this profile already holds for a hostname, if any. Exact matches
+// only: a rule on the parent domain covers this host too, but it is not this
+// host's rule and removing it would reach further than the row asked.
+function findRule(rules, hostname) {
+  var want = str(hostname).toLowerCase()
+  if (want === "") return null
+  var list = rules || []
+  for (var i = 0; i < list.length; i++)
+    if (list[i].hostname.toLowerCase() === want) return list[i]
+  return null
+}
+
+// What pressing the row's action does, given what the profile already says.
+// Applying the override a second time takes it away, so one key is both.
+function ruleIntent(query, rules) {
+  var action = overrideAction(query)
+  if (action === "") return { action: "", verb: "", hostname: "" }
+  var host = str(query.question)
+  var rule = findRule(rules, host)
+  if (rule === null) return { action: action, verb: "create", hostname: host }
+  if (rule.action === action) return { action: action, verb: "delete", hostname: host }
+  return { action: action, verb: "update", hostname: host }
+}
+
 // Nerd Font glyphs, matching what the built-in panels use for their rows.
 function actionGlyph(action) {
   switch (str(action)) {

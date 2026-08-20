@@ -9,7 +9,7 @@ const vm = require("node:vm")
 
 const src = fs.readFileSync(path.join(__dirname, "..", "Model.js"), "utf8")
 const M = {}
-vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, groupRules, flattenGroups, countRules, limitRuleRows, rulesCaption, activityFilterOptions, activityActionArg, actionGlyph, ruleDetail, accountLine, matchEndpoint, controldPresent, controldLive, ctrldActive, resolverLabel, resolverUnknown, parseDevices, parseDevice, replaceDevice, deviceProtected, analyticsReadable, endpointLine, endpointState, ENDPOINT_PENDING, ENDPOINT_NONE, ENDPOINT_UNKNOWN, ENDPOINT_MACHINE, activeProfile, parseStats, formatCount, blockedShare, meterRatio, filterLabel, countryName, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
+vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, groupRules, flattenGroups, countRules, limitRuleRows, rulesCaption, activityFilterOptions, activityActionArg, actionGlyph, overrideAction, findRule, ruleIntent, ruleDetail, accountLine, matchEndpoint, controldPresent, controldLive, ctrldActive, resolverLabel, resolverUnknown, parseDevices, parseDevice, replaceDevice, deviceProtected, analyticsReadable, endpointLine, endpointState, ENDPOINT_PENDING, ENDPOINT_NONE, ENDPOINT_UNKNOWN, ENDPOINT_MACHINE, activeProfile, parseStats, formatCount, blockedShare, meterRatio, filterLabel, countryName, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
 const m = M.__exports
 
 // vm-realm arrays fail strict deepEqual on prototype identity; compare by value.
@@ -129,6 +129,37 @@ test("limitRuleRows caps rules, not rows, and drops headers left with nothing", 
   // No cap.
   same(m.limitRuleRows(rows, 0).map(r => r.kind), rows.map(r => r.kind))
   same(m.limitRuleRows(null, 3), [])
+})
+
+// One action per row, and applying it twice takes it away.
+test("ruleIntent offers the opposite verdict, then offers to undo it", () => {
+  const blocked = { action: 0, question: "ads.example" }
+  const bypassed = { action: 1, question: "ads.example" }
+  assert.equal(m.overrideAction(blocked), "bypass")
+  assert.equal(m.overrideAction(bypassed), "block")
+  // Redirects and spoofs are already deliberate rules; -1 decided nothing.
+  same([2, 3, -1].map(a => m.overrideAction({ action: a })), ["", "", ""])
+  assert.equal(m.overrideAction(null), "")
+
+  const none = m.parseRules("[]").rules
+  same(m.ruleIntent(blocked, none), { action: "bypass", verb: "create", hostname: "ads.example" })
+
+  const mine = m.parseRules(JSON.stringify([
+    { hostname: "ads.example", action: "bypass", enabled: true, order: 1 }
+  ])).rules
+  // The rule this row would have written: pressing again removes it.
+  same(m.ruleIntent(blocked, mine), { action: "bypass", verb: "delete", hostname: "ads.example" })
+  // A rule pointing the other way is flipped, not duplicated.
+  same(m.ruleIntent(bypassed, mine), { action: "block", verb: "update", hostname: "ads.example" })
+
+  // Matching is exact: a parent rule covers the host but is not its rule.
+  const parent = m.parseRules(JSON.stringify([
+    { hostname: "example", action: "bypass", enabled: true, order: 1 }
+  ])).rules
+  assert.equal(m.findRule(parent, "ads.example"), null)
+  assert.equal(m.findRule(mine, "ADS.EXAMPLE").action, "bypass")
+  assert.equal(m.findRule(mine, ""), null)
+  same(m.ruleIntent({ action: 2, question: "x" }, none), { action: "", verb: "", hostname: "" })
 })
 
 test("activityActionArg narrows the log server side, or does not", () => {
