@@ -1745,9 +1745,13 @@ Panel {
           // back to the verdict that removing it restores.
           readonly property string onReach: activityRow.applied ? verdict : activityRow.intent.action
           anchors.centerIn: parent
-          text: Model.actionGlyph(activityRow.actionable && activityRow.hot ? onReach : atRest)
+          // The glyph's own hover, not the row's: crossing a row on the way
+          // somewhere else should not make every verdict it passes flicker
+          // into its opposite.
+          text: Model.actionGlyph(activityRow.actionable && verdictMouse.containsMouse
+            ? onReach : atRest)
           color: activityRow.applied ? Color.accent
-            : (activityRow.hot && activityRow.actionable ? root.foreground
+            : (verdictMouse.containsMouse && activityRow.actionable ? root.foreground
               : (activityRow.blocked ? root.foreground : root.dim))
           opacity: activityRow.pending ? 0.4 : 1.0
           font.family: root.fontFamily
