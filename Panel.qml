@@ -118,10 +118,14 @@ Panel {
     if (controld.needsAuth) return "Not authenticated"
     if (controld.refreshing && !controld.authenticated) return "Checking…"
     // The caret is the only thing saying the profile can be changed, since the
-    // hero's meta is a plain string with nowhere to hang a control.
-    if (controld.endpoint)
-      return Model.endpointLine(controld.endpoint, "")
-        + (controld.canEnforce ? (profilePickerOpen ? "  \udb80\udd43" : "  \udb80\udd40") : "")
+    // hero's meta is a plain string with nowhere to hang a control. The name is
+    // the profile asked for rather than the one confirmed, so the hero answers
+    // the click at once and the ellipsis carries the wait.
+    if (controld.endpoint) {
+      var name = controld.activeProfile ? controld.activeProfile.name : ""
+      if (controld.enforceBusy) return name + "…"
+      return name + (controld.canEnforce ? (profilePickerOpen ? "  \udb80\udd43" : "  \udb80\udd40") : "")
+    }
     // With no endpoint to name, the empty state below carries the reason. The
     // hero says which account is signed in instead, which is what the reader
     // needs to act on it. The address alone: the region belongs to the
@@ -229,7 +233,7 @@ Panel {
     if (entry.kind === "header") {
       // The mark is the dashboard link and `o` is its key, so the row itself
       // is free to carry the switch the caret advertises.
-      if (controld.canEnforce) root.openProfilePicker()
+      if (controld.canEnforce) root.toggleProfilePicker()
       else Quickshell.execDetached(["omarchy-launch-browser", root.dashboardUrl])
       return
     }
@@ -253,6 +257,11 @@ Panel {
       if (controld.profiles[i].id === controld.endpointProfileId) current = i
     setCursor("profileOption:" + current)
     cursorActive = true
+  }
+
+  function toggleProfilePicker() {
+    if (profilePickerOpen) closeProfilePicker()
+    else openProfilePicker()
   }
 
   function closeProfilePicker() {
@@ -496,7 +505,7 @@ Panel {
         else if (t === "g") root.jumpToEdge(false)
         else if (t === "G") root.jumpToEdge(true)
         else if (t === "?") root.legendOpen = !root.legendOpen
-        else if (t === "p") root.openProfilePicker()
+        else if (t === "p") root.toggleProfilePicker()
         else if (t === "o") Quickshell.execDetached(["omarchy-launch-browser", root.dashboardUrl])
         // Shift for the action, since the plain letter now names a section.
         else if (t === "R") controld.refresh()
@@ -533,6 +542,19 @@ Panel {
             width: parent.width
             implicitHeight: hero.implicitHeight
             function focusHero() { root.setCursor("header") }
+
+            // The caret on the hero's meta line has nowhere of its own to take
+            // a click: `PanelHero.meta` is a plain string. So the hero carries
+            // the click, declared before it and therefore beneath it, which
+            // leaves the mark and the switch their own. Clicks land here only
+            // where nothing above accepts them.
+            MouseArea {
+              anchors.fill: parent
+              enabled: controld.canEnforce && controld.installed
+              hoverEnabled: enabled
+              cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+              onClicked: root.toggleProfilePicker()
+            }
             // The hero switch is a control, not a row: its hover is a
             // deliberate pointer act, so it does not need the gate.
 
@@ -759,7 +781,8 @@ Panel {
                 required property var modelData
                 required property int index
                 readonly property string cursorKey: "profileOption:" + index
-                readonly property bool enforced: modelData.id === controld.endpointProfileId
+                readonly property bool enforced: modelData.id === controld.enforcedProfileId
+                readonly property bool switching: enforced && controld.enforceBusy
 
                 width: profilePicker.width
                 implicitHeight: profileLabel.implicitHeight + Style.space(10)
@@ -787,7 +810,7 @@ Panel {
                   anchors.rightMargin: Style.space(8)
                   anchors.verticalCenter: parent.verticalCenter
                   visible: profileRow.enforced
-                  text: "in force"
+                  text: profileRow.switching ? "switching…" : "in force"
                   color: root.dim
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.caption
@@ -800,6 +823,7 @@ Panel {
                   cursorShape: Qt.PointingHandCursor
                   onEntered: root.setCursorFromPointer(profileRow.cursorKey, profileRow, { x: profileMouse.mouseX, y: profileMouse.mouseY })
                   onPositionChanged: function(mouse) { root.setCursorFromPointer(profileRow.cursorKey, profileRow, mouse) }
+                  enabled: !controld.enforceBusy
                   onClicked: {
                     controld.setEnforcedProfile(profileRow.modelData.id)
                     root.closeProfilePicker()

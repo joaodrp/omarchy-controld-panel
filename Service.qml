@@ -24,7 +24,7 @@ Item {
   property var profiles: []
   // The profile this machine's endpoint enforces, which is the only one the
   // panel describes.
-  readonly property var activeProfile: Model.activeProfile(profiles, endpointProfileId, "")
+  readonly property var activeProfile: Model.activeProfile(profiles, enforcedProfileId, "")
   property var rules: []
   property var folders: []
   readonly property var groups: Model.groupRules(rules, folders)
@@ -124,6 +124,11 @@ Item {
   readonly property bool canEnforce: endpoint !== null && profiles.length > 1
   property bool enforceBusy: false
   property string enforceError: ""
+  // What was just asked for, until the account confirms it. The write takes a
+  // second or two, and a panel that says nothing for that long reads as a
+  // click that missed: the reader opens the list again and picks again.
+  property string pendingProfileId: ""
+  readonly property string enforcedProfileId: pendingProfileId !== "" ? pendingProfileId : endpointProfileId
   property int _statusExit: -1
   readonly property bool protectionObserved: {
     if (statusCommand !== "") return _statusExit === 0
@@ -259,9 +264,10 @@ Item {
   // cdctl rejects it here rather than half-applying the write.
   function setEnforcedProfile(profileId) {
     var id = String(profileId || "")
-    if (endpoint === null || id === "" || id === endpointProfileId || enforceBusy) return
+    if (endpoint === null || id === "" || id === enforcedProfileId || enforceBusy) return
     enforceBusy = true
     enforceError = ""
+    pendingProfileId = id
     enforceProcess.command = cdctl(["-y", "device", "update", endpoint.id, "--enforce", id])
     enforceProcess.running = true
   }
@@ -514,6 +520,10 @@ Item {
     stderr: StdioCollector { id: enforceStderr; waitForEnd: true }
     onExited: function(exitCode) {
       root.enforceBusy = false
+      // Cleared either way: the device below carries the confirmed profile, and
+      // a failure has to fall back to what the account still says rather than
+      // leaving the panel describing a switch that did not happen.
+      root.pendingProfileId = ""
       if (exitCode !== 0) {
         root.enforceError = Model.errorLine(Model.parseError(enforceStderr.text, exitCode),
           "Could not switch this device's profile")
