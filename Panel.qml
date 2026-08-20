@@ -27,6 +27,9 @@ Panel {
   readonly property color dim: Qt.darker(foreground, 1.55)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property color hoverFill: bar ? Style.hoverFillFor(bar.foreground, Color.accent) : "transparent"
+  // What is chosen, as against where the cursor is. CursorSurface paints the
+  // two differently on purpose: one highlight would say both at once.
+  readonly property color selectedFill: bar ? Style.selectedFillFor(bar.foreground, Color.accent) : "transparent"
 
   // This panel describes one machine: the endpoint it resolves through and the
   // profile that endpoint enforces. Every section hangs off that, so without an
@@ -114,7 +117,11 @@ Panel {
     if (!controld.installed) return "cdctl is not installed"
     if (controld.needsAuth) return "Not authenticated"
     if (controld.refreshing && !controld.authenticated) return "Checking…"
-    if (controld.endpoint) return Model.endpointLine(controld.endpoint, "")
+    // The caret is the only thing saying the profile can be changed, since the
+    // hero's meta is a plain string with nowhere to hang a control.
+    if (controld.endpoint)
+      return Model.endpointLine(controld.endpoint, "")
+        + (controld.canEnforce ? (profilePickerOpen ? "  \udb80\udd43" : "  \udb80\udd40") : "")
     // With no endpoint to name, the empty state below carries the reason. The
     // hero says which account is signed in instead, which is what the reader
     // needs to act on it. The address alone: the region belongs to the
@@ -146,8 +153,6 @@ Panel {
         items.push({ key: "profileOption:" + p, kind: "profileOption", index: p, value: "" })
       return items
     }
-    if (showEndpoint && controld.canEnforce)
-      items.push({ key: "profile", kind: "profile", value: "" })
     if (showEndpoint && controld.endpoint)
       items.push({ key: "endpoint", kind: "endpoint", value: controld.endpoint.id })
     if (showStats && controld.stats) {
@@ -221,8 +226,13 @@ Panel {
   function activateCursor() {
     var entry = currentCursor()
     if (!entry) return
-    if (entry.kind === "header") { Quickshell.execDetached(["omarchy-launch-browser", root.dashboardUrl]); return }
-    if (entry.kind === "profile") { root.openProfilePicker(); return }
+    if (entry.kind === "header") {
+      // The mark is the dashboard link and `o` is its key, so the row itself
+      // is free to carry the switch the caret advertises.
+      if (controld.canEnforce) root.openProfilePicker()
+      else Quickshell.execDetached(["omarchy-launch-browser", root.dashboardUrl])
+      return
+    }
     if (entry.kind === "profileOption") {
       controld.setEnforcedProfile(controld.profiles[entry.index].id)
       root.closeProfilePicker()
@@ -248,7 +258,7 @@ Panel {
   function closeProfilePicker() {
     if (!profilePickerOpen) return
     profilePickerOpen = false
-    setCursor("profile")
+    setCursor("header")
   }
 
   // Collapsing the log takes rows out from above the row that did it, so
@@ -394,6 +404,7 @@ Panel {
   onOpenedChanged: {
     controld.statsWanted = opened
     legendOpen = false
+    profilePickerOpen = false
     if (!opened) return
     cursorActive = false
     cursorKey = "header"
@@ -738,36 +749,42 @@ Panel {
             Repeater {
               model: root.profilePickerOpen ? controld.profiles : []
 
-              Item {
+              // CursorSurface, so where the cursor is and what is in force are
+              // two different paints. Its contract forbids reading the mouse
+              // for colour: hover moves the panel's cursor, and the cursor is
+              // what the row draws from, so there is one highlight on screen
+              // however you are driving it.
+              CursorSurface {
                 id: profileRow
                 required property var modelData
                 required property int index
                 readonly property string cursorKey: "profileOption:" + index
                 readonly property bool enforced: modelData.id === controld.endpointProfileId
-                readonly property bool hasCursor: root.cursorActive && root.cursorKey === cursorKey
+
                 width: profilePicker.width
                 implicitHeight: profileLabel.implicitHeight + Style.space(10)
-
-                Rectangle {
-                  anchors.fill: parent
-                  radius: Style.cornerRadius
-                  color: profileRow.hasCursor || profileMouse.containsMouse ? root.hoverFill : "transparent"
-                }
+                hasCursor: root.cursorActive && root.cursorKey === cursorKey
+                current: enforced
+                foreground: root.foreground
+                accent: Color.accent
+                fill: root.hoverFill
+                currentFill: root.selectedFill
 
                 Text {
                   id: profileLabel
                   anchors.left: parent.left
-                  anchors.leftMargin: Style.space(6)
+                  anchors.leftMargin: Style.space(8)
                   anchors.verticalCenter: parent.verticalCenter
                   text: profileRow.modelData.name
                   color: root.foreground
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.bodySmall
+                  font.bold: profileRow.enforced
                 }
 
                 Text {
                   anchors.right: parent.right
-                  anchors.rightMargin: Style.space(6)
+                  anchors.rightMargin: Style.space(8)
                   anchors.verticalCenter: parent.verticalCenter
                   visible: profileRow.enforced
                   text: "in force"
