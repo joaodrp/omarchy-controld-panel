@@ -9,7 +9,7 @@ const vm = require("node:vm")
 
 const src = fs.readFileSync(path.join(__dirname, "..", "Model.js"), "utf8")
 const M = {}
-vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, groupRules, flattenGroups, countRules, limitRuleRows, rulesCaption, activityFilterOptions, activityActionArg, actionGlyph, overrideAction, findRule, ruleIntent, ruleDetail, accountLine, matchEndpoint, controldPresent, controldLive, ctrldActive, resolverLabel, resolverUnknown, parseDevices, parseDevice, replaceDevice, deviceProtected, analyticsReadable, endpointLine, endpointState, ENDPOINT_PENDING, ENDPOINT_NONE, ENDPOINT_UNKNOWN, ENDPOINT_MACHINE, activeProfile, parseStats, formatCount, blockedShare, meterRatio, filterLabel, countryName, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
+vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, groupRules, flattenGroups, countRules, limitRuleRows, rulesCaption, activityFilterOptions, activityActionArg, actionGlyph, mergeSticky, overrideAction, findRule, ruleIntent, ruleDetail, accountLine, matchEndpoint, controldPresent, controldLive, ctrldActive, resolverLabel, resolverUnknown, parseDevices, parseDevice, replaceDevice, deviceProtected, analyticsReadable, endpointLine, endpointState, ENDPOINT_PENDING, ENDPOINT_NONE, ENDPOINT_UNKNOWN, ENDPOINT_MACHINE, activeProfile, parseStats, formatCount, blockedShare, meterRatio, filterLabel, countryName, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
 const m = M.__exports
 
 // vm-realm arrays fail strict deepEqual on prototype identity; compare by value.
@@ -129,6 +129,22 @@ test("limitRuleRows caps rules, not rows, and drops headers left with nothing", 
   // No cap.
   same(m.limitRuleRows(rows, 0).map(r => r.kind), rows.map(r => r.kind))
   same(m.limitRuleRows(null, 3), [])
+})
+
+// Bypassing a blocked host takes it out of the blocked view, which is where
+// the undo lives, so a row acted on is held even when the fetch drops it.
+test("mergeSticky holds an acted-on row, in its place", () => {
+  const fetched = [
+    { question: "c.example", action: 0, time: "2026-08-20T10:03:00Z" },
+    { question: "a.example", action: 0, time: "2026-08-20T10:01:00Z" }
+  ]
+  const held = [{ question: "b.example", action: 0, time: "2026-08-20T10:02:00Z" }]
+  same(m.mergeSticky(fetched, held).map(q => q.question), ["c.example", "b.example", "a.example"])
+  // Still fetched: held, not duplicated.
+  same(m.mergeSticky(fetched, [fetched[0]]).map(q => q.question), ["c.example", "a.example"])
+  same(m.mergeSticky(fetched, []).map(q => q.question), ["c.example", "a.example"])
+  same(m.mergeSticky([], held).map(q => q.question), ["b.example"])
+  same(m.mergeSticky(null, null), [])
 })
 
 // One action per row, and applying it twice takes it away.

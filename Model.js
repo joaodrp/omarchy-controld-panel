@@ -787,6 +787,25 @@ function activityDetail(query) {
   return parts.join(" · ")
 }
 
+// A row acted on stays in the log even once the fetch stops returning it:
+// bypassing a host means it stops being blocked, so the very act of using the
+// blocked view removes what you just used it on, and with it the only way to
+// take the override back. Merged by time so the row keeps its place rather
+// than jumping to the top.
+function mergeSticky(queries, sticky) {
+  var out = (queries || []).slice()
+  var held = sticky || []
+  for (var i = 0; i < held.length; i++) {
+    var q = held[i]
+    var seen = false
+    for (var j = 0; j < out.length; j++)
+      if (out[j].question === q.question && out[j].action === q.action) { seen = true; break }
+    if (!seen) out.push(q)
+  }
+  out.sort(function(a, b) { return str(b.time).localeCompare(str(a.time)) })
+  return out
+}
+
 // The override an activity row offers: the opposite of what happened to it.
 // Only the two verdicts a custom rule can reverse. A redirect or a spoof is
 // already somebody's deliberate rule, and unmatched means nothing decided.

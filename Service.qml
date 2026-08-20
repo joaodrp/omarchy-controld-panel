@@ -124,6 +124,13 @@ Item {
   property string pendingRuleHost: ""
   property bool ruleBusy: false
   property string ruleError: ""
+  // Rows held in the log because an override was applied to them. Long enough
+  // to see what happened and take it back, then gone: bypassing a host is
+  // supposed to take it out of the blocked view, and a row that outstayed that
+  // would be reporting a block that no longer happens.
+  property var stickyActivity: []
+  readonly property var activityLog: Model.mergeSticky(activity, stickyActivity)
+  property var _ruleIntent: null
 
   // Switching which profile this endpoint enforces. Only offered when the
   // account has somewhere else to switch to.
@@ -288,10 +295,27 @@ Item {
     ruleBusy = true
     ruleError = ""
     pendingRuleHost = intent.hostname
+    _ruleIntent = intent
     var args = ["rule", intent.verb, intent.hostname, "--profile", activeProfile.id]
     if (intent.verb !== "delete") args = args.concat(["--action", intent.action])
     ruleProcess.command = cdctl(["-y"].concat(args))
     ruleProcess.running = true
+  }
+
+  // Hold the row an override was just applied to, or let go of one whose
+  // override was just taken back.
+  function holdActedRow(intent) {
+    if (!intent) return
+    var next = []
+    for (var i = 0; i < stickyActivity.length; i++)
+      if (stickyActivity[i].question !== intent.hostname) next.push(stickyActivity[i])
+    if (intent.verb !== "delete") {
+      for (var j = 0; j < activity.length; j++)
+        if (activity[j].question === intent.hostname) { next.push(activity[j]); break }
+    }
+    stickyActivity = next
+    if (next.length > 0) stickyTimer.restart()
+    else stickyTimer.stop()
   }
 
   function setProtection(on) {
@@ -545,6 +569,8 @@ Item {
         return
       }
       root.ruleError = ""
+      root.holdActedRow(root._ruleIntent)
+      root._ruleIntent = null
       // The rules the panel draws come from the list, so the list is what has
       // to agree before the row stops offering what it just did.
       root.loadRules(root.activeProfile.id)
@@ -681,6 +707,16 @@ Item {
       // The end of the probe chain. With a status command, that one ticks.
       if (root.statusCommand === "") root.noteProtectionProbe()
     }
+  }
+
+  Timer {
+    // One window for every held row rather than one each: they are all things
+    // done moments ago, and the last of them is what the reader is still
+    // looking at.
+    id: stickyTimer
+    interval: 10000
+    repeat: false
+    onTriggered: root.stickyActivity = []
   }
 
   Timer {

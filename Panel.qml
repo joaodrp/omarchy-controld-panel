@@ -53,7 +53,7 @@ Panel {
     || (controld.installed && controld.needsAuth)
     || unprotected || endpointUnknown
   readonly property bool showActivity: controld.ready && machineMode && controld.activityEnabled
-    && (controld.activity.length > 0 || controld.activityError !== "")
+    && (controld.activityLog.length > 0 || controld.activityError !== "")
   readonly property bool showStats: controld.ready && machineMode && controld.statsEnabled
     && (controld.statsAvailable || controld.statsError !== "")
   property bool legendOpen: false
@@ -80,11 +80,11 @@ Panel {
   // already fetched, so this costs nothing but the space.
   property bool activityExpanded: false
   readonly property var visibleActivity: {
-    var all = controld.activity
+    var all = controld.activityLog
     if (activityExpanded || all.length <= controld.activityRows) return all
     return all.slice(0, controld.activityRows)
   }
-  readonly property int hiddenActivity: controld.activity.length - visibleActivity.length
+  readonly property int hiddenActivity: controld.activityLog.length - visibleActivity.length
   readonly property bool activityExpandable: hiddenActivity > 0 || activityExpanded
 
   property string destinationView: "networks"
@@ -431,6 +431,7 @@ Panel {
     cursorActive = false
     cursorKey = "header"
     activityExpanded = false
+    controld.stickyActivity = []
     controld.setActivityFilter("blocked")
     controld.setActivityGrouped(true)
     pointerGate.reset()
@@ -1107,7 +1108,7 @@ Panel {
               // reader just did, rather than something the window reports.
               text: controld.ruleError !== "" ? controld.ruleError
                 : (controld.activityError !== "" ? controld.activityError
-                  : (controld.activity.length === 0
+                  : (controld.activityLog.length === 0
                     ? (controld.activityFilter === "blocked" ? "nothing blocked in this window" : "no queries yet")
                     : ""))
               color: controld.ruleError !== "" || controld.activityError !== "" ? root.urgent : root.dim
@@ -1775,7 +1776,10 @@ Panel {
         Text {
           Layout.fillWidth: true
           text: activityRow.question
-          color: activityRow.hot ? root.foreground : Qt.darker(root.foreground, 1.25)
+          // A row this profile now overrides is done with: it stays for the
+          // undo, dimmed, rather than reading like something still to act on.
+          color: activityRow.applied ? root.dim
+            : (activityRow.hot ? root.foreground : Qt.darker(root.foreground, 1.25))
           font.family: root.fontFamily
           font.pixelSize: Style.font.body
           elide: Text.ElideMiddle
