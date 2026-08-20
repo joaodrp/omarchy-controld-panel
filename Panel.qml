@@ -1691,7 +1691,10 @@ Panel {
     readonly property string question: query ? query.question : ""
     readonly property bool blocked: query && query.action === 0
     readonly property bool hasCursor: cursorKey !== "" && root.cursorActive && root.cursorKey === cursorKey
-    readonly property bool hot: activityMouse.containsMouse || hasCursor
+    // The glyph's own hover counts: without it, moving onto the control takes
+    // hover off the row, and a control that reads the row's hover would put
+    // itself away exactly as the pointer arrives.
+    readonly property bool hot: activityMouse.containsMouse || verdictMouse.containsMouse || hasCursor
     // The override this row offers, given what the profile already says.
     readonly property var intent: Model.ruleIntent(query, controld.rules)
     readonly property bool actionable: intent.verb !== "" && controld.activeProfile !== null
@@ -1700,18 +1703,68 @@ Panel {
 
     implicitHeight: activityText.implicitHeight + Style.spacing.sm * 2
 
+    // Declared before the row's contents and therefore beneath them, so the
+    // action button takes its own clicks and everything else falls through to
+    // the row. Filling the row over the top would swallow the button.
+    MouseArea {
+      id: activityMouse
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onEntered: if (activityRow.cursorKey !== "") root.setCursorFromPointer(activityRow.cursorKey, activityRow, { x: activityMouse.mouseX, y: activityMouse.mouseY })
+      onPositionChanged: function(mouse) { if (activityRow.cursorKey !== "") root.setCursorFromPointer(activityRow.cursorKey, activityRow, mouse) }
+      onClicked: controld.copyToClipboard(activityRow.question)
+    }
+
     RowLayout {
       anchors.left: parent.left
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
       spacing: Style.space(8)
 
-      Text {
-        text: Model.actionGlyph(Model.actionName(activityRow.query ? activityRow.query.action : -1))
-        color: activityRow.blocked ? root.foreground : root.dim
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.icon
+      // The verdict, and the control that reverses it. At rest the glyph is
+      // what happened; under the pointer or the cursor it becomes what
+      // clicking will make it, so the row previews its own action in place.
+      // Shape stays the history and colour carries the override: a row whose
+      // glyph permanently showed a check would contradict the "block" its own
+      // detail line reports.
+      Item {
+        Layout.preferredWidth: verdictGlyph.implicitWidth
+        Layout.preferredHeight: verdictGlyph.implicitHeight
         Layout.alignment: Qt.AlignVCenter
+
+        Text {
+          id: verdictGlyph
+          readonly property string verdict: Model.actionName(activityRow.query ? activityRow.query.action : -1)
+          anchors.centerIn: parent
+          text: Model.actionGlyph(activityRow.actionable && activityRow.hot
+            ? activityRow.intent.action : verdict)
+          color: activityRow.applied ? Color.accent
+            : (activityRow.hot && activityRow.actionable ? root.foreground
+              : (activityRow.blocked ? root.foreground : root.dim))
+          opacity: activityRow.pending ? 0.4 : 1.0
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.icon
+
+          Behavior on color { ColorAnimation { duration: 60 } }
+        }
+
+        MouseArea {
+          id: verdictMouse
+          anchors.fill: parent
+          enabled: activityRow.actionable && !controld.ruleBusy
+          hoverEnabled: enabled
+          cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+          onClicked: controld.applyRuleIntent(activityRow.intent)
+        }
+
+        PanelToolTip {
+          visible: verdictMouse.containsMouse
+          text: activityRow.applied
+            ? ("Remove this " + activityRow.intent.action + " rule")
+            : (activityRow.intent.action + " this host")
+          fontFamily: root.fontFamily
+        }
       }
 
       ColumnLayout {
@@ -1738,37 +1791,6 @@ Panel {
         }
       }
 
-      // Reserved whether or not it is showing, so the hostname beside it does
-      // not re-elide as the pointer crosses the row.
-      Item {
-        Layout.preferredWidth: ruleButton.size
-        Layout.preferredHeight: ruleButton.size
-        Layout.alignment: Qt.AlignVCenter
-        visible: activityRow.actionable
-
-        PanelActionButton {
-          id: ruleButton
-          anchors.centerIn: parent
-          // Shown once the row is under the pointer or the cursor, and kept
-          // shown while this profile holds the rule: an override that only
-          // appears on hover is one nobody knows they left behind.
-          visible: activityRow.hot || activityRow.applied
-          enabled: !controld.ruleBusy
-          opacity: activityRow.pending ? 0.4 : 1.0
-          // The glyph is the verdict the button makes, and the border says the
-          // profile already says so.
-          iconText: Model.actionGlyph(activityRow.intent.action)
-          bordered: activityRow.applied
-          tooltipText: (activityRow.applied ? "Remove this " : "")
-            + activityRow.intent.action + (activityRow.applied ? " rule" : " this host")
-          foreground: root.foreground
-          fontFamily: root.fontFamily
-          fontSize: Style.font.caption
-          hasCursor: activityRow.hasCursor
-          onClicked: controld.applyRuleIntent(activityRow.intent)
-        }
-      }
-
       Text {
         text: Model.clockTime(activityRow.query ? activityRow.query.time : "")
         color: root.dim
@@ -1778,15 +1800,6 @@ Panel {
       }
     }
 
-    MouseArea {
-      id: activityMouse
-      anchors.fill: parent
-      hoverEnabled: true
-      cursorShape: Qt.PointingHandCursor
-      onEntered: if (activityRow.cursorKey !== "") root.setCursorFromPointer(activityRow.cursorKey, activityRow, { x: activityMouse.mouseX, y: activityMouse.mouseY })
-      onPositionChanged: function(mouse) { if (activityRow.cursorKey !== "") root.setCursorFromPointer(activityRow.cursorKey, activityRow, mouse) }
-      onClicked: controld.copyToClipboard(activityRow.question)
-    }
 
     PanelToolTip {
       visible: activityMouse.containsMouse
