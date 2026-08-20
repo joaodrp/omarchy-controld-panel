@@ -54,6 +54,10 @@ Panel {
   readonly property bool showStats: controld.ready && machineMode && controld.statsEnabled
     && (controld.statsAvailable || controld.statsError !== "")
   property bool legendOpen: false
+  // The profile list, open under the hero. While it is open the cursor walks
+  // its rows and nothing else: picking one is a write, so it should not be
+  // possible to drift off it and press enter on something else.
+  property bool profilePickerOpen: false
   // Only the keys that exist in the state being shown: a legend that lists
   // what does nothing here is worse than none.
   readonly property var legendKeys: {
@@ -62,6 +66,7 @@ Panel {
     if (showActivity) keys.push({ key: "a", what: "activity" })
     if (showRules) keys.push({ key: "r", what: "rules" })
     if (showEndpoint) keys.push({ key: "m", what: "machine" })
+    if (controld.canEnforce) keys.push({ key: "p", what: "profile" })
     keys.push({ key: "g/G", what: "top/bottom" }, { key: "o", what: "dashboard" },
       { key: "R", what: "refresh" }, { key: "esc", what: "close" })
     return keys
@@ -136,6 +141,13 @@ Panel {
   // Document order, so moving the cursor also walks the panel top to bottom.
   readonly property var cursorItems: {
     var items = [{ key: "header", kind: "header", value: "" }]
+    if (profilePickerOpen) {
+      for (var p = 0; p < controld.profiles.length; p++)
+        items.push({ key: "profileOption:" + p, kind: "profileOption", index: p, value: "" })
+      return items
+    }
+    if (showEndpoint && controld.canEnforce)
+      items.push({ key: "profile", kind: "profile", value: "" })
     if (showEndpoint && controld.endpoint)
       items.push({ key: "endpoint", kind: "endpoint", value: controld.endpoint.id })
     if (showStats && controld.stats) {
@@ -210,9 +222,33 @@ Panel {
     var entry = currentCursor()
     if (!entry) return
     if (entry.kind === "header") { Quickshell.execDetached(["omarchy-launch-browser", root.dashboardUrl]); return }
+    if (entry.kind === "profile") { root.openProfilePicker(); return }
+    if (entry.kind === "profileOption") {
+      controld.setEnforcedProfile(controld.profiles[entry.index].id)
+      root.closeProfilePicker()
+      return
+    }
     if (entry.kind === "more") { root.toggleActivityExpanded(cursorItem()); return }
     if (entry.kind === "reading") return
     if (String(entry.value || "") !== "") controld.copyToClipboard(entry.value)
+  }
+
+  // Opening lands the cursor on the profile in force, so enter twice is a
+  // no-op rather than a write to whatever sat first in the list.
+  function openProfilePicker() {
+    if (!controld.canEnforce) return
+    profilePickerOpen = true
+    var current = 0
+    for (var i = 0; i < controld.profiles.length; i++)
+      if (controld.profiles[i].id === controld.endpointProfileId) current = i
+    setCursor("profileOption:" + current)
+    cursorActive = true
+  }
+
+  function closeProfilePicker() {
+    if (!profilePickerOpen) return
+    profilePickerOpen = false
+    setCursor("profile")
   }
 
   // Collapsing the log takes rows out from above the row that did it, so
@@ -436,7 +472,10 @@ Panel {
         root.moveCursor(dx, dy)
       }
       onActivateRequested: if (root.cursorActive) root.activateCursor()
-      onCloseRequested: root.close()
+      onCloseRequested: {
+        if (root.profilePickerOpen) root.closeProfilePicker()
+        else root.close()
+      }
       onTabRequested: function(direction) { root.switchPanel(direction) }
       onTextKey: function(t) {
         if (t === "s") root.jumpTo(statsSection)
@@ -446,6 +485,7 @@ Panel {
         else if (t === "g") root.jumpToEdge(false)
         else if (t === "G") root.jumpToEdge(true)
         else if (t === "?") root.legendOpen = !root.legendOpen
+        else if (t === "p") root.openProfilePicker()
         else if (t === "o") Quickshell.execDetached(["omarchy-launch-browser", root.dashboardUrl])
         // Shift for the action, since the plain letter now names a section.
         else if (t === "R") controld.refresh()
@@ -684,6 +724,82 @@ Panel {
               InfoLabel { text: "Unmatched" }
               DetailValue { text: controld.activeProfile ? Model.actionLabel(controld.activeProfile.defaultAction) : "--" }
             }
+          }
+
+          // The account's profiles, under the hero that names the one in force.
+          // Only while picking: a list of what could be enforced is noise next
+          // to what is.
+          Column {
+            id: profilePicker
+            visible: root.profilePickerOpen
+            width: parent.width
+            spacing: Style.spacing.labelGap
+
+            Repeater {
+              model: root.profilePickerOpen ? controld.profiles : []
+
+              Item {
+                id: profileRow
+                required property var modelData
+                required property int index
+                readonly property string cursorKey: "profileOption:" + index
+                readonly property bool enforced: modelData.id === controld.endpointProfileId
+                readonly property bool hasCursor: root.cursorActive && root.cursorKey === cursorKey
+                width: profilePicker.width
+                implicitHeight: profileLabel.implicitHeight + Style.space(10)
+
+                Rectangle {
+                  anchors.fill: parent
+                  radius: Style.cornerRadius
+                  color: profileRow.hasCursor || profileMouse.containsMouse ? root.hoverFill : "transparent"
+                }
+
+                Text {
+                  id: profileLabel
+                  anchors.left: parent.left
+                  anchors.leftMargin: Style.space(6)
+                  anchors.verticalCenter: parent.verticalCenter
+                  text: profileRow.modelData.name
+                  color: root.foreground
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.bodySmall
+                }
+
+                Text {
+                  anchors.right: parent.right
+                  anchors.rightMargin: Style.space(6)
+                  anchors.verticalCenter: parent.verticalCenter
+                  visible: profileRow.enforced
+                  text: "in force"
+                  color: root.dim
+                  font.family: root.fontFamily
+                  font.pixelSize: Style.font.caption
+                }
+
+                MouseArea {
+                  id: profileMouse
+                  anchors.fill: parent
+                  hoverEnabled: true
+                  cursorShape: Qt.PointingHandCursor
+                  onEntered: root.setCursorFromPointer(profileRow.cursorKey, profileRow, { x: profileMouse.mouseX, y: profileMouse.mouseY })
+                  onPositionChanged: function(mouse) { root.setCursorFromPointer(profileRow.cursorKey, profileRow, mouse) }
+                  onClicked: {
+                    controld.setEnforcedProfile(profileRow.modelData.id)
+                    root.closeProfilePicker()
+                  }
+                }
+              }
+            }
+          }
+
+          Text {
+            width: parent.width
+            visible: controld.enforceError !== ""
+            text: controld.enforceError
+            color: root.dim
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            wrapMode: Text.WordWrap
           }
 
           PanelSeparator {

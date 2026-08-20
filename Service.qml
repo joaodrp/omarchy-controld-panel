@@ -119,6 +119,11 @@ Item {
   readonly property bool canPause: hostPause || endpoint !== null
   property bool pauseBusy: false
   property string pauseError: ""
+  // Switching which profile this endpoint enforces. Only offered when the
+  // account has somewhere else to switch to.
+  readonly property bool canEnforce: endpoint !== null && profiles.length > 1
+  property bool enforceBusy: false
+  property string enforceError: ""
   property int _statusExit: -1
   readonly property bool protectionObserved: {
     if (statusCommand !== "") return _statusExit === 0
@@ -247,6 +252,18 @@ Item {
     // collapses the panel's content height, which drags the scroll to the top
     // and loses the reader's place.
     loadActivity()
+  }
+
+  // Point this machine's endpoint at another profile. `--enforce`, not the
+  // global `--profile`: that one scopes which profile a command reads, and
+  // cdctl rejects it here rather than half-applying the write.
+  function setEnforcedProfile(profileId) {
+    var id = String(profileId || "")
+    if (endpoint === null || id === "" || id === endpointProfileId || enforceBusy) return
+    enforceBusy = true
+    enforceError = ""
+    enforceProcess.command = cdctl(["-y", "device", "update", endpoint.id, "--enforce", id])
+    enforceProcess.running = true
   }
 
   function setProtection(on) {
@@ -484,6 +501,31 @@ Item {
     repeat: true
     running: root._pauseDesired >= 0 && root.hostPause
     onTriggered: root.refresh()
+  }
+
+  Process {
+    // Same verified read-back as the pause: the device cdctl prints is the one
+    // the account holds, so the profile the panel describes follows it and the
+    // rules for it reload without a re-list.
+    id: enforceProcess
+    running: false
+    command: []
+    stdout: StdioCollector { id: enforceStdout; waitForEnd: true }
+    stderr: StdioCollector { id: enforceStderr; waitForEnd: true }
+    onExited: function(exitCode) {
+      root.enforceBusy = false
+      if (exitCode !== 0) {
+        root.enforceError = Model.errorLine(Model.parseError(enforceStderr.text, exitCode),
+          "Could not switch this device's profile")
+        return
+      }
+      var parsed = Model.parseDevice(enforceStdout.text)
+      if (!parsed.ok) {
+        root.enforceError = "Could not read this device back"
+        return
+      }
+      root.devices = Model.replaceDevice(root.devices, parsed.device)
+    }
   }
 
   Process {
