@@ -1724,11 +1724,12 @@ Panel {
       spacing: Style.space(8)
 
       // The verdict, and the control that reverses it. At rest the glyph is
-      // what happened; under the pointer or the cursor it becomes what
-      // clicking will make it, so the row previews its own action in place.
-      // Shape stays the history and colour carries the override: a row whose
-      // glyph permanently showed a check would contradict the "block" its own
-      // detail line reports.
+      // where the host stands now -- the log's verdict, or the override this
+      // profile holds over it. Under the pointer or the cursor it becomes what
+      // clicking will make it, which on an overridden row is the way back. So
+      // the glyph answers "what is it" until you reach for it, then "what will
+      // this do", and the accent says the answer came from a rule you wrote
+      // rather than from the log.
       Item {
         Layout.preferredWidth: verdictGlyph.implicitWidth
         Layout.preferredHeight: verdictGlyph.implicitHeight
@@ -1737,9 +1738,14 @@ Panel {
         Text {
           id: verdictGlyph
           readonly property string verdict: Model.actionName(activityRow.query ? activityRow.query.action : -1)
+          // Where the host stands: the override if this profile holds one,
+          // else what the log recorded.
+          readonly property string atRest: activityRow.applied ? activityRow.intent.action : verdict
+          // What clicking makes it: the override, or -- once it is applied --
+          // back to the verdict that removing it restores.
+          readonly property string onReach: activityRow.applied ? verdict : activityRow.intent.action
           anchors.centerIn: parent
-          text: Model.actionGlyph(activityRow.actionable && activityRow.hot
-            ? activityRow.intent.action : verdict)
+          text: Model.actionGlyph(activityRow.actionable && activityRow.hot ? onReach : atRest)
           color: activityRow.applied ? Color.accent
             : (activityRow.hot && activityRow.actionable ? root.foreground
               : (activityRow.blocked ? root.foreground : root.dim))
