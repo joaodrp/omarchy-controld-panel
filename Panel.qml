@@ -1,5 +1,4 @@
 import QtQuick
-import QtQuick.Effects
 import QtQuick.Shapes
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -283,13 +282,21 @@ Panel {
     controld.applyRuleIntent(intent)
   }
 
-  // Which rule the confirmation is about. Held rather than passed, because the
-  // dialog outlives the row: the list can rebuild while it is open.
-  property var pendingDeleteRule: null
+  // The one row asking to be deleted, by host: a rule write rebuilds the list,
+  // and a held object would outlive the row it came from. One at a time --
+  // opening another closes this one, which is the whole of the mutual
+  // exclusion an inline strip gets.
+  property string pendingDeleteHost: ""
 
   function askDeleteRule(rule) {
     if (!rule || controld.ruleBusy) return
-    pendingDeleteRule = rule
+    pendingDeleteHost = pendingDeleteHost === rule.hostname ? "" : rule.hostname
+  }
+
+  function confirmDeleteRule() {
+    var rule = Model.findRule(controld.rules, pendingDeleteHost)
+    pendingDeleteHost = ""
+    if (rule) controld.deleteRule(rule)
   }
 
   // `x` switches the rule under the cursor off, or back on. Rules only: the
@@ -541,32 +548,20 @@ Panel {
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
-      // While the confirmation is up it owns the keyboard: the panel's own
-      // cursor must not move under a dialog asking about the row it left.
       onMoveRequested: function(dx, dy) {
-        if (root.pendingDeleteRule) {
-          deleteConfirm.selectedIndex = deleteConfirm.selectedIndex === 0 ? 1 : 0
-          return
-        }
         if (!root.cursorActive) { root.cursorActive = true; return }
         root.moveCursor(dx, dy)
       }
-      onActivateRequested: {
-        if (root.pendingDeleteRule) {
-          if (deleteConfirm.selectedIndex === 0) deleteConfirm.canceled()
-          else deleteConfirm.confirmed()
-          return
-        }
-        if (root.cursorActive) root.activateCursor()
-      }
+      onActivateRequested: if (root.cursorActive) root.activateCursor()
       onCloseRequested: {
-        if (root.pendingDeleteRule) deleteConfirm.canceled()
+        // The strip answers first, then the picker, then the panel itself:
+        // escape should undo the last thing opened, not the outermost.
+        if (root.pendingDeleteHost !== "") root.pendingDeleteHost = ""
         else if (root.profilePickerOpen) root.closeProfilePicker()
         else root.close()
       }
       onTabRequested: function(direction) { root.switchPanel(direction) }
       onTextKey: function(t) {
-        if (root.pendingDeleteRule) return
         if (t === "s") root.jumpTo(statsSection)
         else if (t === "a") root.jumpTo(activitySection)
         else if (t === "r") root.jumpTo(rulesSection)
@@ -587,19 +582,6 @@ Panel {
 
       Flickable {
         id: panelFlick
-
-        // Blurred out from under the confirmation, and only there: a write
-        // takes a second or two and what you are watching in it is the row
-        // changing, so blurring for that would hide the answer. A modal is the
-        // one moment the rest of the panel should be neither readable nor
-        // reachable, which is what the dialog's own scrim is already saying.
-        layer.enabled: root.pendingDeleteRule !== null
-        layer.effect: MultiEffect {
-          blurEnabled: true
-          blur: 1.0
-          blurMax: 24
-          autoPaddingEnabled: false
-        }
         anchors.left: parent.left
         anchors.right: parent.right
         // Reach into the card's padding so the scrollbar, which overlays the
@@ -1285,27 +1267,6 @@ Panel {
       }
 
       // Keys are invisible by nature, so ? reveals them without spending
-      // Over everything the panel draws, since it is asking about one row and
-      // the rest must not be reachable while it does. Declared last so it sits
-      // above the list, its scrim taking the clicks the rows would otherwise.
-      ConfirmDialog {
-        id: deleteConfirm
-        anchors.fill: parent
-        opened: root.pendingDeleteRule !== null
-        message: root.pendingDeleteRule
-          ? "Delete the rule for " + root.pendingDeleteRule.hostname + "?"
-          : ""
-        confirmText: "Delete"
-        cancelText: "Keep"
-        foreground: root.foreground
-        fontFamily: root.fontFamily
-        onCanceled: root.pendingDeleteRule = null
-        onConfirmed: {
-          controld.deleteRule(root.pendingDeleteRule)
-          root.pendingDeleteRule = null
-        }
-      }
-
       // room on a legend nobody asked for.
       Column {
         id: legend
@@ -1969,12 +1930,19 @@ Panel {
     // Reported by the delete button itself: the row's own hover goes out from
     // under it the moment the pointer arrives on the button.
     property bool ruleDeleteHovered: false
+    readonly property bool confirming: hostname !== "" && root.pendingDeleteHost === hostname
+    // The row grows downwards, so on the last rule the question opens below
+    // the fold. Asking a question nobody can see is worse than not asking --
+    // and it has to wait for the height, since scrolling on the change itself
+    // reveals the row at the size it was before the strip was in it.
+    onHeightChanged: if (confirming) root.scrollItemIntoView(ruleRow)
 
     hasCursor: root.cursorActive && root.cursorKey === "rule:" + rowIndex
     foreground: root.foreground
     fill: root.hoverFill
 
     implicitHeight: ruleContent.implicitHeight + Style.spacing.rowPaddingX
+      + (confirming ? confirmStrip.implicitHeight + Style.space(8) : 0)
 
     MouseArea {
       id: ruleMouse
@@ -1987,9 +1955,11 @@ Panel {
     }
 
     RowLayout {
+      id: ruleTop
       anchors.left: parent.left
       anchors.right: parent.right
-      anchors.verticalCenter: parent.verticalCenter
+      anchors.top: parent.top
+      anchors.topMargin: Style.spacing.rowPaddingX / 2
       anchors.leftMargin: Style.space(10)
       anchors.rightMargin: Style.space(8)
       spacing: Style.space(8)
@@ -2069,7 +2039,7 @@ Panel {
         iconText: Model.TRASH_GLYPH
         // Silenced while the confirmation is up: the pointer is still on this
         // button, and its tooltip would sit over the answer it is asking for.
-        tooltipText: root.pendingDeleteRule ? "" : "Delete this rule"
+        tooltipText: ruleRow.confirming ? "" : "Delete this rule"
         foreground: root.foreground
         fontFamily: root.fontFamily
         fontSize: Style.font.caption
@@ -2080,8 +2050,53 @@ Panel {
       }
     }
 
+    // Under the row rather than over the panel: the rule being deleted stays
+    // legible directly above the question, which is what a card naming it in
+    // text was standing in for.
+    RowLayout {
+      id: confirmStrip
+      visible: ruleRow.confirming
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.top: ruleTop.bottom
+      anchors.topMargin: Style.space(8)
+      anchors.leftMargin: Style.space(40)
+      anchors.rightMargin: Style.space(8)
+      spacing: Style.space(8)
+
+      Text {
+        text: "Delete this rule?"
+        color: root.foreground
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.caption
+        Layout.alignment: Qt.AlignVCenter
+      }
+
+      Item { Layout.fillWidth: true }
+
+      Button {
+        text: "Keep"
+        foreground: root.foreground
+        accent: Color.accent
+        fontFamily: root.fontFamily
+        fontSize: Style.font.caption
+        bordered: true
+        onClicked: root.pendingDeleteHost = ""
+      }
+
+      Button {
+        text: "Delete"
+        foreground: root.urgent
+        accent: root.urgent
+        fontFamily: root.fontFamily
+        fontSize: Style.font.caption
+        bordered: true
+        onClicked: root.confirmDeleteRule()
+      }
+    }
+
     PanelToolTip {
-      visible: ruleMouse.containsMouse && !ruleRow.glyphReached
+      visible: ruleMouse.containsMouse && !ruleRow.glyphReached && !ruleRow.confirming
       text: ruleRow.ruleEnabled ? "Copy hostname" : "Rule is off · copy hostname"
       fontFamily: root.fontFamily
     }
