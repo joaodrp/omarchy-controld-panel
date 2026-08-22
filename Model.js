@@ -808,11 +808,17 @@ function activityDetail(query) {
 // blocked view removes what you just used it on, and with it the only way to
 // take the override back. Merged by time so the row keeps its place rather
 // than jumping to the top.
-function mergeSticky(queries, sticky) {
+function mergeSticky(queries, sticky, actions) {
   var out = (queries || []).slice()
   var held = sticky || []
+  var want = actions || []
   for (var i = 0; i < held.length; i++) {
     var q = held[i]
+    // Only into the view whose verdict it is: a blocked row held for its undo
+    // does not belong under Bypassed just because that is what is on screen.
+    var fits = want.length === 0
+    for (var w = 0; w < want.length; w++) if (want[w] === q.action) { fits = true; break }
+    if (!fits) continue
     var seen = false
     for (var j = 0; j < out.length; j++)
       if (out[j].question === q.question && out[j].action === q.action) { seen = true; break }

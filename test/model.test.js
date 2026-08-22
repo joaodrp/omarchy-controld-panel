@@ -143,6 +143,11 @@ test("mergeSticky holds an acted-on row, in its place", () => {
   // Still fetched: held, not duplicated.
   same(m.mergeSticky(fetched, [fetched[0]]).map(q => q.question), ["c.example", "a.example"])
   same(m.mergeSticky(fetched, []).map(q => q.question), ["c.example", "a.example"])
+  // Held under its own verdict only: a blocked row is not evidence for the
+  // bypassed view, however recently it was acted on.
+  same(m.mergeSticky([], held, [0]).map(q => q.question), ["b.example"])
+  same(m.mergeSticky([], held, [1]), [])
+  same(m.mergeSticky([], held, [2, 3]), [])
   same(m.mergeSticky([], held).map(q => q.question), ["b.example"])
   same(m.mergeSticky(null, null), [])
 })

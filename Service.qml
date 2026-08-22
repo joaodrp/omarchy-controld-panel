@@ -129,7 +129,8 @@ Item {
   // supposed to take it out of the blocked view, and a row that outstayed that
   // would be reporting a block that no longer happens.
   property var stickyActivity: []
-  readonly property var activityLog: Model.mergeSticky(activity, stickyActivity)
+  readonly property var activityLog: Model.mergeSticky(activity, stickyActivity,
+    Model.activityActions(activityFilter))
   property var _ruleIntent: null
 
   // Switching which profile this endpoint enforces. Only offered when the
