@@ -909,7 +909,6 @@ var UNDO_GLYPH = "\udb81\udd4c"
 // on a rule that is running, play on one that is not.
 var PAUSE_GLYPH = "\udb80\udfe4"
 var PLAY_GLYPH = "\udb81\udc0a"
-var PLUS_GLYPH = "\udb81\udc15"
 var TRASH_GLYPH = "\udb82\ude7a"
 
 // Nerd Font glyphs, matching what the built-in panels use for their rows.

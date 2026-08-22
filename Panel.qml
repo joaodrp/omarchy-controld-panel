@@ -1279,11 +1279,17 @@ Panel {
                 elide: Text.ElideRight
               }
 
-              PanelActionButton {
-                iconText: Model.PLUS_GLYPH
-                tooltipText: root.addRuleOpen ? "Close" : "Add a rule"
-                bordered: root.addRuleOpen
+              // A word in a bordered box, as every other control at the right
+              // of a section header here is: a bare glyph belongs in a row,
+              // and one in the header reads as a row control that drifted up.
+              Button {
+                // What it does, which is not the same when the form is open:
+                // two buttons reading "Add" on one screen, one opening a form
+                // and one submitting it, is a guess the reader should not make.
+                text: root.addRuleOpen ? "Cancel" : "Add"
+                bordered: true
                 foreground: root.foreground
+                accent: Color.accent
                 fontFamily: root.fontFamily
                 fontSize: Style.font.caption
                 Layout.alignment: Qt.AlignVCenter
