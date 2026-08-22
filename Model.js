@@ -886,6 +886,11 @@ function ruleIntent(query, rules) {
 // know what that will say.
 var UNDO_GLYPH = "\udb81\udd4c"
 
+// A rule's own row offers to switch it off, or back on. Toggling does not
+// change what the rule does, so there is no verdict to preview: the glyph
+// names the operation instead, and the tooltip says which way it runs.
+var POWER_GLYPH = "\udb80\udc25"
+
 // Nerd Font glyphs, matching what the built-in panels use for their rows.
 function actionGlyph(action) {
   switch (str(action)) {

@@ -331,6 +331,20 @@ Item {
     else stickyTimer.stop()
   }
 
+  // Switch a rule off, or back on. Not delete: a rule here may be older than
+  // this panel, and disabling it is undone in place, whereas removing it is
+  // not recoverable from anything the panel shows.
+  function toggleRule(rule) {
+    if (!activeProfile || ruleBusy || !rule) return
+    ruleBusy = true
+    ruleError = ""
+    pendingRuleHost = rule.hostname
+    _ruleIntent = null
+    ruleProcess.command = cdctl(["-y", "rule", "update", rule.hostname,
+      "--profile", activeProfile.id, rule.enabled ? "--disabled" : "--enabled"])
+    ruleProcess.running = true
+  }
+
   function setProtection(on) {
     if (!canPause || pauseBusy) return
     _pauseDesired = on ? 1 : 0

@@ -67,6 +67,10 @@ Panel {
   // here, the reach survives the rebuild it causes; held by index, it would
   // follow the position rather than the host.
   property string hoveredGlyphHost: ""
+  // The same idea for the rules list, kept apart: a rule's hostname and an
+  // activity row's question can be the same string, and reaching for one
+  // should not light the other.
+  property string hoveredRuleHost: ""
   // Only the keys that exist in the state being shown: a legend that lists
   // what does nothing here is worse than none.
   readonly property var legendKeys: {
@@ -75,6 +79,7 @@ Panel {
     if (showActivity) keys.push({ key: "a", what: "activity" })
     if (showActivity) keys.push({ key: "b/B", what: "bypass/block" })
     if (showRules) keys.push({ key: "r", what: "rules" })
+    if (showRules) keys.push({ key: "x", what: "rule on/off" })
     if (showEndpoint) keys.push({ key: "m", what: "machine" })
     if (controld.canEnforce) keys.push({ key: "p", what: "profile" })
     keys.push({ key: "g/G", what: "top/bottom" }, { key: "o", what: "dashboard" },
@@ -275,6 +280,14 @@ Panel {
     var intent = Model.ruleIntent(visibleActivity[entry.index], controld.rules)
     if (intent.action !== action) return
     controld.applyRuleIntent(intent)
+  }
+
+  // `x` switches the rule under the cursor off, or back on. Rules only: the
+  // key names an operation that no other row has.
+  function toggleRuleKey() {
+    var entry = cursorActive ? currentCursor() : null
+    if (!entry || entry.kind !== "rule") return
+    controld.toggleRule(cursorRules[entry.index])
   }
 
   // Opening lands the cursor on the profile in force, so enter twice is a
@@ -544,6 +557,7 @@ Panel {
         // Shift for the heavier verdict, as `r`/`R` already reads here.
         else if (t === "b") root.applyRuleKey("bypass")
         else if (t === "B") root.applyRuleKey("block")
+        else if (t === "x") root.toggleRuleKey()
       }
 
       Flickable {
@@ -1890,6 +1904,9 @@ Panel {
     property var rule: null
     property int rowIndex: 0
     readonly property bool ruleEnabled: rule ? rule.enabled : false
+    readonly property string hostname: rule ? rule.hostname : ""
+    readonly property bool glyphReached: hostname !== "" && root.hoveredRuleHost === hostname
+    readonly property bool pending: controld.ruleBusy && controld.pendingRuleHost === hostname
 
     hasCursor: root.cursorActive && root.cursorKey === "rule:" + rowIndex
     foreground: root.foreground
@@ -1915,13 +1932,40 @@ Panel {
       anchors.rightMargin: Style.space(8)
       spacing: Style.space(8)
 
-      Text {
-        text: Model.actionGlyph(ruleRow.rule ? ruleRow.rule.action : "")
-        color: ruleRow.ruleEnabled ? root.foreground : root.dim
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.icon
+      // The rule's action, and the switch that turns the rule off. At rest it
+      // says what the rule does; reaching for it says what the click does,
+      // which is not the same question -- toggling leaves the action alone.
+      Item {
+        Layout.preferredWidth: Style.space(22)
+        Layout.preferredHeight: ruleGlyph.implicitHeight
         Layout.alignment: Qt.AlignVCenter
-        opacity: ruleRow.ruleEnabled ? 1.0 : 0.6
+
+        Text {
+          id: ruleGlyph
+          anchors.centerIn: parent
+          text: ruleRow.glyphReached ? Model.POWER_GLYPH
+            : Model.actionGlyph(ruleRow.rule ? ruleRow.rule.action : "")
+          color: ruleRow.ruleEnabled || ruleRow.glyphReached ? root.foreground : root.dim
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.icon
+          opacity: ruleRow.pending ? 0.4 : (ruleRow.ruleEnabled || ruleRow.glyphReached ? 1.0 : 0.6)
+        }
+
+        MouseArea {
+          id: ruleGlyphMouse
+          anchors.fill: parent
+          hoverEnabled: true
+          cursorShape: Qt.PointingHandCursor
+          onEntered: root.hoveredRuleHost = ruleRow.hostname
+          onExited: if (root.hoveredRuleHost === ruleRow.hostname) root.hoveredRuleHost = ""
+          onClicked: controld.toggleRule(ruleRow.rule)
+        }
+
+        PanelToolTip {
+          visible: ruleRow.glyphReached
+          text: ruleRow.ruleEnabled ? "Switch this rule off" : "Switch this rule on"
+          fontFamily: root.fontFamily
+        }
       }
 
       ColumnLayout {
@@ -1931,11 +1975,14 @@ Panel {
 
         Text {
           Layout.fillWidth: true
-          text: ruleRow.rule ? ruleRow.rule.hostname : ""
+          text: ruleRow.hostname
           color: ruleRow.ruleEnabled ? root.foreground : root.dim
           font.family: root.fontFamily
           font.pixelSize: Style.font.body
           elide: Text.ElideRight
+          // The same line the activity log draws through a verdict a rule has
+          // overruled. A rule switched off is the same claim about itself.
+          font.strikeout: !ruleRow.ruleEnabled
         }
 
         Text {
@@ -1948,19 +1995,11 @@ Panel {
         }
       }
 
-      PanelActionButton {
-        iconText: "󰆏"
-        tooltipText: "Copy hostname"
-        foreground: root.foreground
-        fontFamily: root.fontFamily
-        Layout.alignment: Qt.AlignVCenter
-        onClicked: if (ruleRow.rule) controld.copyToClipboard(ruleRow.rule.hostname)
-      }
     }
 
     PanelToolTip {
-      visible: ruleMouse.containsMouse
-      text: ruleRow.ruleEnabled ? "Copy hostname" : "Rule is disabled · copy hostname"
+      visible: ruleMouse.containsMouse && !ruleRow.glyphReached
+      text: ruleRow.ruleEnabled ? "Copy hostname" : "Rule is off · copy hostname"
       fontFamily: root.fontFamily
     }
   }
