@@ -844,6 +844,23 @@ function mergeSticky(queries, sticky, actions) {
   return out
 }
 
+// What the add form will hand to cdctl. The API does the real validation;
+// this only keeps the obvious mistakes from becoming a failed request: a URL
+// pasted whole, a stray space, an empty box. A leading "*." is legal and is
+// the only place a wildcard may sit.
+function validHostname(text) {
+  var host = str(text).trim().toLowerCase()
+  if (host === "" || host.length > 253) return false
+  if (/[\s\/:]/.test(host)) return false
+  var body = host.indexOf("*.") === 0 ? host.substring(2) : host
+  if (body.indexOf("*") !== -1) return false
+  if (!/^[a-z0-9.-]+$/.test(body)) return false
+  if (body.indexOf("..") !== -1) return false
+  if (body.charAt(0) === "." || body.charAt(0) === "-") return false
+  if (body.charAt(body.length - 1) === "." || body.charAt(body.length - 1) === "-") return false
+  return body.indexOf(".") > 0
+}
+
 // The override an activity row offers: the opposite of what happened to it.
 // Only the two verdicts a custom rule can reverse. A redirect or a spoof is
 // already somebody's deliberate rule, and unmatched means nothing decided.
@@ -892,6 +909,7 @@ var UNDO_GLYPH = "\udb81\udd4c"
 // on a rule that is running, play on one that is not.
 var PAUSE_GLYPH = "\udb80\udfe4"
 var PLAY_GLYPH = "\udb81\udc0a"
+var PLUS_GLYPH = "\udb81\udc15"
 var TRASH_GLYPH = "\udb82\ude7a"
 
 // Nerd Font glyphs, matching what the built-in panels use for their rows.

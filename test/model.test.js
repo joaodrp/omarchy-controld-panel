@@ -9,7 +9,7 @@ const vm = require("node:vm")
 
 const src = fs.readFileSync(path.join(__dirname, "..", "Model.js"), "utf8")
 const M = {}
-vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, groupRules, flattenGroups, countRules, limitRuleRows, rulesCaption, activityFilterOptions, activityActions, activityHours, actionGlyph, mergeSticky, overrideAction, findRule, ruleIntent, dropOverridden, ruleDetail, accountLine, matchEndpoint, controldPresent, controldLive, ctrldActive, resolverLabel, resolverUnknown, parseDevices, parseDevice, replaceDevice, deviceProtected, analyticsReadable, endpointLine, endpointState, ENDPOINT_PENDING, ENDPOINT_NONE, ENDPOINT_UNKNOWN, ENDPOINT_MACHINE, activeProfile, parseStats, formatCount, blockedShare, meterRatio, filterLabel, countryName, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
+vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, groupRules, flattenGroups, countRules, limitRuleRows, rulesCaption, activityFilterOptions, activityActions, activityHours, actionGlyph, mergeSticky, overrideAction, findRule, ruleIntent, validHostname, dropOverridden, ruleDetail, accountLine, matchEndpoint, controldPresent, controldLive, ctrldActive, resolverLabel, resolverUnknown, parseDevices, parseDevice, replaceDevice, deviceProtected, analyticsReadable, endpointLine, endpointState, ENDPOINT_PENDING, ENDPOINT_NONE, ENDPOINT_UNKNOWN, ENDPOINT_MACHINE, activeProfile, parseStats, formatCount, blockedShare, meterRatio, filterLabel, countryName, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
 const m = M.__exports
 
 // vm-realm arrays fail strict deepEqual on prototype identity; compare by value.
@@ -173,6 +173,18 @@ test("mergeSticky holds an acted-on row, in its place", () => {
   same(m.mergeSticky([], held, [2, 3]), [])
   same(m.mergeSticky([], held).map(q => q.question), ["b.example"])
   same(m.mergeSticky(null, null), [])
+})
+
+// The add form's gate: enough to stop a failed request, not a second
+// implementation of what the API already enforces.
+test("validHostname takes hosts and leading wildcards, not URLs", () => {
+  const ok = ["example.com", "a.b.example.com", "*.example.com", "xn--80ak6aa92e.com", "a-b.co"]
+  const no = ["", "   ", "example", "http://example.com", "example .com", "*example.com",
+              "a.*.com", "-a.com", ".example.com", "a..com", "example.com/path", "a.com:53"]
+  same(ok.map(h => m.validHostname(h)), ok.map(() => true))
+  same(no.map(h => m.validHostname(h)), no.map(() => false))
+  // Trimmed and lowered before the check, as the service sends it.
+  assert.equal(m.validHostname("  Example.COM  "), true)
 })
 
 // One action per row, and applying it twice takes it away.

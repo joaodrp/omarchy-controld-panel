@@ -345,6 +345,19 @@ Item {
     ruleProcess.running = true
   }
 
+  // Add a rule by hand, for a host the log has not shown you.
+  function createRule(hostname, action) {
+    var host = String(hostname || "").trim().toLowerCase()
+    if (!activeProfile || ruleBusy || !Model.validHostname(host)) return
+    ruleBusy = true
+    ruleError = ""
+    pendingRuleHost = host
+    _ruleIntent = null
+    ruleProcess.command = cdctl(["-y", "rule", "create", host,
+      "--action", String(action || "block"), "--profile", activeProfile.id])
+    ruleProcess.running = true
+  }
+
   // Remove a rule outright. Behind a confirmation in the panel, because unlike
   // switching one off this cannot be undone from anything the panel shows.
   function deleteRule(rule) {

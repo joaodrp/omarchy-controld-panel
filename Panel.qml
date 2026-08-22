@@ -156,9 +156,15 @@ Panel {
     // this line past the trailing controls into an ellipsis.
     return controld.email !== "" ? controld.email : controld.statusText
   }
+  // Only what the plus cannot say: that the list is still loading, that there
+  // is nothing in it, or that it is showing fewer rules than the profile has.
+  // The plain "5 of 6 enabled" is what the rows already tell you.
   readonly property string rulesCaption: {
     if (controld.loadingRules && controld.rules.length === 0) return "Loading rules…"
-    return Model.rulesCaption(controld.ruleCount, controld.shownRuleCount)
+    if (controld.ruleCount.total === 0) return "No custom rules in this profile."
+    if (controld.shownRuleCount < controld.ruleCount.total)
+      return "showing " + controld.shownRuleCount + " of " + controld.ruleCount.total
+    return ""
   }
   // The machine facts above already name the profile these rules belong to.
   readonly property string rulesTitle: "RULES"
@@ -287,6 +293,28 @@ Panel {
   // opening another closes this one, which is the whole of the mutual
   // exclusion an inline strip gets.
   property string pendingDeleteHost: ""
+  // The add form, and what it will write. Block by default: a rule you go
+  // looking for is usually one you want stopped, and a host you want allowed
+  // is normally already in the log with a glyph offering it.
+  property bool addRuleOpen: false
+  property string addRuleAction: "block"
+
+  function toggleAddRule() {
+    addRuleOpen = !addRuleOpen
+    if (!addRuleOpen) return
+    // Nothing else should be mid-question while a new rule is being typed.
+    pendingDeleteHost = ""
+    addRuleHost.text = ""
+    addRuleHost.forceActiveFocus()
+    scrollItemIntoView(addRuleForm)
+  }
+
+  function submitAddRule() {
+    if (!Model.validHostname(addRuleHost.text)) return
+    controld.createRule(addRuleHost.text, addRuleAction)
+    addRuleOpen = false
+    addRuleHost.text = ""
+  }
 
   function askDeleteRule(rule) {
     if (!rule || controld.ruleBusy) return
@@ -557,11 +585,15 @@ Panel {
         // The strip answers first, then the picker, then the panel itself:
         // escape should undo the last thing opened, not the outermost.
         if (root.pendingDeleteHost !== "") root.pendingDeleteHost = ""
+        else if (root.addRuleOpen) root.toggleAddRule()
         else if (root.profilePickerOpen) root.closeProfilePicker()
         else root.close()
       }
       onTabRequested: function(direction) { root.switchPanel(direction) }
       onTextKey: function(t) {
+        // The add form owns the letters while it is open: `b` belongs in a
+        // hostname there, not on the row behind it.
+        if (root.addRuleOpen) return
         if (t === "s") root.jumpTo(statsSection)
         else if (t === "a") root.jumpTo(activitySection)
         else if (t === "r") root.jumpTo(rulesSection)
@@ -1224,10 +1256,86 @@ Panel {
             width: parent.width
             spacing: Style.space(10)
 
-            SectionTitle {
+            RowLayout {
               width: parent.width
-              text: root.rulesTitle
-              caption: root.rulesCaption
+              spacing: Style.space(8)
+
+              PanelSectionHeader {
+                text: root.rulesTitle
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+              }
+
+              Item { Layout.fillWidth: true }
+
+              Text {
+                Layout.alignment: Qt.AlignVCenter
+                Layout.maximumWidth: parent.width * 0.6
+                visible: root.rulesCaption !== ""
+                text: root.rulesCaption
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.caption
+                elide: Text.ElideRight
+              }
+
+              PanelActionButton {
+                iconText: Model.PLUS_GLYPH
+                tooltipText: root.addRuleOpen ? "Close" : "Add a rule"
+                bordered: root.addRuleOpen
+                foreground: root.foreground
+                fontFamily: root.fontFamily
+                fontSize: Style.font.caption
+                Layout.alignment: Qt.AlignVCenter
+                onClicked: root.toggleAddRule()
+              }
+            }
+
+            // Opens under the header it belongs to, the way the profile list
+            // opens under the hero and the delete question under its row.
+            Column {
+              id: addRuleForm
+              visible: root.addRuleOpen
+              width: parent.width
+              spacing: Style.space(8)
+              topPadding: Style.space(2)
+
+              TextField {
+                id: addRuleHost
+                width: parent.width
+                placeholderText: "hostname, or *.example.com"
+                foreground: root.foreground
+                accent: Color.accent
+                onAccepted: root.submitAddRule()
+              }
+
+              RowLayout {
+                width: parent.width
+                spacing: Style.space(8)
+
+                ButtonGroup {
+                  options: [{ value: "block", label: "Block" }, { value: "bypass", label: "Bypass" }]
+                  value: root.addRuleAction
+                  foreground: root.foreground
+                  accent: Color.accent
+                  fontFamily: root.fontFamily
+                  fontSize: Style.font.caption
+                  onChanged: function(v) { root.addRuleAction = v }
+                }
+
+                Item { Layout.fillWidth: true }
+
+                Button {
+                  text: "Add"
+                  enabled: Model.validHostname(addRuleHost.text) && !controld.ruleBusy
+                  foreground: root.foreground
+                  accent: Color.accent
+                  fontFamily: root.fontFamily
+                  fontSize: Style.font.caption
+                  bordered: true
+                  onClicked: root.submitAddRule()
+                }
+              }
             }
 
             Column {
@@ -1327,35 +1435,6 @@ Panel {
 
   // A section header with an optional right-aligned caption. No icon: the
   // built-in panels label their sections with text alone.
-  component SectionTitle: Item {
-    id: sectionTitle
-    property string text: ""
-    property string caption: ""
-
-    implicitHeight: Math.max(label.implicitHeight, captionText.implicitHeight)
-
-    PanelSectionHeader {
-      id: label
-      anchors.left: parent.left
-      text: sectionTitle.text
-      foreground: root.foreground
-      fontFamily: root.fontFamily
-    }
-
-    Text {
-      id: captionText
-      anchors.right: parent.right
-      anchors.baseline: label.baseline
-      visible: sectionTitle.caption !== ""
-      text: sectionTitle.caption
-      color: root.dim
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.caption
-      elide: Text.ElideRight
-      width: Math.min(implicitWidth, parent.width * 0.6)
-      horizontalAlignment: Text.AlignRight
-    }
-  }
 
 
   component FolderRow: Item {
