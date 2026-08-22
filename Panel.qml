@@ -1758,7 +1758,8 @@ Panel {
           readonly property string atRest: activityRow.applied ? activityRow.intent.action : verdict
           // What clicking makes it: the override, or -- once it is applied --
           // back to the verdict that removing it restores.
-          readonly property string onReach: activityRow.applied ? verdict : activityRow.intent.action
+          readonly property string onReach: activityRow.applied
+            ? Model.oppositeAction(activityRow.intent.action) : activityRow.intent.action
           anchors.centerIn: parent
           // The glyph's own hover, not the row's: crossing a row on the way
           // somewhere else should not make every verdict it passes flicker

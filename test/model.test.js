@@ -9,7 +9,7 @@ const vm = require("node:vm")
 
 const src = fs.readFileSync(path.join(__dirname, "..", "Model.js"), "utf8")
 const M = {}
-vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, groupRules, flattenGroups, countRules, limitRuleRows, rulesCaption, activityFilterOptions, activityActions, activityHours, actionGlyph, mergeSticky, overrideAction, findRule, ruleIntent, ruleDetail, accountLine, matchEndpoint, controldPresent, controldLive, ctrldActive, resolverLabel, resolverUnknown, parseDevices, parseDevice, replaceDevice, deviceProtected, analyticsReadable, endpointLine, endpointState, ENDPOINT_PENDING, ENDPOINT_NONE, ENDPOINT_UNKNOWN, ENDPOINT_MACHINE, activeProfile, parseStats, formatCount, blockedShare, meterRatio, filterLabel, countryName, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
+vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, groupRules, flattenGroups, countRules, limitRuleRows, rulesCaption, activityFilterOptions, activityActions, activityHours, actionGlyph, mergeSticky, overrideAction, findRule, ruleIntent, oppositeAction, ruleDetail, accountLine, matchEndpoint, controldPresent, controldLive, ctrldActive, resolverLabel, resolverUnknown, parseDevices, parseDevice, replaceDevice, deviceProtected, analyticsReadable, endpointLine, endpointState, ENDPOINT_PENDING, ENDPOINT_NONE, ENDPOINT_UNKNOWN, ENDPOINT_MACHINE, activeProfile, parseStats, formatCount, blockedShare, meterRatio, filterLabel, countryName, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
 const m = M.__exports
 
 // vm-realm arrays fail strict deepEqual on prototype identity; compare by value.
@@ -170,8 +170,12 @@ test("ruleIntent offers the opposite verdict, then offers to undo it", () => {
   ])).rules
   // The rule this row would have written: pressing again removes it.
   same(m.ruleIntent(blocked, mine), { action: "bypass", verb: "delete", hostname: "ads.example" })
-  // A rule pointing the other way is flipped, not duplicated.
-  same(m.ruleIntent(bypassed, mine), { action: "block", verb: "update", hostname: "ads.example" })
+  // And once the bypass takes effect the host turns up bypassed. That row is
+  // the rule's own doing, so it offers to remove it rather than inverting it
+  // into a block, which would turn an allow into a deny in one click.
+  same(m.ruleIntent(bypassed, mine), { action: "bypass", verb: "delete", hostname: "ads.example" })
+  assert.equal(m.oppositeAction("bypass"), "block")
+  assert.equal(m.oppositeAction("block"), "bypass")
 
   // Matching is exact: a parent rule covers the host but is not its rule.
   const parent = m.parseRules(JSON.stringify([

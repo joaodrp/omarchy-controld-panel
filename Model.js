@@ -850,16 +850,24 @@ function findRule(rules, hostname) {
   return null
 }
 
+// The verdict a rule for this host would be reversed to. Removing a bypass
+// puts the host back among the blocked, which is why it was bypassed.
+function oppositeAction(action) {
+  return str(action) === "bypass" ? "block" : "bypass"
+}
+
 // What pressing the row's action does, given what the profile already says.
-// Applying the override a second time takes it away, so one key is both.
+// A host this profile has a rule for offers to have it taken away, whichever
+// way the log now reads: once a bypass takes effect the row turns up bypassed,
+// and inverting it there would quietly turn an allow into a deny. Everything
+// else offers the opposite of the verdict recorded.
 function ruleIntent(query, rules) {
   var action = overrideAction(query)
   if (action === "") return { action: "", verb: "", hostname: "" }
   var host = str(query.question)
   var rule = findRule(rules, host)
   if (rule === null) return { action: action, verb: "create", hostname: host }
-  if (rule.action === action) return { action: action, verb: "delete", hostname: host }
-  return { action: action, verb: "update", hostname: host }
+  return { action: rule.action, verb: "delete", hostname: host }
 }
 
 // Nerd Font glyphs, matching what the built-in panels use for their rows.
