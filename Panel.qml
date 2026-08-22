@@ -1743,7 +1743,10 @@ Panel {
       // this do", and the accent says the answer came from a rule you wrote
       // rather than from the log.
       Item {
-        Layout.preferredWidth: verdictGlyph.implicitWidth
+        // A fixed cell, not the glyph's own width: these glyphs do not all
+        // advance the same, so sizing to the one on show slid the hostname
+        // sideways every time the pointer changed it.
+        Layout.preferredWidth: Style.space(22)
         Layout.preferredHeight: verdictGlyph.implicitHeight
         Layout.alignment: Qt.AlignVCenter
 
