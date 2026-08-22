@@ -1791,8 +1791,11 @@ Panel {
               return Model.actionGlyph(atRest)
             return activityRow.applied ? Model.UNDO_GLYPH : Model.actionGlyph(activityRow.intent.action)
           }
-          color: activityRow.applied ? Color.accent
-            : (activityRow.glyphReached && activityRow.actionable ? root.foreground
+          // Accent only at rest, where it is the one thing telling your rule
+          // from an ordinary bypass. Under the pointer the glyph has already
+          // changed shape, and saying it twice just makes it louder.
+          color: activityRow.glyphReached && activityRow.actionable ? root.foreground
+            : (activityRow.applied ? Color.accent
               : (activityRow.blocked ? root.foreground : root.dim))
           opacity: activityRow.pending ? 0.4 : 1.0
           font.family: root.fontFamily
