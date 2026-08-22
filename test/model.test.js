@@ -9,7 +9,7 @@ const vm = require("node:vm")
 
 const src = fs.readFileSync(path.join(__dirname, "..", "Model.js"), "utf8")
 const M = {}
-vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, groupRules, flattenGroups, countRules, limitRuleRows, rulesCaption, activityFilterOptions, activityActions, activityHours, actionGlyph, mergeSticky, overrideAction, findRule, ruleIntent, oppositeAction, ruleDetail, accountLine, matchEndpoint, controldPresent, controldLive, ctrldActive, resolverLabel, resolverUnknown, parseDevices, parseDevice, replaceDevice, deviceProtected, analyticsReadable, endpointLine, endpointState, ENDPOINT_PENDING, ENDPOINT_NONE, ENDPOINT_UNKNOWN, ENDPOINT_MACHINE, activeProfile, parseStats, formatCount, blockedShare, meterRatio, filterLabel, countryName, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
+vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, groupRules, flattenGroups, countRules, limitRuleRows, rulesCaption, activityFilterOptions, activityActions, activityHours, actionGlyph, mergeSticky, overrideAction, findRule, ruleIntent, oppositeAction, dropOverridden, ruleDetail, accountLine, matchEndpoint, controldPresent, controldLive, ctrldActive, resolverLabel, resolverUnknown, parseDevices, parseDevice, replaceDevice, deviceProtected, analyticsReadable, endpointLine, endpointState, ENDPOINT_PENDING, ENDPOINT_NONE, ENDPOINT_UNKNOWN, ENDPOINT_MACHINE, activeProfile, parseStats, formatCount, blockedShare, meterRatio, filterLabel, countryName, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
 const m = M.__exports
 
 // vm-realm arrays fail strict deepEqual on prototype identity; compare by value.
@@ -129,6 +129,29 @@ test("limitRuleRows caps rules, not rows, and drops headers left with nothing", 
   // No cap.
   same(m.limitRuleRows(rows, 0).map(r => r.kind), rows.map(r => r.kind))
   same(m.limitRuleRows(null, 3), [])
+})
+
+// Allowing a host does not rewrite the lookups it was blocked on, so the
+// blocked view has to stop showing them itself.
+test("dropOverridden drops rows a current rule contradicts", () => {
+  const rows = [
+    { question: "a.example", action: 0 },   // blocked, bypass rule -> gone
+    { question: "b.example", action: 0 },   // blocked, block rule  -> stays
+    { question: "c.example", action: 1 },   // bypassed, bypass rule -> stays
+    { question: "d.example", action: 0 },   // blocked, no rule     -> stays
+    { question: "e.example", action: 0 }    // blocked, disabled rule -> stays
+  ]
+  const rules = m.parseRules(JSON.stringify([
+    { hostname: "a.example", action: "bypass", enabled: true, order: 1 },
+    { hostname: "b.example", action: "block", enabled: true, order: 2 },
+    { hostname: "c.example", action: "bypass", enabled: true, order: 3 },
+    { hostname: "e.example", action: "bypass", enabled: false, order: 4 }
+  ])).rules
+  same(m.dropOverridden(rows, rules).map(q => q.question),
+       ["b.example", "c.example", "d.example", "e.example"])
+  same(m.dropOverridden(rows, []).map(q => q.question),
+       ["a.example", "b.example", "c.example", "d.example", "e.example"])
+  same(m.dropOverridden(null, null), [])
 })
 
 // Bypassing a blocked host takes it out of the blocked view, which is where

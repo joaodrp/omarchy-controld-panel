@@ -803,6 +803,22 @@ function activityDetail(query) {
   return parts.join(" · ")
 }
 
+// Rows the profile has since overruled. The log is a record of lookups, so
+// allowing a host leaves every lookup it was blocked on standing -- and the
+// blocked view would go on listing a host that is no longer blocked, with the
+// glyph saying so. A row whose host now has a rule pointing the other way is
+// history the view is not for.
+function dropOverridden(queries, rules) {
+  var list = queries || []
+  var out = []
+  for (var i = 0; i < list.length; i++) {
+    var rule = findRule(rules, list[i].question)
+    if (rule !== null && rule.enabled && rule.action !== actionName(list[i].action)) continue
+    out.push(list[i])
+  }
+  return out
+}
+
 // A row acted on stays in the log even once the fetch stops returning it:
 // bypassing a host means it stops being blocked, so the very act of using the
 // blocked view removes what you just used it on, and with it the only way to

@@ -129,7 +129,11 @@ Item {
   // supposed to take it out of the blocked view, and a row that outstayed that
   // would be reporting a block that no longer happens.
   property var stickyActivity: []
-  readonly property var activityLog: Model.mergeSticky(activity, stickyActivity,
+  // Overruled rows go, then the held ones come back: the row you just acted on
+  // is exactly the one a rule now contradicts, and holding it is what gives you
+  // the moment to change your mind.
+  readonly property var activityLog: Model.mergeSticky(
+    Model.dropOverridden(activity, rules), stickyActivity,
     Model.activityActions(activityFilter))
   property var _ruleIntent: null
 
