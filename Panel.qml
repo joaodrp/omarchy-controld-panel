@@ -114,6 +114,10 @@ Panel {
     return ""
   }
   // Only rule rows take the cursor; folder headers are labels.
+  // Set from the list's own hover rather than from any row, so crossing the
+  // gap between two rows does not count as leaving.
+  onActivityHoveredChanged: controld.activityHeld = activityHovered
+  readonly property bool activityHovered: activityColumn && activityHover.hovered
   readonly property var cursorRules: cursorRuleList()
   readonly property bool headerHasCursor: cursorActive && cursorKey === "header" && controld.installed
   readonly property color iconColor: controld.ready && !unprotected ? foreground : dim
@@ -1134,6 +1138,14 @@ Panel {
               width: parent.width
               spacing: Style.space(6)
 
+              // The log repolls every fifteen seconds and new lookups arrive at
+              // the top, so every row below shifts down -- under whatever the
+              // pointer was aiming at. These rows write account rules, so that
+              // is not a flicker, it is a rule against the wrong host. While
+              // the pointer is in the list the rows it is choosing between hold
+              // still, and the newer page lands once it leaves.
+              HoverHandler { id: activityHover }
+
               Repeater {
                 model: root.visibleActivity
                 ActivityRow {
@@ -1712,6 +1724,11 @@ Panel {
     readonly property var intent: Model.ruleIntent(query, controld.rules)
     readonly property bool actionable: intent.verb !== "" && controld.activeProfile !== null
     readonly property bool applied: intent.verb === "delete"
+    readonly property string verdictName: Model.actionName(query ? query.action : -1)
+    // The rule contradicts what this lookup recorded, so the record is spent:
+    // struck through for the moment it is held, then gone. A row the rule
+    // agrees with is not spent -- the rule is why it reads as it does.
+    readonly property bool superseded: applied && intent.action !== verdictName
     readonly property bool pending: controld.ruleBusy && controld.pendingRuleHost === question
 
     implicitHeight: activityText.implicitHeight + Style.spacing.sm * 2
@@ -1752,7 +1769,7 @@ Panel {
 
         Text {
           id: verdictGlyph
-          readonly property string verdict: Model.actionName(activityRow.query ? activityRow.query.action : -1)
+          readonly property string verdict: activityRow.verdictName
           // Where the host stands: the override if this profile holds one,
           // else what the log recorded.
           readonly property string atRest: activityRow.applied ? activityRow.intent.action : verdict
@@ -1802,10 +1819,11 @@ Panel {
         Text {
           Layout.fillWidth: true
           text: activityRow.question
-          // A row this profile now overrides is done with: it stays for the
-          // undo, dimmed, rather than reading like something still to act on.
-          color: activityRow.applied ? root.dim
-            : (activityRow.hot ? root.foreground : Qt.darker(root.foreground, 1.25))
+          color: activityRow.hot ? root.foreground : Qt.darker(root.foreground, 1.25)
+          // Struck through, not dimmed: dimming reads as "less important",
+          // which a row you just acted on is not. A line through it says the
+          // verdict it records no longer stands.
+          font.strikeout: activityRow.superseded
           font.family: root.fontFamily
           font.pixelSize: Style.font.body
           elide: Text.ElideMiddle

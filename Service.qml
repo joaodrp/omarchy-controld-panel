@@ -80,6 +80,11 @@ Item {
   // blocked by default: that is the verdict worth reading, and the one a site
   // that will not load sends you looking for.
   property var activity: []
+  // Set while the pointer is inside the list. A page that lands then is kept
+  // back rather than dropped: the rows are choosing targets for a write, and
+  // moving them under the pointer is how the wrong host gets a rule.
+  property bool activityHeld: false
+  property var _pendingActivity: null
   property bool activityLoading: false
   property string activityError: ""
   property string activityFilter: "blocked"
@@ -347,6 +352,12 @@ Item {
     devicePauseProcess.running = true
   }
 
+  onActivityHeldChanged: {
+    if (activityHeld || _pendingActivity === null) return
+    activity = _pendingActivity
+    _pendingActivity = null
+  }
+
   onProtectionObservedChanged: {
     if (_pauseDesired >= 0 && protectionObserved === (_pauseDesired === 1)) {
       _pauseDesired = -1
@@ -468,6 +479,10 @@ Item {
   function commitRules() {
     if (_rulesPending || _foldersPending) return
     loadingRules = false
+    if (ruleBusy) {
+      ruleBusy = false
+      pendingRuleHost = ""
+    }
     if (_pendingRules) rules = _pendingRules
     if (_pendingFolders) folders = _pendingFolders
   }
@@ -569,9 +584,9 @@ Item {
     command: []
     stderr: StdioCollector { id: ruleStderr; waitForEnd: true }
     onExited: function(exitCode) {
-      root.ruleBusy = false
-      root.pendingRuleHost = ""
       if (exitCode !== 0) {
+        root.ruleBusy = false
+        root.pendingRuleHost = ""
         root.ruleError = Model.errorLine(Model.parseError(ruleStderr.text, exitCode),
           "Could not change this rule")
         return
@@ -579,8 +594,10 @@ Item {
       root.ruleError = ""
       root.holdActedRow(root._ruleIntent)
       root._ruleIntent = null
-      // The rules the panel draws come from the list, so the list is what has
-      // to agree before the row stops offering what it just did.
+      // Still busy: the write has landed but the row goes on looking unacted
+      // on until the rules it reads from agree, which is a second or two more.
+      // `commitRules` releases it, so the glyph stays marked for the whole
+      // operation rather than for the fast half of it.
       root.loadRules(root.activeProfile.id)
     }
   }
@@ -724,7 +741,12 @@ Item {
     id: stickyTimer
     interval: 10000
     repeat: false
-    onTriggered: root.stickyActivity = []
+    // Letting go of a held row moves every row beneath it, so that waits for
+    // the pointer as well.
+    onTriggered: {
+      if (root.activityHeld) { stickyTimer.restart(); return }
+      root.stickyActivity = []
+    }
   }
 
   Timer {
@@ -745,7 +767,8 @@ Item {
       if (root.reaped(activityProcess)) return
       var parsed = Model.parseActivity(activityStdout.text)
       if (parsed.ok) {
-        root.activity = parsed.queries
+        if (root.activityHeld) root._pendingActivity = parsed.queries
+        else root.activity = parsed.queries
         root.activityError = ""
         return
       }
