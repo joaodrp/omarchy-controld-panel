@@ -61,6 +61,12 @@ Panel {
   // its rows and nothing else: picking one is a write, so it should not be
   // possible to drift off it and press enter on something else.
   property bool profilePickerOpen: false
+  // Which row's glyph the pointer is on, by host rather than by row. Writing a
+  // rule rebuilds the list, and a rebuilt delegate's MouseArea reports no
+  // hover -- the pointer never entered it, it was created underneath one. Held
+  // here, the reach survives the rebuild it causes; held by index, it would
+  // follow the position rather than the host.
+  property string hoveredGlyphHost: ""
   // Only the keys that exist in the state being shown: a legend that lists
   // what does nothing here is worse than none.
   readonly property var legendKeys: {
@@ -1719,7 +1725,8 @@ Panel {
     // The glyph's own hover counts: without it, moving onto the control takes
     // hover off the row, and a control that reads the row's hover would put
     // itself away exactly as the pointer arrives.
-    readonly property bool hot: activityMouse.containsMouse || verdictMouse.containsMouse || hasCursor
+    readonly property bool glyphReached: question !== "" && root.hoveredGlyphHost === question
+    readonly property bool hot: activityMouse.containsMouse || glyphReached || hasCursor
     // The override this row offers, given what the profile already says.
     readonly property var intent: Model.ruleIntent(query, controld.rules)
     readonly property bool actionable: intent.verb !== "" && controld.activeProfile !== null
@@ -1773,18 +1780,19 @@ Panel {
           // Where the host stands: the override if this profile holds one,
           // else what the log recorded.
           readonly property string atRest: activityRow.applied ? activityRow.intent.action : verdict
-          // What clicking makes it: the override, or -- once it is applied --
-          // back to the verdict that removing it restores.
-          readonly property string onReach: activityRow.applied
-            ? Model.oppositeAction(activityRow.intent.action) : activityRow.intent.action
           anchors.centerIn: parent
           // The glyph's own hover, not the row's: crossing a row on the way
           // somewhere else should not make every verdict it passes flicker
-          // into its opposite.
-          text: Model.actionGlyph(activityRow.actionable && verdictMouse.containsMouse
-            ? onReach : atRest)
+          // into its opposite. On reach, a row with no rule shows the verdict
+          // the click writes -- exact, since the rule is what decides it --
+          // and a row with one shows undo, which is all the click promises.
+          text: {
+            if (!activityRow.actionable || !activityRow.glyphReached)
+              return Model.actionGlyph(atRest)
+            return activityRow.applied ? Model.UNDO_GLYPH : Model.actionGlyph(activityRow.intent.action)
+          }
           color: activityRow.applied ? Color.accent
-            : (verdictMouse.containsMouse && activityRow.actionable ? root.foreground
+            : (activityRow.glyphReached && activityRow.actionable ? root.foreground
               : (activityRow.blocked ? root.foreground : root.dim))
           opacity: activityRow.pending ? 0.4 : 1.0
           font.family: root.fontFamily
@@ -1796,14 +1804,21 @@ Panel {
         MouseArea {
           id: verdictMouse
           anchors.fill: parent
-          enabled: activityRow.actionable && !controld.ruleBusy
+          // Not disabled while a write is in flight: taking the mouse area
+          // away under the pointer drops its hover, and giving it back does
+          // not restore it until the pointer moves -- so the row it just acted
+          // on would go back to showing its resting glyph. `applyRuleIntent`
+          // turns a second click away on its own.
+          enabled: activityRow.actionable
           hoverEnabled: enabled
           cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+          onEntered: root.hoveredGlyphHost = activityRow.question
+          onExited: if (root.hoveredGlyphHost === activityRow.question) root.hoveredGlyphHost = ""
           onClicked: controld.applyRuleIntent(activityRow.intent)
         }
 
         PanelToolTip {
-          visible: verdictMouse.containsMouse
+          visible: activityRow.glyphReached
           text: activityRow.applied
             ? ("Remove this " + activityRow.intent.action + " rule")
             : (activityRow.intent.action + " this host")

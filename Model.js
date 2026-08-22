@@ -866,12 +866,6 @@ function findRule(rules, hostname) {
   return null
 }
 
-// The verdict a rule for this host would be reversed to. Removing a bypass
-// puts the host back among the blocked, which is why it was bypassed.
-function oppositeAction(action) {
-  return str(action) === "bypass" ? "block" : "bypass"
-}
-
 // What pressing the row's action does, given what the profile already says.
 // A host this profile has a rule for offers to have it taken away, whichever
 // way the log now reads: once a bypass takes effect the row turns up bypassed,
@@ -885,6 +879,12 @@ function ruleIntent(query, rules) {
   if (rule === null) return { action: action, verb: "create", hostname: host }
   return { action: rule.action, verb: "delete", hostname: host }
 }
+
+// What a row offers when the profile already holds a rule for it. Naming the
+// operation rather than drawing the verdict it would leave behind: removing a
+// rule hands the host back to whatever else decides, and the panel does not
+// know what that will say.
+var UNDO_GLYPH = "\udb81\udd4c"
 
 // Nerd Font glyphs, matching what the built-in panels use for their rows.
 function actionGlyph(action) {
