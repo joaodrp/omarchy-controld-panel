@@ -32,7 +32,10 @@ import controld_api as api
 PAGE_SIZE = 500
 MAX_ROWS = 20
 # How far back the log reaches. Recent is the whole point, and the panel polls
-# every fifteen seconds, so a wide window only buys rows nobody scrolls to.
+# every fifteen seconds, so a wide window only buys rows nobody scrolls to --
+# except for the verdicts that hardly ever happen, where a short window reports
+# their absence rather than their rarity. The caller says which it is asking
+# for.
 WINDOW_HOURS = 6
 
 
@@ -88,21 +91,24 @@ def main():
     parser.add_argument("--region", required=True, help="account region, as `cdctl auth status` reports it")
     parser.add_argument("--group", choices=("host", "lookup"), default="host",
                         help="fold rows by host anywhere in the page, or only where they neighbour")
-    parser.add_argument("--action", type=int, default=None,
-                        help="keep only this verdict: 0 blocked, 1 bypassed, 2 redirected. "
-                             "Omit for every verdict")
+    parser.add_argument("--hours", type=int, default=WINDOW_HOURS,
+                        help="how far back to look (default %d)" % WINDOW_HOURS)
+    parser.add_argument("--action", type=int, action="append", dest="actions",
+                        help="keep only this verdict: 0 blocked, 1 bypassed, 2 redirected, "
+                             "3 spoofed. Repeatable. Omit for every verdict")
     args = parser.parse_args()
 
     try:
         token = api.read_token()
         # Ask for more than we keep: collapsing several raw rows into one means
         # a page of 100 can be worth far fewer entries.
-        params = dict(api.window(WINDOW_HOURS, args.endpoint), pageSize=PAGE_SIZE)
+        params = dict(api.window(args.hours, args.endpoint), pageSize=PAGE_SIZE)
         # Narrowing server side is what keeps the list full: a page filtered to
         # blocked is a page of blocked, not the handful that survive a client
-        # side filter.
-        if args.action is not None:
-            params["action"] = args.action
+        # side filter. `action[]` takes one verdict or several, so a chip
+        # covering two of them is still one request.
+        if args.actions:
+            params["action[]"] = args.actions
         body = api.get(api.host_for(args.region), "/v2/activity-log", params, token)
     except RuntimeError as exc:
         json.dump({"ok": False, "error": str(exc)}, sys.stdout)

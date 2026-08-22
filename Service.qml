@@ -233,8 +233,11 @@ Item {
     var args = ["python3", scriptPath("scripts/activity.py"),
       "--endpoint", endpoint.id,
       "--region", region]
-    var action = Model.activityActionArg(activityFilter)
-    if (action !== "") args = args.concat(["--action", action])
+    // One `--action` per verdict the chip asks for; the helper repeats them as
+    // `action[]` so the page comes back already narrowed.
+    args = args.concat(["--hours", String(Model.activityHours(activityFilter))])
+    var actions = Model.activityActions(activityFilter)
+    for (var i = 0; i < actions.length; i++) args = args.concat(["--action", String(actions[i])])
     args = args.concat(["--group", activityGrouped ? "host" : "lookup"])
     activityProcess.command = args
     activityProcess.running = true

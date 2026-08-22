@@ -101,6 +101,13 @@ Panel {
   }
   // The window chips already name the range, so this says only what they
   // cannot.
+  // Each chip says nothing happened in its own words, since "no queries yet"
+  // is wrong on a tab that is simply the rare one.
+  readonly property string emptyActivityLine: {
+    if (controld.activityFilter === "bypassed") return "nothing bypassed in this window"
+    if (controld.activityFilter === "others") return "no redirects or spoofs in this window"
+    return "nothing blocked in this window"
+  }
   readonly property string statsCaption: {
     if (!controld.statsAvailable) return "analytics off for this endpoint"
     if (controld.statsLoading) return "loading…"
@@ -1065,6 +1072,26 @@ Panel {
 
               Item { Layout.fillWidth: true }
 
+              ButtonGroup {
+                options: Model.activityFilterOptions()
+                value: controld.activityFilter
+                foreground: root.foreground
+                accent: Color.accent
+                fontFamily: root.fontFamily
+                fontSize: Style.font.caption
+                onChanged: function(v) { controld.setActivityFilter(v) }
+              }
+            }
+
+            // One chip per verdict fills the title row, as it does under
+            // STATISTICS and BREAKDOWN, so the switch takes a line of its own
+            // rather than pushing the last chip off the panel.
+            RowLayout {
+              width: parent.width
+              spacing: Style.space(8)
+
+              Item { Layout.fillWidth: true }
+
               Text {
                 Layout.alignment: Qt.AlignVCenter
                 text: "Grouped"
@@ -1086,19 +1113,6 @@ Panel {
                   fontFamily: root.fontFamily
                 }
               }
-
-              ButtonGroup {
-                // The switch and the chips govern different things, so they sit
-                // further apart than the chips do from each other.
-                Layout.leftMargin: Style.space(6)
-                options: Model.activityFilterOptions()
-                value: controld.activityFilter
-                foreground: root.foreground
-                accent: Color.accent
-                fontFamily: root.fontFamily
-                fontSize: Style.font.caption
-                onChanged: function(v) { controld.setActivityFilter(v) }
-              }
             }
 
             Text {
@@ -1108,9 +1122,7 @@ Panel {
               // reader just did, rather than something the window reports.
               text: controld.ruleError !== "" ? controld.ruleError
                 : (controld.activityError !== "" ? controld.activityError
-                  : (controld.activityLog.length === 0
-                    ? (controld.activityFilter === "blocked" ? "nothing blocked in this window" : "no queries yet")
-                    : ""))
+                  : (controld.activityLog.length === 0 ? root.emptyActivityLine : ""))
               color: controld.ruleError !== "" || controld.activityError !== "" ? root.urgent : root.dim
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption

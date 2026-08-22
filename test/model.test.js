@@ -9,7 +9,7 @@ const vm = require("node:vm")
 
 const src = fs.readFileSync(path.join(__dirname, "..", "Model.js"), "utf8")
 const M = {}
-vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, groupRules, flattenGroups, countRules, limitRuleRows, rulesCaption, activityFilterOptions, activityActionArg, actionGlyph, mergeSticky, overrideAction, findRule, ruleIntent, ruleDetail, accountLine, matchEndpoint, controldPresent, controldLive, ctrldActive, resolverLabel, resolverUnknown, parseDevices, parseDevice, replaceDevice, deviceProtected, analyticsReadable, endpointLine, endpointState, ENDPOINT_PENDING, ENDPOINT_NONE, ENDPOINT_UNKNOWN, ENDPOINT_MACHINE, activeProfile, parseStats, formatCount, blockedShare, meterRatio, filterLabel, countryName, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
+vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, groupRules, flattenGroups, countRules, limitRuleRows, rulesCaption, activityFilterOptions, activityActions, activityHours, actionGlyph, mergeSticky, overrideAction, findRule, ruleIntent, ruleDetail, accountLine, matchEndpoint, controldPresent, controldLive, ctrldActive, resolverLabel, resolverUnknown, parseDevices, parseDevice, replaceDevice, deviceProtected, analyticsReadable, endpointLine, endpointState, ENDPOINT_PENDING, ENDPOINT_NONE, ENDPOINT_UNKNOWN, ENDPOINT_MACHINE, activeProfile, parseStats, formatCount, blockedShare, meterRatio, filterLabel, countryName, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
 const m = M.__exports
 
 // vm-realm arrays fail strict deepEqual on prototype identity; compare by value.
@@ -178,13 +178,20 @@ test("ruleIntent offers the opposite verdict, then offers to undo it", () => {
   same(m.ruleIntent({ action: 2, question: "x" }, none), { action: "", verb: "", hostname: "" })
 })
 
-test("activityActionArg narrows the log server side, or does not", () => {
-  same(m.activityFilterOptions().map(o => o.value), ["blocked", "all"])
-  // Anything but "all" narrows, so an unset or junk filter still lands on the
-  // verdict the section is for rather than showing everything.
-  assert.equal(m.activityActionArg("blocked"), "0")
-  assert.equal(m.activityActionArg(""), "0")
-  assert.equal(m.activityActionArg("all"), "")
+// One chip per verdict, every row under exactly one of them.
+test("activityActions narrows each chip server side", () => {
+  same(m.activityFilterOptions().map(o => o.value), ["blocked", "bypassed", "others"])
+  same(m.activityActions("blocked"), [0])
+  same(m.activityActions("bypassed"), [1])
+  // The two rarities share a chip because either alone is almost never there.
+  same(m.activityActions("others"), [2, 3])
+  // An unset or junk filter lands on the verdict the section is for.
+  same(m.activityActions(""), [0])
+  same(m.activityActions("nonsense"), [0])
+  // The rare chip reaches further, or it reports absence where there was rarity.
+  assert.equal(m.activityHours("others"), 24)
+  assert.equal(m.activityHours("blocked"), 6)
+  assert.equal(m.activityHours("bypassed"), 6)
 })
 
 test("rulesCaption says what is hidden only when something is", () => {

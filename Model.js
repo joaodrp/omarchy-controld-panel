@@ -572,6 +572,7 @@ function parseSeries(list) {
 var ACTION_BLOCKED = 0
 var ACTION_BYPASSED = 1
 var ACTION_REDIRECTED = 2
+var ACTION_SPOOFED = 3
 
 function actionOptions() {
   return [
@@ -581,22 +582,37 @@ function actionOptions() {
   ]
 }
 
-// What the activity log is filtered to. Blocked is the default because it is
-// the verdict worth acting on: a page that is all blocked is the list you came
-// to read when a site did not load. Bypassed is left out on purpose, since it
-// is most of the log and says nothing happened; "All" still reaches it.
+// What the activity log is filtered to: one chip per verdict, and every row
+// under exactly one of them. Blocked is the default, being the verdict you
+// come to the log for when a site will not load. Bypassed earns its own chip
+// now that its rows are actionable -- the glyph there blocks the host -- and
+// "Others" is where a redirect or a spoof is visible at all: among a page of
+// blocked and bypassed it would never be found. Empty most days, which is
+// itself the answer.
 function activityFilterOptions() {
   return [
     { value: "blocked", label: "Blocked" },
-    { value: "all", label: "All" }
+    { value: "bypassed", label: "Bypassed" },
+    { value: "others", label: "Others" }
   ]
 }
 
-// The `--action` the log is fetched with. "all" sends none, so the API returns
-// every verdict; anything else narrows it server side, which is why filtering
-// costs nothing and still fills the list.
-function activityActionArg(filter) {
-  return str(filter) === "all" ? "" : String(ACTION_BLOCKED)
+// How far back a chip looks. A redirect or a spoof may be the only one all
+// day, so the rare chip reaches further: at six hours it would report that
+// none happened when one did, which is a different claim.
+function activityHours(filter) {
+  return str(filter) === "others" ? 24 : 6
+}
+
+// The verdicts a chip asks for. The API takes `action[]` repeatedly, so even
+// "Others" narrows server side: a page filtered to a verdict is a page of it,
+// not the handful that survive a client-side sieve.
+function activityActions(filter) {
+  switch (str(filter)) {
+  case "bypassed": return [ACTION_BYPASSED]
+  case "others": return [ACTION_REDIRECTED, ACTION_SPOOFED]
+  default: return [ACTION_BLOCKED]
+  }
 }
 
 // The windows the dashboard offers, minus Real-Time and Custom.
