@@ -2048,8 +2048,8 @@ Panel {
 
       // Always drawn, never revealed on hover: a control that appears under
       // the pointer is a control that can move out from under it. Quiet until
-      // reached, and urgent-tinted there, since this is the one action in the
-      // panel that cannot be taken back.
+      // reached, and no louder there -- the confirmation is what guards this,
+      // and a red icon on every row makes the list look alarming at rest.
       PanelActionButton {
         id: ruleDelete
         iconText: Model.TRASH_GLYPH
@@ -2057,7 +2057,6 @@ Panel {
         // button, and its tooltip would sit over the answer it is asking for.
         tooltipText: root.pendingDeleteRule ? "" : "Delete this rule"
         foreground: root.foreground
-        hoverColor: root.urgent
         fontFamily: root.fontFamily
         fontSize: Style.font.caption
         opacity: ruleRow.hasCursor || ruleDeleteHovered ? 1.0 : 0.35
