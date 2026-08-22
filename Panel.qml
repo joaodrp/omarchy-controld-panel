@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import QtQuick.Shapes
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -586,6 +587,19 @@ Panel {
 
       Flickable {
         id: panelFlick
+
+        // Blurred out from under the confirmation, and only there: a write
+        // takes a second or two and what you are watching in it is the row
+        // changing, so blurring for that would hide the answer. A modal is the
+        // one moment the rest of the panel should be neither readable nor
+        // reachable, which is what the dialog's own scrim is already saying.
+        layer.enabled: root.pendingDeleteRule !== null
+        layer.effect: MultiEffect {
+          blurEnabled: true
+          blur: 1.0
+          blurMax: 24
+          autoPaddingEnabled: false
+        }
         anchors.left: parent.left
         anchors.right: parent.right
         // Reach into the card's padding so the scrollbar, which overlays the
