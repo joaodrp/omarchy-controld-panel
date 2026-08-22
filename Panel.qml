@@ -831,7 +831,12 @@ Panel {
                   id: profileLabel
                   anchors.left: parent.left
                   anchors.leftMargin: Style.space(8)
+                  // Bounded by whatever is to its right, so a profile named at
+                  // length is cut rather than drawn through the panel edge.
+                  anchors.right: profileStatus.visible ? profileStatus.left : parent.right
+                  anchors.rightMargin: Style.space(8)
                   anchors.verticalCenter: parent.verticalCenter
+                  elide: Text.ElideRight
                   text: profileRow.modelData.name
                   color: root.foreground
                   font.family: root.fontFamily
@@ -840,6 +845,7 @@ Panel {
                 }
 
                 Text {
+                  id: profileStatus
                   anchors.right: parent.right
                   anchors.rightMargin: Style.space(8)
                   anchors.verticalCenter: parent.verticalCenter
@@ -1385,6 +1391,11 @@ Panel {
     color: root.foreground
     font.family: root.fontFamily
     font.pixelSize: Style.font.bodySmall
+    // Deliberately not elided. Every value here comes from a closed set -- an
+    // endpoint id, a protocol name, a resolver from `RESOLVERS`, an action --
+    // and letting the text keep its own width is what makes the grid lend the
+    // long ones room from the labels. Eliding cut `systemd-resolved`, which
+    // fits only because of that lending.
     property bool copyable: false
     // Set instead of `copyable` when the value is worth acting on rather than
     // taking: the glyph and the click follow.
