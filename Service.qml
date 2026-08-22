@@ -345,6 +345,18 @@ Item {
     ruleProcess.running = true
   }
 
+  // Remove a rule outright. Behind a confirmation in the panel, because unlike
+  // switching one off this cannot be undone from anything the panel shows.
+  function deleteRule(rule) {
+    if (!activeProfile || ruleBusy || !rule) return
+    ruleBusy = true
+    ruleError = ""
+    pendingRuleHost = rule.hostname
+    _ruleIntent = null
+    ruleProcess.command = cdctl(["-y", "rule", "delete", rule.hostname, "--profile", activeProfile.id])
+    ruleProcess.running = true
+  }
+
   function setProtection(on) {
     if (!canPause || pauseBusy) return
     _pauseDesired = on ? 1 : 0

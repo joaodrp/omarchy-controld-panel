@@ -886,10 +886,13 @@ function ruleIntent(query, rules) {
 // know what that will say.
 var UNDO_GLYPH = "\udb81\udd4c"
 
-// A rule's own row offers to switch it off, or back on. Toggling does not
-// change what the rule does, so there is no verdict to preview: the glyph
-// names the operation instead, and the tooltip says which way it runs.
-var POWER_GLYPH = "\udb80\udc25"
+// A rule's own row offers to switch it off, or back on, and to delete it.
+// Toggling does not change what the rule does, so there is no verdict to
+// preview: the glyph names the operation, and says which way it runs -- pause
+// on a rule that is running, play on one that is not.
+var PAUSE_GLYPH = "\udb80\udfe4"
+var PLAY_GLYPH = "\udb81\udc0a"
+var TRASH_GLYPH = "\udb82\ude7a"
 
 // Nerd Font glyphs, matching what the built-in panels use for their rows.
 function actionGlyph(action) {

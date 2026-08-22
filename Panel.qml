@@ -282,6 +282,15 @@ Panel {
     controld.applyRuleIntent(intent)
   }
 
+  // Which rule the confirmation is about. Held rather than passed, because the
+  // dialog outlives the row: the list can rebuild while it is open.
+  property var pendingDeleteRule: null
+
+  function askDeleteRule(rule) {
+    if (!rule || controld.ruleBusy) return
+    pendingDeleteRule = rule
+  }
+
   // `x` switches the rule under the cursor off, or back on. Rules only: the
   // key names an operation that no other row has.
   function toggleRuleKey() {
@@ -531,17 +540,32 @@ Panel {
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
+      // While the confirmation is up it owns the keyboard: the panel's own
+      // cursor must not move under a dialog asking about the row it left.
       onMoveRequested: function(dx, dy) {
+        if (root.pendingDeleteRule) {
+          deleteConfirm.selectedIndex = deleteConfirm.selectedIndex === 0 ? 1 : 0
+          return
+        }
         if (!root.cursorActive) { root.cursorActive = true; return }
         root.moveCursor(dx, dy)
       }
-      onActivateRequested: if (root.cursorActive) root.activateCursor()
+      onActivateRequested: {
+        if (root.pendingDeleteRule) {
+          if (deleteConfirm.selectedIndex === 0) deleteConfirm.canceled()
+          else deleteConfirm.confirmed()
+          return
+        }
+        if (root.cursorActive) root.activateCursor()
+      }
       onCloseRequested: {
-        if (root.profilePickerOpen) root.closeProfilePicker()
+        if (root.pendingDeleteRule) deleteConfirm.canceled()
+        else if (root.profilePickerOpen) root.closeProfilePicker()
         else root.close()
       }
       onTabRequested: function(direction) { root.switchPanel(direction) }
       onTextKey: function(t) {
+        if (root.pendingDeleteRule) return
         if (t === "s") root.jumpTo(statsSection)
         else if (t === "a") root.jumpTo(activitySection)
         else if (t === "r") root.jumpTo(rulesSection)
@@ -1247,6 +1271,27 @@ Panel {
       }
 
       // Keys are invisible by nature, so ? reveals them without spending
+      // Over everything the panel draws, since it is asking about one row and
+      // the rest must not be reachable while it does. Declared last so it sits
+      // above the list, its scrim taking the clicks the rows would otherwise.
+      ConfirmDialog {
+        id: deleteConfirm
+        anchors.fill: parent
+        opened: root.pendingDeleteRule !== null
+        message: root.pendingDeleteRule
+          ? "Delete the rule for " + root.pendingDeleteRule.hostname + "?"
+          : ""
+        confirmText: "Delete"
+        cancelText: "Keep"
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        onCanceled: root.pendingDeleteRule = null
+        onConfirmed: {
+          controld.deleteRule(root.pendingDeleteRule)
+          root.pendingDeleteRule = null
+        }
+      }
+
       // room on a legend nobody asked for.
       Column {
         id: legend
@@ -1907,6 +1952,9 @@ Panel {
     readonly property string hostname: rule ? rule.hostname : ""
     readonly property bool glyphReached: hostname !== "" && root.hoveredRuleHost === hostname
     readonly property bool pending: controld.ruleBusy && controld.pendingRuleHost === hostname
+    // Reported by the delete button itself: the row's own hover goes out from
+    // under it the moment the pointer arrives on the button.
+    property bool ruleDeleteHovered: false
 
     hasCursor: root.cursorActive && root.cursorKey === "rule:" + rowIndex
     foreground: root.foreground
@@ -1943,7 +1991,10 @@ Panel {
         Text {
           id: ruleGlyph
           anchors.centerIn: parent
-          text: ruleRow.glyphReached ? Model.POWER_GLYPH
+          // Pause on a rule that is running, play on one that is not: the
+          // glyph says which way the click goes, not merely that it toggles.
+          text: ruleRow.glyphReached
+            ? (ruleRow.ruleEnabled ? Model.PAUSE_GLYPH : Model.PLAY_GLYPH)
             : Model.actionGlyph(ruleRow.rule ? ruleRow.rule.action : "")
           color: ruleRow.ruleEnabled || ruleRow.glyphReached ? root.foreground : root.dim
           font.family: root.fontFamily
@@ -1963,7 +2014,7 @@ Panel {
 
         PanelToolTip {
           visible: ruleRow.glyphReached
-          text: ruleRow.ruleEnabled ? "Switch this rule off" : "Switch this rule on"
+          text: ruleRow.ruleEnabled ? "Pause this rule" : "Resume this rule"
           fontFamily: root.fontFamily
         }
       }
@@ -1995,6 +2046,25 @@ Panel {
         }
       }
 
+      // Always drawn, never revealed on hover: a control that appears under
+      // the pointer is a control that can move out from under it. Quiet until
+      // reached, and urgent-tinted there, since this is the one action in the
+      // panel that cannot be taken back.
+      PanelActionButton {
+        id: ruleDelete
+        iconText: Model.TRASH_GLYPH
+        // Silenced while the confirmation is up: the pointer is still on this
+        // button, and its tooltip would sit over the answer it is asking for.
+        tooltipText: root.pendingDeleteRule ? "" : "Delete this rule"
+        foreground: root.foreground
+        hoverColor: root.urgent
+        fontFamily: root.fontFamily
+        fontSize: Style.font.caption
+        opacity: ruleRow.hasCursor || ruleDeleteHovered ? 1.0 : 0.35
+        Layout.alignment: Qt.AlignVCenter
+        onHovered: function(on) { ruleRow.ruleDeleteHovered = on }
+        onClicked: root.askDeleteRule(ruleRow.rule)
+      }
     }
 
     PanelToolTip {
