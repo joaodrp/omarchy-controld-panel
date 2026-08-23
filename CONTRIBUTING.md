@@ -43,6 +43,7 @@ qs log -p "$OMARCHY_PATH/shell" --tail 60   # QML errors land here, and only wit
 node test/model.test.js
 omarchy plugin validate "$PWD"
 python3 -m py_compile scripts/*.py
+python3 .github/check-manifest.py
 
 # QML lint needs an import dir holding a `qs` symlink to the shell
 mkdir -p /tmp/qslint && ln -sfn "$OMARCHY_PATH/shell" /tmp/qslint/qs
@@ -57,6 +58,9 @@ before and after a change rather than aiming for silence.
 
 A test must fail before it passes: when fixing a bug, write the failing test first and confirm it
 fails against the unfixed code.
+
+CI runs everything above except `omarchy plugin validate` and the linter, which need Omarchy and
+Quickshell on the machine. Run those two yourself.
 
 ## Conventions
 
