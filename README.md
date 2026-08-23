@@ -14,15 +14,15 @@ client for Control D.
 
 ## Highlights
 
-- 🚫 A site will not load? Find it in the log, press `b`, and it resolves. Press again to put the block back.
+- 🚫 A site will not load? Find it in the log, press `b`, and it resolves.
 - 🔀 Switch which profile your endpoint enforces without leaving the bar.
-- ✍️ Add, switch off and delete custom rules in place, with deletes behind a confirmation.
-- ⏸️ Stand Control D down and bring it back from the hero switch: your own command when you have one, the account when you do not.
-- 🔎 Finds your endpoint by reading the resolver actually in use, so it reports what resolves rather than what the account believes. `ctrld`, `stubby`, `dnscrypt-proxy`, `unbound`, `dnsmasq`, NetworkManager, systemd-resolved, or a bare IPv6 address.
-- 📊 Queries over time, the blocked share, and the domains and filters doing the blocking, for the window you pick.
+- ✍️ Add, switch off and delete custom rules in place.
+- ⏸️ Stand Control D down and bring it back from the hero switch.
+- 🔎 Identifies your endpoint from the resolver in use, not from the account: `ctrld`, `stubby`, `dnscrypt-proxy`, `unbound`, `dnsmasq`, NetworkManager, systemd-resolved, or a bare IPv6 address.
+- 📊 Queries over time, the blocked share, and the domains and filters doing the blocking.
 - ⌨️ Keyboard first: every actionable row has a key, and `?` shows them all.
-- 🤖 Stuck? `A` hands the panel to Omarchy's agent, pointed at `cdctl` and this plugin, so it can read your setup and fix it.
-- 🔒 Every write goes through `cdctl`, which reads the account back to confirm it landed. Your API token never touches a command line.
+- 🤖 Stuck? `A` hands the panel to Omarchy's agent to read your setup and fix it.
+- 🔒 Writes go through `cdctl` and are read back to confirm. Your API token never touches a command line.
 
 ## Install
 
