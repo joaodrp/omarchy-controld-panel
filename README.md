@@ -4,9 +4,13 @@ See what [Control D](https://controld.com) is doing on **your machine**, from th
 endpoint you resolve through, the profile it enforces, and that profile's statistics, recent
 lookups and rules. Block or bypass a host straight from the log.
 
-Backed by [`cdctl`](https://github.com/joaodrp/controld-cli), the Control D CLI.
+Backed by [`cdctl`](https://github.com/joaodrp/controld-cli), an independent command-line
+client for Control D.
 
 <img src="preview.png" alt="The panel open in the Omarchy bar, showing the endpoint, its profile, and blocked-query statistics" width="380">
+
+The endpoint ID in these screenshots is a placeholder. A real one routes DNS, so publishing it
+would let anyone resolve through that endpoint.
 
 ## Install
 
@@ -17,9 +21,10 @@ omarchy plugin add https://github.com/joaodrp/omarchy-controld-panel.git --enabl
 Needs `cdctl` installed and signed in (`cdctl auth login --token-stdin`). Full
 [requirements](#requirements) below.
 
+Move it to another section of the bar:
+
 ```sh
-omarchy bar move io.github.joaodrp.controld --section right   # move it
-omarchy plugin remove io.github.joaodrp.controld              # uninstall
+omarchy bar move io.github.joaodrp.controld --section right
 ```
 
 ## What it shows
@@ -46,7 +51,11 @@ reading the account back:
 | The profile your endpoint enforces | Hero caret |
 | Your device's on/off state | Hero switch |
 
+<img src="docs/images/profiles.png" alt="The profile picker open under the hero, with the enforced profile marked in force" width="380">
+
 ### Statistics
+
+<img src="docs/images/statistics.png" alt="The statistics section: queries over time, totals, and top domains and filters" width="380">
 
 Pick the window (1h/24h/7d/30d) and the verdict (blocked/bypassed/redirected); destinations switch
 between networks and countries, spelled out from ISO 3166-1. The verdict governs domains and
@@ -76,6 +85,8 @@ behind an inline confirmation, and `y` copies the hostname.
 
 ### Pause switch
 
+<img src="docs/images/hero.png" alt="The hero, with the endpoint, the enforced profile and the pause switch" width="380">
+
 The hero switch stands Control D down and brings it back.
 
 - With `pauseCommand` and `resumeCommand` set, the panel runs those; empty, it pauses your device
@@ -89,6 +100,10 @@ The hero switch stands Control D down and brings it back.
 - Paused, the panel says so instead of reporting a missing resolver.
 
 ## Keyboard shortcuts
+
+Press `?` in the panel for the same list:
+
+<img src="docs/images/legend.png" alt="The in-panel key legend" width="380">
 
 | Key | Does |
 | --- | --- |
@@ -147,7 +162,8 @@ resolved.
 
 ## Requirements
 
-- `cdctl`, installed and authenticated. The panel looks on `PATH`, then in `~/.cargo/bin`,
+- [`cdctl`](https://github.com/joaodrp/controld-cli), installed and authenticated. The panel
+  looks on `PATH`, then in `~/.cargo/bin`,
   `~/.local/bin`, `/usr/local/bin`, `/usr/bin`
 - `wl-copy` for clipboard actions
 - `python3` for the analytics helpers, standard library only
@@ -171,10 +187,17 @@ omarchy-shell io.github.joaodrp.controld status    # account line
 Bug reports and pull requests welcome -- see [CONTRIBUTING.md](CONTRIBUTING.md) to get set up, and
 [docs/how-it-works.md](docs/how-it-works.md) for how the pieces fit.
 
+## Remove
+
+```sh
+omarchy plugin remove io.github.joaodrp.controld
+```
+
 ## Icons
 
-The bar and hero mark is the Control D logo, drawn natively from its paths in `ControldIcon.qml`.
-The artwork belongs to Control D; this project is not affiliated with them.
+The bar and hero mark is the Control D logo, and the artwork belongs to Control D.
+
+This is an independent project. It is not affiliated with, endorsed by, or supported by Control D.
 
 ## License
 
