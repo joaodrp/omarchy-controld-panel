@@ -146,7 +146,9 @@ function parseRules(raw) {
   var out = []
   for (var i = 0; i < parsed.value.length; i++) {
     var r = parsed.value[i]
-    if (!r || typeof r !== "object" || str(r.hostname) === "") continue
+    // Without an action there is nothing to draw and nothing to undo, and
+    // `ruleIntent` would read the gap as an offer to delete.
+    if (!r || typeof r !== "object" || str(r.hostname) === "" || str(r.action) === "") continue
     out.push(normalizeRule(r))
   }
   out.sort(function(a, b) { return a.order - b.order })
@@ -443,6 +445,10 @@ function parseDevice(raw) {
     return { ok: false, device: null, error: "not a device" }
   var device = normalizeDevice(parsed.value)
   if (device.id === "") return { ok: false, device: null, error: "device has no id" }
+  // A write echo carrying an id and nothing else means cdctl's shape moved.
+  // `deviceProtected` reads an unknown status as protected, so trusting it
+  // would report the opposite of the write that just landed.
+  if (device.status === "") return { ok: false, device: null, error: "device has no status" }
   return { ok: true, device: device, error: "" }
 }
 

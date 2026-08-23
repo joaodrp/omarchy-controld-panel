@@ -414,12 +414,26 @@ test("parseDevice and replaceDevice fold a verified write back into the list", (
   const next = m.replaceDevice(devices, written.device)
   same(next.map(d => d.status), ["active", "soft-disabled"])
   // An id that is not in the list changes nothing rather than appending.
-  same(m.replaceDevice(devices, m.parseDevice('{"id":"zz"}').device).map(d => d.id), ["a", "b"])
+  const absent = m.parseDevice('{"id":"zz","status":"active"}').device
+  same(m.replaceDevice(devices, absent).map(d => d.id), ["a", "b"])
   same(m.replaceDevice(devices, null).map(d => d.id), ["a", "b"])
   // A list is a list, not a device.
   assert.equal(m.parseDevice("[]").ok, false)
   assert.equal(m.parseDevice('{"name":"no id"}').ok, false)
   assert.equal(m.parseDevice("nope").ok, false)
+  // An echo carrying an id and nothing else is cdctl's shape moving, not a
+  // device. deviceProtected reads an unknown status as protected, so taking
+  // it would report the opposite of the write that just landed.
+  assert.equal(m.parseDevice('{"id":"b"}').ok, false)
+  assert.equal(m.parseDevice('{"id":"b","status":"soft-disabled"}').ok, true)
+})
+
+test("a rule with no action is not a rule", () => {
+  // ruleIntent reads any matching rule as an offer to remove it, and the
+  // delete command never looks at the action, so an actionless row would
+  // turn a click into a deletion.
+  same(m.parseRules('[{"hostname":"a.example","enabled":true,"order":1}]').rules, [])
+  assert.equal(m.parseRules('[{"hostname":"a.example","action":"block","enabled":true,"order":1}]').rules.length, 1)
 })
 
 // Only the two disabled states are a pause. "pending" is a device that has
