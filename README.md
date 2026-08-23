@@ -69,6 +69,8 @@ nothing takes those as input.
 
 ### Rules
 
+<img src="docs/images/rules.png" alt="The rules list, showing a spoof rule, bypass rules, and a disabled rule struck through" width="380">
+
 `Add` creates a rule, `x` switches the one under the cursor off without deleting it, delete sits
 behind an inline confirmation, and `y` copies the hostname.
 
