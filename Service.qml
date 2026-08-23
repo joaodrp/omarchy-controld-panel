@@ -103,8 +103,6 @@ Item {
   readonly property bool statsEnabled: setting("showStatistics", true) !== false
   readonly property bool activityEnabled: setting("showActivity", true) !== false
   readonly property int activityRows: intSetting("activityRows", 10, 3, 20)
-  // Rows per statistics list (domains, filters, destinations), and the cap on
-  // the rules list. Every list in the panel is a top-N; these are the Ns.
   // Standing Control D down has two answers, and the host's wins. A machine
   // with its own way of doing it says so through these settings and the panel
   // runs that; anything else goes through the account, which needs no setup
@@ -166,6 +164,8 @@ Item {
   property int _pauseSettles: 0
   readonly property bool protectionActive: _pauseDesired >= 0 ? _pauseDesired === 1 : protectionObserved
 
+  // Rows per statistics list (domains, filters, destinations), and the cap on
+  // the rules list. Every list in the panel is a top-N; these are the Ns.
   readonly property int statsRows: intSetting("statsRows", 5, 3, 20)
   readonly property int ruleLimit: intSetting("ruleRows", 15, 5, 100)
   readonly property bool busy: lookupProcess.running || authProcess.running || profilesProcess.running || rulesProcess.running || foldersProcess.running || resolverProcess.running || devicesProcess.running

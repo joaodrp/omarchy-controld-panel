@@ -111,8 +111,6 @@ Panel {
     if (a === 2) return "redirected"
     return "blocked"
   }
-  // The window chips already name the range, so this says only what they
-  // cannot.
   // Each chip says nothing happened in its own words, since "no queries yet"
   // is wrong on a tab that is simply the rare one.
   readonly property string emptyActivityLine: {
@@ -120,16 +118,18 @@ Panel {
     if (controld.activityFilter === "others") return "no redirects or spoofs in this window"
     return "nothing blocked in this window"
   }
+  // The window chips already name the range, so this says only what they
+  // cannot.
   readonly property string statsCaption: {
     if (!controld.statsAvailable) return "analytics off for this endpoint"
     if (controld.statsLoading) return "loading..."
     return ""
   }
-  // Only rule rows take the cursor; folder headers are labels.
   // Set from the list's own hover rather than from any row, so crossing the
   // gap between two rows does not count as leaving.
   onActivityHoveredChanged: controld.activityHeld = activityHovered
   readonly property bool activityHovered: activityColumn && activityHover.hovered
+  // Only rule rows take the cursor; folder headers are labels.
   readonly property var cursorRules: cursorRuleList()
   readonly property bool headerHasCursor: cursorActive && cursorKey === "header" && controld.installed
   readonly property color iconColor: controld.ready && !unprotected ? foreground : dim
@@ -1854,8 +1854,6 @@ Panel {
     }
   }
 
-  // One lookup: what was asked, what happened to it, and when. The A/AAAA
-  // pair of a single lookup arrives already collapsed.
   // The foot of a list that draws short: what is left, and a way to see it.
   // Reads as a control rather than a row, since it is the one thing there that
   // acts on the list instead of belonging to it.
@@ -1894,6 +1892,8 @@ Panel {
     }
   }
 
+  // One lookup: what was asked, what happened to it, and when. Rows for the
+  // same host and verdict arrive already folded, carrying a tally.
   component ActivityRow: Item {
     id: activityRow
     property var query: null

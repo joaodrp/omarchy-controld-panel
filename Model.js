@@ -292,10 +292,6 @@ var RESOLVERS = [
 // device-specific v6 resolver sits in.
 var CONTROLD_MARKER = /(dns\.controld\.com|\b2606:1a40:|\b76\.76\.(?:2|10)\.(?:2|11|22)\b)/i
 
-// The probe arrives in labelled sections, because the same endpoint means
-// different things depending on which config holds it. An undelimited blob is
-// read as the stub file's, the one source that claims nothing about who wrote
-// it.
 // Whole lines only. A trailing `#` is not a comment in what this reads:
 // systemd-resolved writes `76.76.2.22#hostname`, and the hostname is the
 // identity, so cutting at the hash would throw the endpoint away.
@@ -306,6 +302,10 @@ function stripComments(text) {
   return out.join("\n")
 }
 
+// The probe arrives in labelled sections, because the same endpoint means
+// different things depending on which config holds it. An undelimited blob is
+// read as the stub file's, the one source that claims nothing about who wrote
+// it.
 function probeSections(text) {
   var out = { daemon: "" }
   for (var r = 0; r < RESOLVERS.length; r++) out[RESOLVERS[r].key] = ""
