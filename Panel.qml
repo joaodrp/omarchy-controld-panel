@@ -776,6 +776,19 @@ Panel {
             wrapMode: Text.WordWrap
           }
 
+          // Up here rather than in ACTIVITY, which is where the rule writes
+          // are made but which hides itself when the log is empty. A refused
+          // write has to be visible from wherever it was made.
+          Text {
+            visible: controld.ruleError !== ""
+            width: parent.width
+            text: controld.ruleError
+            color: root.urgent
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.bodySmall
+            wrapMode: Text.WordWrap
+          }
+
           Text {
             visible: controld.lastHint !== "" && !root.showEmptyState
             width: parent.width
@@ -965,9 +978,9 @@ Panel {
             width: parent.width
             visible: controld.enforceError !== ""
             text: controld.enforceError
-            color: root.dim
+            color: root.urgent
             font.family: root.fontFamily
-            font.pixelSize: Style.font.caption
+            font.pixelSize: Style.font.bodySmall
             wrapMode: Text.WordWrap
           }
 
@@ -1222,12 +1235,9 @@ Panel {
             Text {
               width: parent.width
               visible: text !== ""
-              // A refused write outranks both: it is the one thing here the
-              // reader just did, rather than something the window reports.
-              text: controld.ruleError !== "" ? controld.ruleError
-                : (controld.activityError !== "" ? controld.activityError
-                  : (controld.activityLog.length === 0 ? root.emptyActivityLine : ""))
-              color: controld.ruleError !== "" || controld.activityError !== "" ? root.urgent : root.dim
+              text: controld.activityError !== "" ? controld.activityError
+                : (controld.activityLog.length === 0 ? root.emptyActivityLine : "")
+              color: controld.activityError !== "" ? root.urgent : root.dim
               font.family: root.fontFamily
               font.pixelSize: Style.font.caption
               wrapMode: Text.WordWrap
