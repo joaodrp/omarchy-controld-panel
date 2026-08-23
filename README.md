@@ -11,7 +11,7 @@ Backed by [`cdctl`](https://github.com/joaodrp/controld-cli), an independent com
 client for Control D.
 
 > [!IMPORTANT]
-> An independent project, not affiliated with Control D.
+> An independent project, [not affiliated with Control D](#trademarks).
 
 <img src="preview.png" alt="The panel open in the Omarchy bar, showing the endpoint, its profile, and blocked-query statistics" width="380">
 
