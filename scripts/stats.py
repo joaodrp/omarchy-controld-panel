@@ -11,12 +11,12 @@ change with the action, so the panel can cache per pair and still redraw its
 summary from any of them.
 
     {"ok": true, "hours": 24, "action": 0,
-     "totals": {"all": 21405, "blocked": 6290, "bypassed": 14709, "redirected": 0},
-     "series": [{"time": "...", "total": 273, "blocked": 23}, ...],
-     "domains":   [{"value": "d.dropbox.com", "count": 2112}, ...],
-     "filters":   [{"value": "x-hagezi-proplus", "count": 6288}, ...],
-     "networks":  [{"value": "Google", "count": 72}, ...],
-     "countries": [{"value": "US", "count": 211}, ...]}
+     "totals": {"all": 20000, "blocked": 6000, "bypassed": 14000, "redirected": 0},
+     "series": [{"time": "...", "total": 300, "blocked": 25}, ...],
+     "domains":   [{"value": "telemetry.example", "count": 2000}, ...],
+     "filters":   [{"value": "x-example-list", "count": 6000}, ...],
+     "networks":  [{"value": "Example Cloud", "count": 70}, ...],
+     "countries": [{"value": "US", "count": 200}, ...]}
 
 On failure, the same envelope with "ok": false and an "error" string, exit 1.
 """

@@ -728,7 +728,6 @@ Panel {
                 }
               }
 
-
               // The only control here, and the one that has to survive there
               // being no endpoint to describe: pausing is what removed it.
               // Everything else the hero could carry has a key instead.
@@ -1473,7 +1472,6 @@ Panel {
   // A section header with an optional right-aligned caption. No icon: the
   // built-in panels label their sections with text alone.
 
-
   component FolderRow: Item {
     id: folderRow
     property var group: null
@@ -2044,7 +2042,6 @@ Panel {
         Layout.alignment: Qt.AlignVCenter
       }
     }
-
 
     PanelToolTip {
       visible: activityMouse.containsMouse

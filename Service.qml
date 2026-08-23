@@ -205,8 +205,11 @@ Item {
     return String(Qt.resolvedUrl(name)).replace(/^file:\/\//, "")
   }
 
+  // The endpoint belongs in the key: the numbers are its own, and a machine
+  // whose resolver changes mid-session would otherwise be shown the previous
+  // device's figures.
   function statsKey(hours, action) {
-    return String(hours) + ":" + String(action)
+    return String(endpoint ? endpoint.id : "") + ":" + String(hours) + ":" + String(action)
   }
 
   function loadStats(force) {
@@ -480,7 +483,7 @@ Item {
       statusProcess.running = true
     }
     if (statsWanted) { loadStats(true); loadActivity() }
-    if (!pollWatchdog.running) pollWatchdog.start()
+    pollWatchdog.restart()
   }
 
   function loadRules(profileId) {
@@ -489,19 +492,22 @@ Item {
     loadingRules = true
     _pendingRules = null
     _pendingFolders = null
-    if (!rulesProcess.running) {
-      _rulesForProfile = id
-      _rulesPending = true
-      rulesProcess.command = cdctl(["rule", "list", "--profile", id])
-      rulesProcess.running = true
-    }
-    if (!foldersProcess.running) {
-      _foldersForProfile = id
-      _foldersPending = true
-      foldersProcess.command = cdctl(["folder", "list", "--profile", id])
-      foldersProcess.running = true
-    }
-    if (!pollWatchdog.running) pollWatchdog.start()
+    // Both halves are refetched together and for the same profile. Skipping
+    // whichever was still running let one profile's rules commit alongside
+    // another's folders, which draws a coherent and entirely wrong list.
+    reap(rulesProcess)
+    reap(foldersProcess)
+    _rulesForProfile = id
+    _rulesPending = true
+    rulesProcess.command = cdctl(["rule", "list", "--profile", id])
+    rulesProcess.running = true
+    _foldersForProfile = id
+    _foldersPending = true
+    foldersProcess.command = cdctl(["folder", "list", "--profile", id])
+    foldersProcess.running = true
+    // Restarted, not started: these are new processes, and an already-armed
+    // watchdog would otherwise reap them with whatever is left of its run.
+    pollWatchdog.restart()
   }
 
   function setUnavailable(message, hint) {
@@ -511,6 +517,12 @@ Item {
     folders = []
     statusText = message
     lastHint = hint || ""
+  }
+
+  // Every failure the panel paints also goes to the shell log, which is the
+  // only thing a bug report can carry: `qs log -p "$OMARCHY_PATH/shell"`.
+  function note(what, detail) {
+    console.warn("controld:", what, String(detail || ""))
   }
 
   // A write failure is only news until the panel has read the world again.
@@ -524,6 +536,7 @@ Item {
 
   function applyError(err, fallback) {
     lastError = Model.errorLine(err, fallback)
+    note(fallback, lastError)
     lastHint = err ? err.hint : ""
     if (err && err.exitCode === Model.EXIT_AUTH) {
       needsAuth = true
@@ -609,12 +622,14 @@ Item {
         root.pendingRuleHost = ""
         root._ruleIntent = null
         root.ruleError = "The rule write did not answer"
+        root.note("rule write did not answer", ruleProcess.command.join(" "))
       }
       if (enforceProcess.running) {
         root.reap(enforceProcess)
         root.enforceBusy = false
         root.pendingProfileId = ""
         root.enforceError = "The profile switch did not answer"
+        root.note("profile switch did not answer", enforceProcess.command.join(" "))
       }
       if (devicePauseProcess.running || pauseProcess.running) {
         root.reap(devicePauseProcess)
@@ -622,6 +637,7 @@ Item {
         root.pauseBusy = false
         root._pauseDesired = -1
         root.pauseError = "The pause command did not answer"
+        root.note("pause did not answer", "")
       }
     }
   }
@@ -682,6 +698,7 @@ Item {
         root.pendingRuleHost = ""
         root.ruleError = Model.errorLine(Model.parseError(ruleStderr.text, exitCode),
           "Could not change this rule")
+        root.note("rule write failed", root.ruleError)
         return
       }
       root.ruleError = ""
@@ -714,6 +731,7 @@ Item {
       if (exitCode !== 0) {
         root.enforceError = Model.errorLine(Model.parseError(enforceStderr.text, exitCode),
           "Could not switch this device's profile")
+        root.note("profile switch failed", root.enforceError)
         return
       }
       var parsed = Model.parseDevice(enforceStdout.text)
@@ -741,6 +759,7 @@ Item {
       if (exitCode !== 0) {
         root.pauseError = Model.errorLine(Model.parseError(devicePauseStderr.text, exitCode),
           "Could not change this device")
+        root.note("device pause failed", root.pauseError)
         return
       }
       var parsed = Model.parseDevice(devicePauseStdout.text)
@@ -766,6 +785,7 @@ Item {
         root._pauseDesired = -1
         root.pauseError = Model.errorLine(Model.parseError(pauseStderr.text, exitCode),
           "The pause command failed")
+        root.note("pause command failed", root.pauseError)
       }
       // Re-probe: the resolver is the only thing that says whether it worked.
       root.refresh()
