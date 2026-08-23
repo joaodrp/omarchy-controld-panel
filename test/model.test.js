@@ -442,6 +442,28 @@ test("parseDevice and replaceDevice fold a verified write back into the list", (
   assert.equal(m.parseDevice('{"id":"b","status":"soft-disabled"}').ok, true)
 })
 
+test("rules differing only in case name the one cdctl will remove", () => {
+  const both = rulesOf(
+    { hostname: "Example.com", action: "block", enabled: true, order: 1 },
+    { hostname: "example.com", action: "bypass", enabled: true, order: 2 }
+  )
+  // The exact spelling wins over a case-folded neighbour, both ways round.
+  assert.equal(m.findRule(both, "example.com").action, "bypass")
+  assert.equal(m.findRule(both, "Example.com").action, "block")
+  same(m.ruleIntent({ action: 0, question: "example.com" }, both),
+    { action: "bypass", verb: "delete", hostname: "example.com" })
+
+  // A spelling matching neither exactly folds onto both. cdctl refuses to
+  // guess between them, so the row offers nothing rather than removing the
+  // rule the reader did not mean.
+  same(m.ruleIntent({ action: 0, question: "EXAMPLE.COM" }, both),
+    { action: "", verb: "", hostname: "" })
+
+  // A single folded match is still resolved, and still echoes cdctl's spelling.
+  const one = rulesOf({ hostname: "Ads.Example", action: "bypass", enabled: true, order: 1 })
+  assert.equal(m.ruleIntent({ action: 0, question: "ads.example" }, one).hostname, "Ads.Example")
+})
+
 test("a rule with no action is not a rule", () => {
   // ruleIntent reads any matching rule as an offer to remove it, and the
   // delete command never looks at the action, so an actionless row would

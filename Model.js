@@ -758,13 +758,31 @@ function canonicalHost(hostname) {
 
 // Exact matches only: a rule on the parent domain covers this host too, but it
 // is not this host's rule and removing it would reach further than the row asked.
-function findRule(rules, hostname) {
+//
+// Two rules can differ by case alone, so spelling is resolved the way cdctl
+// resolves it: the exact one first, a single case-insensitive match second,
+// and neither when several fold together. Folding first would name one rule to
+// the reader and hand cdctl the other.
+function matchRule(rules, hostname) {
   var want = canonicalHost(hostname)
-  if (want === "") return null
+  if (want === "") return { rule: null, ambiguous: false }
+  var asked = str(hostname).trim().replace(/\.+$/, "")
   var list = rules || []
-  for (var i = 0; i < list.length; i++)
-    if (canonicalHost(list[i].hostname) === want) return list[i]
-  return null
+  var folded = null
+  var several = false
+  for (var i = 0; i < list.length; i++) {
+    var name = str(list[i].hostname).trim().replace(/\.+$/, "")
+    if (name === asked) return { rule: list[i], ambiguous: false }
+    if (name.toLowerCase() === want) {
+      if (folded === null) folded = list[i]
+      else several = true
+    }
+  }
+  return { rule: several ? null : folded, ambiguous: several }
+}
+
+function findRule(rules, hostname) {
+  return matchRule(rules, hostname).rule
 }
 
 // A host with a rule offers to have it taken away, whichever way the log now
@@ -772,13 +790,18 @@ function findRule(rules, hostname) {
 // there would turn an allow into a deny. Everything else offers the opposite.
 function ruleIntent(query, rules) {
   var action = overrideAction(query)
-  var host = canonicalHost(query ? query.question : "")
+  var asked = query ? str(query.question) : ""
+  var host = canonicalHost(asked)
   if (action === "" || host === "") return { action: "", verb: "", hostname: "" }
-  var rule = findRule(rules, host)
-  if (rule === null) return { action: action, verb: "create", hostname: host }
+  // The log's spelling matches several rules that differ only in case. cdctl
+  // refuses to guess between them and so does the panel, rather than removing
+  // the one the reader did not mean.
+  var match = matchRule(rules, asked)
+  if (match.ambiguous) return { action: "", verb: "", hostname: "" }
+  if (match.rule === null) return { action: action, verb: "create", hostname: host }
   // The rule's own spelling, not the log's: this becomes an argv entry, and
   // cdctl removes the rule it names rather than the one we matched.
-  return { action: rule.action, verb: "delete", hostname: rule.hostname }
+  return { action: match.rule.action, verb: "delete", hostname: match.rule.hostname }
 }
 
 // Removing a rule hands the host back to whatever else decides, which the panel
