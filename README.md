@@ -97,7 +97,7 @@ behind an inline confirmation, and `y` copies the hostname.
 
 ### Pause switch
 
-<img src="docs/images/hero.png" alt="The hero, with the endpoint, the enforced profile and the pause switch" width="380">
+<img src="docs/images/paused.png" alt="The panel with Control D paused: the mark crossed out, the switch off, and the sections replaced by the reason" width="380">
 
 The hero switch stands Control D down and brings it back.
 
@@ -208,4 +208,4 @@ The bar and hero mark is the Control D logo, and the artwork belongs to Control 
 
 MIT, see [LICENSE](LICENSE).
 
-<sub>The endpoint ID in the screenshots is a placeholder.</sub>
+<sub>Identifiers in the screenshots are placeholders.</sub>
