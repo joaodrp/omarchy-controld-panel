@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.joaodrp.controld",
   "name": "Control D",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "João Pereira",
   "license": "MIT",
   "description": "What Control D is doing on your machine, in the Omarchy bar, powered by cdctl.",
