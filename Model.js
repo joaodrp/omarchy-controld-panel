@@ -1,10 +1,7 @@
-// Pure parsing and shaping of cdctl output for the Control D panel.
-// Qt-free so it runs under node (test/model.test.js); Service.qml owns the
-// processes and Panel.qml owns the rendering.
+// Pure, Qt-free parsing and shaping of cdctl output, so it runs under node too
+// (test/model.test.js). Service.qml owns the processes, Panel.qml the rendering.
 
-// The cdctl exit codes the panel treats specially: one sends the reader to
-// `cdctl auth login`, the other says the failure is worth retrying. Every
-// other code is a plain error line.
+// Exit 4 sends the reader to `cdctl auth login`; exit 8 is worth retrying.
 var EXIT_AUTH = 4
 var EXIT_RETRYABLE = 8
 
@@ -12,9 +9,8 @@ function str(value) {
   return value === undefined || value === null ? "" : String(value)
 }
 
-// A missing value is not a zero. `Number(null)` and `Number("")` are both 0
-// and both finite, so testing the conversion alone hands back a number the
-// caller never had and swallows the fallback it asked for.
+// A missing value is not a zero: `Number(null)` and `Number("")` are both a
+// finite 0, so testing the conversion alone would swallow the fallback.
 function num(value, fallback) {
   var fall = fallback === undefined ? 0 : fallback
   if (typeof value !== "number" && (typeof value !== "string" || value.trim() === "")) return fall
@@ -24,12 +20,7 @@ function num(value, fallback) {
 
 function strList(value) {
   if (!(value instanceof Array)) return []
-  var out = []
-  for (var i = 0; i < value.length; i++) {
-    var item = str(value[i])
-    if (item !== "") out.push(item)
-  }
-  return out
+  return value.map(str).filter(function(item) { return item !== "" })
 }
 
 function parseJson(raw) {
@@ -42,49 +33,60 @@ function parseJson(raw) {
   }
 }
 
-// cdctl --json puts a `{"error": {code, message, hint, ...}}` envelope on
-// stderr. Anything else on stderr (crash text, a shell "not found") is used
-// verbatim.
+// Every cdctl list is a JSON array of objects; `normalize` returns null to drop one.
+function parseList(raw, label, normalize) {
+  var parsed = parseJson(raw)
+  if (!parsed.ok) return { ok: false, items: [], error: parsed.error }
+  if (!(parsed.value instanceof Array)) return { ok: false, items: [], error: label + " list is not an array" }
+  var out = []
+  for (var i = 0; i < parsed.value.length; i++) {
+    var entry = parsed.value[i]
+    if (!entry || typeof entry !== "object") continue
+    var item = normalize(entry)
+    if (item !== null) out.push(item)
+  }
+  return { ok: true, items: out, error: "" }
+}
+
+// cdctl --json puts a `{"error": {...}}` envelope on stderr; anything else
+// there (crash text, a shell "not found") is used verbatim. Exit 8 is
+// retryable whether or not the envelope repeats it.
 function parseError(stderr, exitCode) {
+  var code = num(exitCode, 1)
   var parsed = parseJson(stderr)
-  if (parsed.ok && parsed.value && parsed.value.error) {
-    var err = parsed.value.error
+  var err = parsed.ok && parsed.value ? parsed.value.error : null
+  if (err) {
     return {
       code: str(err.code),
       message: str(err.message),
       hint: str(err.hint),
-      // Exit 8 is cdctl's retryable code whether or not the envelope repeats
-      // it, and the envelope branch was the one that ignored it.
-      retryable: err.retryable === true || num(exitCode, 1) === EXIT_RETRYABLE,
-      exitCode: num(exitCode, 1)
+      retryable: err.retryable === true || code === EXIT_RETRYABLE,
+      exitCode: code
     }
   }
-  var text = str(stderr).replace(/\s+/g, " ").trim()
   return {
     code: "",
-    message: text,
+    message: str(stderr).replace(/\s+/g, " ").trim(),
     hint: "",
-    retryable: num(exitCode, 1) === EXIT_RETRYABLE,
-    exitCode: num(exitCode, 1)
+    retryable: code === EXIT_RETRYABLE,
+    exitCode: code
   }
 }
 
-// One short line for the panel's status row.
+// One short line for the panel's status row. cdctl marks the failures it
+// expects to clear on their own, and the panel has no retry of its own to
+// offer; the suffix saying so comes out of the budget, not on top of it.
 function errorLine(err, fallback) {
   if (!err) return str(fallback)
-  var text = str(err.message)
-  if (text === "") text = str(fallback)
-  // cdctl marks the failures it expects to clear on their own. Saying so is
-  // the difference between "try again" and "this will never work", and the
-  // panel has no retry of its own to offer.
+  var text = str(err.message) || str(fallback)
   var suffix = err.retryable ? " (worth retrying)" : ""
   return elide(text, 140 - suffix.length) + suffix
 }
 
+// The marker counts towards the limit: `max` is what the caller has room for.
 function elide(text, max) {
   var value = str(text).replace(/\s+/g, " ").trim()
   var limit = max || 140
-  // The marker counts towards the limit: `max` is what the caller has room for.
   return value.length > limit ? value.substring(0, Math.max(0, limit - 3)) + "..." : value
 }
 
@@ -104,114 +106,83 @@ function parseAuthStatus(raw) {
   }
 }
 
-function normalizeProfile(p) {
-  var da = p && p.default_action && typeof p.default_action === "object" ? p.default_action : {}
-  return {
-    id: str(p.id),
-    name: str(p.name) || str(p.id),
-    folders: num(p.folders),
-    enabled: p.enabled !== false,
-    disabledUntil: p.disabled_until === undefined ? null : p.disabled_until,
-    defaultAction: str(da.action) || "bypass",
-    updated: str(p.updated)
-  }
-}
-
 function parseProfiles(raw) {
-  var parsed = parseJson(raw)
-  if (!parsed.ok) return { ok: false, profiles: [], error: parsed.error }
-  if (!(parsed.value instanceof Array)) return { ok: false, profiles: [], error: "profile list is not an array" }
-  var out = []
-  for (var i = 0; i < parsed.value.length; i++) {
-    var p = parsed.value[i]
-    if (!p || typeof p !== "object" || str(p.id) === "") continue
-    out.push(normalizeProfile(p))
-  }
-  return { ok: true, profiles: out, error: "" }
-}
-
-function normalizeRule(r) {
-  var folderId = r.folder_id === undefined || r.folder_id === null || r.folder_id === 0 ? null : r.folder_id
-  return {
-    hostname: str(r.hostname),
-    action: str(r.action),
-    via: str(r.via),
-    via6: str(r.via6),
-    enabled: r.enabled !== false,
-    folder: str(r.folder),
-    folderId: folderId,
-    order: num(r.order)
-  }
+  var r = parseList(raw, "profile", function(p) {
+    if (str(p.id) === "") return null
+    var da = p.default_action && typeof p.default_action === "object" ? p.default_action : {}
+    return {
+      id: str(p.id),
+      name: str(p.name) || str(p.id),
+      folders: num(p.folders),
+      enabled: p.enabled !== false,
+      disabledUntil: p.disabled_until === undefined ? null : p.disabled_until,
+      defaultAction: str(da.action) || "bypass",
+      updated: str(p.updated)
+    }
+  })
+  return { ok: r.ok, profiles: r.items, error: r.error }
 }
 
 function parseRules(raw) {
-  var parsed = parseJson(raw)
-  if (!parsed.ok) return { ok: false, rules: [], error: parsed.error }
-  if (!(parsed.value instanceof Array)) return { ok: false, rules: [], error: "rule list is not an array" }
-  var out = []
-  for (var i = 0; i < parsed.value.length; i++) {
-    var r = parsed.value[i]
+  var r = parseList(raw, "rule", function(rule) {
     // Without an action there is nothing to draw and nothing to undo, and
     // `ruleIntent` would read the gap as an offer to delete.
-    if (!r || typeof r !== "object" || str(r.hostname) === "" || str(r.action) === "") continue
-    out.push(normalizeRule(r))
-  }
-  out.sort(function(a, b) { return a.order - b.order })
-  return { ok: true, rules: out, error: "" }
-}
-
-function normalizeFolder(f) {
-  return {
-    id: f.id,
-    name: str(f.name) || ("Folder " + str(f.id)),
-    action: str(f.action),
-    via: str(f.via),
-    enabled: f.enabled !== false,
-    rules: num(f.rules)
-  }
+    if (str(rule.hostname) === "" || str(rule.action) === "") return null
+    return {
+      hostname: str(rule.hostname),
+      action: str(rule.action),
+      via: str(rule.via),
+      via6: str(rule.via6),
+      enabled: rule.enabled !== false,
+      folder: str(rule.folder),
+      folderId: rule.folder_id == null || rule.folder_id === 0 ? null : rule.folder_id,
+      order: num(rule.order)
+    }
+  })
+  r.items.sort(function(a, b) { return a.order - b.order })
+  return { ok: r.ok, rules: r.items, error: r.error }
 }
 
 function parseFolders(raw) {
-  var parsed = parseJson(raw)
-  if (!parsed.ok) return { ok: false, folders: [], error: parsed.error }
-  if (!(parsed.value instanceof Array)) return { ok: false, folders: [], error: "folder list is not an array" }
-  var out = []
-  for (var i = 0; i < parsed.value.length; i++) {
-    var f = parsed.value[i]
-    if (!f || typeof f !== "object" || f.id === undefined || f.id === null) continue
-    out.push(normalizeFolder(f))
-  }
-  return { ok: true, folders: out, error: "" }
+  var r = parseList(raw, "folder", function(f) {
+    if (f.id === undefined || f.id === null) return null
+    return {
+      id: f.id,
+      name: str(f.name) || ("Folder " + str(f.id)),
+      action: str(f.action),
+      via: str(f.via),
+      enabled: f.enabled !== false,
+      rules: num(f.rules)
+    }
+  })
+  return { ok: r.ok, folders: r.items, error: r.error }
 }
 
-// Which profile the panel shows: the persisted id if it still exists, else
-// the first one. A name is accepted as well as an id, so a profile can be
-// asked for by what it is called.
+// The persisted id if it still exists, else the first profile. A name is
+// accepted as well as an id, so a profile can be asked for by what it is called.
 function resolveProfile(profiles, preferred) {
   var list = profiles || []
-  if (list.length === 0) return null
   var want = str(preferred).trim()
   if (want !== "") {
     for (var i = 0; i < list.length; i++) if (list[i].id === want) return list[i]
     var lower = want.toLowerCase()
     for (var j = 0; j < list.length; j++) if (list[j].name.toLowerCase() === lower) return list[j]
   }
-  return list[0]
+  return list.length > 0 ? list[0] : null
 }
 
-// Rules as the panel lists them: root rules first, then one group per folder
-// (in cdctl's folder order), each sorted by `order`. Folders with no rules
-// still get a group so an empty folder is visible; rules whose folder id is
-// unknown are grouped under the name cdctl resolved for them.
+// Root rules first, then one group per folder in cdctl's order. An empty
+// folder still gets a group so it stays visible; a rule whose folder id is not
+// in the list is grouped under the name cdctl resolved for it.
 function groupRules(rules, folders) {
   var groups = []
   var byKey = {}
   function group(key, id, name, folder) {
-    if (byKey[key]) return byKey[key]
-    var g = { key: key, id: id, name: name, folder: folder || null, rules: [] }
-    byKey[key] = g
-    groups.push(g)
-    return g
+    if (!byKey[key]) {
+      byKey[key] = { key: key, id: id, name: name, folder: folder || null, rules: [] }
+      groups.push(byKey[key])
+    }
+    return byKey[key]
   }
   group("root", null, "", null)
   var list = folders || []
@@ -219,14 +190,13 @@ function groupRules(rules, folders) {
   var items = rules || []
   for (var j = 0; j < items.length; j++) {
     var r = items[j]
-    if (r.folderId === null) group("root").rules.push(r)
+    if (r.folderId === null) byKey["root"].rules.push(r)
     else group("f:" + str(r.folderId), r.folderId, r.folder || ("Folder " + str(r.folderId)), null).rules.push(r)
   }
   return groups
 }
 
-// A flat, cursor-addressable list of the rows the RULES section renders, so
-// keyboard navigation can walk headers and rules with one index.
+// Headers and rules in one list, so the cursor walks them with a single index.
 function flattenGroups(groups) {
   var rows = []
   var list = groups || []
@@ -243,11 +213,9 @@ function countRules(rules) {
   return { total: list.length, enabled: list.filter(function(r) { return r.enabled }).length }
 }
 
-// The rules the panel draws. Every other list in the panel is a top-N, and a
-// profile with a few hundred rules would otherwise be the one section that
-// scrolls without end. The cap counts rules, not rows, so folder headers do
-// not eat into it; a header whose rules all fell outside the cut goes with
-// them, since a heading for nothing is worse than the rules being missing.
+// Uncapped, a profile with a few hundred rules is the one section that scrolls
+// without end. The cap counts rules, not rows, so folder headers do not eat
+// into it; a header whose rules all fell outside the cut goes with them.
 function limitRuleRows(rows, maxRules) {
   var list = rows || []
   var limit = num(maxRules, 0)
@@ -267,15 +235,9 @@ function limitRuleRows(rows, maxRules) {
 }
 
 
-// This machine's Control D endpoint is identified by the resolver it is
-// actually using: every device's DoT hostname and DoH path carry its own
-// device id, so `<uid>.dns.controld.com` or `dns.controld.com/<uid>` in the
-// local DNS config names the endpoint exactly. Legacy shared resolvers
-// (p1/p2/family.freedns.controld.com) carry no id and match nothing.
-// The resolvers this panel knows how to read, most specific first. Order is
-// the attribution rule: when two configs name the endpoint, the one doing the
-// talking wins, and everything downstream of it is only repeating what it was
-// told. `resolvconf` is last because the stub file names no manager at all.
+// The resolvers this panel can read. Order is the attribution rule: when two
+// configs name the endpoint, the one doing the talking wins and everything
+// downstream only repeats it. `resolvconf` last, since a stub names no manager.
 var RESOLVERS = [
   { key: "ctrld", label: "ctrld" },
   { key: "stubby", label: "stubby" },
@@ -287,25 +249,18 @@ var RESOLVERS = [
   { key: "resolvconf", label: "unknown" }
 ]
 
-// Anything Control D answers from, whether or not it names a device: the
-// shared legacy resolvers, the anycast addresses, and the prefix every
-// device-specific v6 resolver sits in.
+// Anything Control D answers from, named device or not: the legacy shared
+// resolvers, the anycast addresses, the device-specific v6 prefix.
 var CONTROLD_MARKER = /(dns\.controld\.com|\b2606:1a40:|\b76\.76\.(?:2|10)\.(?:2|11|22)\b)/i
 
-// Whole lines only. A trailing `#` is not a comment in what this reads:
-// systemd-resolved writes `76.76.2.22#hostname`, and the hostname is the
-// identity, so cutting at the hash would throw the endpoint away.
+// Whole lines only. A trailing `#` is not a comment here: systemd-resolved
+// writes `76.76.2.22#hostname`, and that hostname is the identity.
 function stripComments(text) {
-  var lines = str(text).split("\n")
-  var out = []
-  for (var i = 0; i < lines.length; i++) if (!/^\s*[#;]/.test(lines[i])) out.push(lines[i])
-  return out.join("\n")
+  return str(text).split("\n").filter(function(line) { return !/^\s*[#;]/.test(line) }).join("\n")
 }
 
-// The probe arrives in labelled sections, because the same endpoint means
-// different things depending on which config holds it. An undelimited blob is
-// read as the stub file's, the one source that claims nothing about who wrote
-// it.
+// The probe arrives in labelled sections: the same endpoint means different
+// things by which config holds it. An undelimited blob is read as the stub's.
 function probeSections(text) {
   var out = { daemon: "" }
   for (var r = 0; r < RESOLVERS.length; r++) out[RESOLVERS[r].key] = ""
@@ -323,27 +278,26 @@ function hasText(haystack, needle) {
   return want !== "" && str(haystack).toLowerCase().indexOf(want.toLowerCase()) !== -1
 }
 
-// Every form a device publishes itself in, richest first so the transport a
-// match reports is the one actually in use.
+// Richest form first, so a match reports the transport actually in use.
 function deviceIdentities(device) {
   var out = []
   if (device.dot !== "") out.push({ value: device.dot, transport: "DNS-over-TLS" })
   if (device.doh !== "") out.push({ value: device.doh, transport: "DNS-over-HTTPS" })
-  for (var i = 0; i < device.v6.length; i++) out.push({ value: device.v6[i], transport: "IPv6" })
-  for (var j = 0; j < device.v4.length; j++) out.push({ value: device.v4[j], transport: "IPv4" })
-  return out
+  return out.concat(
+    device.v6.map(function(v) { return { value: v, transport: "IPv6" } }),
+    device.v4.map(function(v) { return { value: v, transport: "IPv4" } }))
 }
 
 // Which of this account's devices this machine resolves through, and which
-// local config says so. Matching against the device list rather than against a
-// hostname pattern is what lets the plain IPv6 and legacy IPv4 resolvers name
-// the endpoint too: those carry the device id in an address, not in a name.
+// config says so. Matching the device list rather than a hostname pattern is
+// what lets the IPv6 and legacy IPv4 resolvers name the endpoint too: they
+// carry the device id in an address, not in a name.
 function matchEndpoint(devices, text) {
   var probe = probeSections(text)
   var list = devices || []
   for (var r = 0; r < RESOLVERS.length; r++) {
     var section = probe[RESOLVERS[r].key]
-    if (str(section) === "") continue
+    if (section === "") continue
     for (var d = 0; d < list.length; d++) {
       var forms = deviceIdentities(list[d])
       for (var f = 0; f < forms.length; f++) {
@@ -355,9 +309,8 @@ function matchEndpoint(devices, text) {
   return { device: null, source: "", transport: "" }
 }
 
-// Control D is answering here even though no device matched: a legacy shared
-// resolver, an endpoint owned by another account, or a device list we could
-// not read. Distinct from Control D not being in the picture at all.
+// Control D answering with no device matched: a legacy shared resolver, another
+// account's endpoint, or an unreadable device list. Distinct from no Control D.
 function controldPresent(text) {
   return CONTROLD_MARKER.test(stripComments(text))
 }
@@ -369,9 +322,8 @@ function controldLive(text) {
   return CONTROLD_MARKER.test(probe.resolved) || CONTROLD_MARKER.test(probe.resolvconf)
 }
 
-// Whether a ctrld daemon is actually running here. The account keeps a `ctrld`
-// block on a device long after the daemon is gone, so this question is only
-// answerable on the machine.
+// The account keeps a `ctrld` block on a device long after the daemon is gone,
+// so whether one runs here is only answerable on the machine.
 function ctrldActive(text) {
   return /^active$/m.test(str(probeSections(text).daemon).trim())
 }
@@ -388,53 +340,40 @@ function resolverLabel(source, daemonActive, ctrldVersion) {
   return "--"
 }
 
-// The endpoint is named but nothing says what manages it, which is the case
-// worth hearing about: the panel offers to have the setup reported.
+// Nothing says what manages the endpoint: the panel offers to have it reported.
 function resolverUnknown(source) {
   return source === "resolvconf"
 }
 
 function normalizeDevice(d) {
-  var profile = d && d.profile && typeof d.profile === "object" ? d.profile : {}
-  var resolvers = d && d.resolvers && typeof d.resolvers === "object" ? d.resolvers : {}
-  var ctrld = d && d.ctrld && typeof d.ctrld === "object" ? d.ctrld : null
+  var profile = d.profile && typeof d.profile === "object" ? d.profile : {}
+  var resolvers = d.resolvers && typeof d.resolvers === "object" ? d.resolvers : {}
+  var ctrld = d.ctrld && typeof d.ctrld === "object" ? d.ctrld : null
   return {
     id: str(d.id),
     name: str(d.name),
     profileId: str(profile.id),
     profileName: str(profile.name),
-    // "active" is protected; the two disabled states are a stood-down device.
-    // "pending" means it has never made a query, which is not a pause.
     status: str(d.status),
     ctrldVersion: ctrld ? str(ctrld.version) : "",
-    // "none" is analytics reported as off. An absent level is unreported,
-    // which is not the same answer, so it keeps its own empty value.
     analytics: d.analytics === undefined || d.analytics === null ? "" : str(d.analytics),
     dot: str(resolvers.dot),
     doh: str(resolvers.doh),
-    // Device-specific addresses, which name the endpoint with no proxy in the
-    // way. Always arrays per cdctl's contract, empty when the API omits them.
     v4: strList(resolvers.v4),
     v6: strList(resolvers.v6)
   }
 }
 
 function parseDevices(raw) {
-  var parsed = parseJson(raw)
-  if (!parsed.ok) return { ok: false, devices: [], error: parsed.error }
-  if (!(parsed.value instanceof Array)) return { ok: false, devices: [], error: "device list is not an array" }
-  var out = []
-  for (var i = 0; i < parsed.value.length; i++) {
-    var d = parsed.value[i]
-    if (!d || typeof d !== "object") continue
+  var r = parseList(raw, "device", function(d) {
     var device = normalizeDevice(d)
-    if (device.id !== "") out.push(device)
-  }
-  return { ok: true, devices: out, error: "" }
+    return device.id === "" ? null : device
+  })
+  return { ok: r.ok, devices: r.items, error: r.error }
 }
 
-// One device, as `cdctl device update` prints it back after verifying the
-// write. The same shape as a list entry, so it can replace one outright.
+// One device, as `cdctl device update` echoes it back after verifying the
+// write: the same shape as a list entry, so it can replace one outright.
 function parseDevice(raw) {
   var parsed = parseJson(raw)
   if (!parsed.ok) return { ok: false, device: null, error: parsed.error }
@@ -442,40 +381,33 @@ function parseDevice(raw) {
     return { ok: false, device: null, error: "not a device" }
   var device = normalizeDevice(parsed.value)
   if (device.id === "") return { ok: false, device: null, error: "device has no id" }
-  // A write echo carrying an id and nothing else means cdctl's shape moved.
-  // `deviceProtected` reads an unknown status as protected, so trusting it
-  // would report the opposite of the write that just landed.
+  // An id and nothing else means cdctl's shape moved. `deviceProtected` reads
+  // an unknown status as protected, which would report the write's opposite.
   if (device.status === "") return { ok: false, device: null, error: "device has no status" }
   return { ok: true, device: device, error: "" }
 }
 
-// The device list with one entry replaced by a newer read of it.
 function replaceDevice(devices, device) {
   var list = devices || []
   if (!device) return list
-  var out = []
-  for (var i = 0; i < list.length; i++) out.push(list[i].id === device.id ? device : list[i])
-  return out
+  return list.map(function(d) { return d.id === device.id ? device : d })
 }
 
-// Whether Control D is filtering for this device, as the account sees it.
-// Only the two disabled states are a pause: "pending" is a device that has
-// never made a query, which is not the same as one stood down.
+// Whether Control D is filtering for this device, as the account sees it. Only
+// the two disabled states are a pause: "pending" has just never made a query.
 function deviceProtected(device) {
   if (!device) return false
   return device.status !== "soft-disabled" && device.status !== "hard-disabled"
 }
 
-// Whether this endpoint's analytics can be read. "none" is the only answer
-// that means no: an unreported level is unknown, and the fetch settles it.
+// "none" is the only answer that means no: an unreported level is unknown, and
+// the fetch settles it.
 function analyticsReadable(device) {
   return !!device && device.analytics !== "none"
 }
 
-// Which machine this panel can describe. Everything it shows hangs off an
-// identified endpoint, so the reason there is none has to survive: a machine
-// with no Control D resolver at all is a different story to one whose resolver
-// we cannot put a name to, and only the first means "unprotected".
+// Why this panel has no endpoint to describe: no Control D resolver at all is a
+// different story to one we cannot put a name to, and only the first is bare.
 var ENDPOINT_PENDING = "pending"
 var ENDPOINT_NONE = "none"
 var ENDPOINT_UNKNOWN = "unknown"
@@ -483,10 +415,8 @@ var ENDPOINT_MACHINE = "machine"
 
 function endpointState(resolverChecked, controldFound, devicesChecked, endpoint) {
   if (!resolverChecked) return ENDPOINT_PENDING
-  // A matched device is proof and outranks the marker heuristic below it: a
-  // legacy v4 resolver names a device without looking like Control D anywhere
-  // in the config, and asking whether this looks like Control D first would
-  // deny an endpoint the account positively identified.
+  // Proof outranks the marker heuristic below: a legacy v4 resolver names a
+  // device without looking like Control D anywhere in the config.
   if (endpoint) return ENDPOINT_MACHINE
   if (!controldFound) return ENDPOINT_NONE
   // A resolver we cannot name. Either the device lookup has not answered yet,
@@ -494,9 +424,8 @@ function endpointState(resolverChecked, controldFound, devicesChecked, endpoint)
   return devicesChecked ? ENDPOINT_UNKNOWN : ENDPOINT_PENDING
 }
 
-// The profile the panel describes: the one this machine's endpoint enforces
-// when that is known, else the browsed selection. Machine state wins, so the
-// panel never describes a profile the machine is not using.
+// The profile the endpoint enforces when that is known, else the browsed
+// selection: never one the machine is not actually using.
 function activeProfile(profiles, endpointProfileId, selectedId) {
   var enforced = str(endpointProfileId)
   if (enforced !== "") {
@@ -507,24 +436,24 @@ function activeProfile(profiles, endpointProfileId, selectedId) {
 }
 
 
+// A failure keeps the full shape, zeroed and `ok: false`, so the panel reads it
+// as no answer rather than drawing the zeros as counts.
+function emptyStats(error) {
+  return {
+    ok: false, hours: 0, action: 0,
+    totals: { all: 0, blocked: 0, bypassed: 0, redirected: 0 },
+    series: [], domains: [], filters: [], networks: [], countries: [], error: error
+  }
+}
+
 // scripts/stats.py fans the analytics calls into one document per (window,
 // action) pair, so this only has to validate it.
 function parseStats(raw) {
   var parsed = parseJson(raw)
-  var empty = {
-    ok: false, hours: 0, action: 0,
-    totals: { all: 0, blocked: 0, bypassed: 0, redirected: 0 },
-    series: [], domains: [], filters: [], networks: [], countries: [], error: ""
-  }
-  if (!parsed.ok || !parsed.value || typeof parsed.value !== "object") {
-    empty.error = parsed.error || "bad stats output"
-    return empty
-  }
+  if (!parsed.ok || !parsed.value || typeof parsed.value !== "object")
+    return emptyStats(parsed.error || "bad stats output")
   var v = parsed.value
-  if (v.ok !== true) {
-    empty.error = str(v.error) || "analytics failed"
-    return empty
-  }
+  if (v.ok !== true) return emptyStats(str(v.error) || "analytics failed")
   var totals = v.totals && typeof v.totals === "object" ? v.totals : {}
   return {
     ok: true,
@@ -546,29 +475,18 @@ function parseStats(raw) {
 }
 
 function parseCounts(list) {
-  var out = []
   var items = list instanceof Array ? list : []
-  for (var i = 0; i < items.length; i++) {
-    var entry = items[i]
-    if (!entry || str(entry.value) === "") continue
-    out.push({ value: str(entry.value), count: num(entry.count) })
-  }
-  return out
+  return items.filter(function(entry) { return entry && str(entry.value) !== "" })
+    .map(function(entry) { return { value: str(entry.value), count: num(entry.count) } })
 }
 
 function parseSeries(list) {
-  var out = []
   var items = list instanceof Array ? list : []
-  for (var i = 0; i < items.length; i++) {
-    var bucket = items[i]
-    if (!bucket) continue
-    out.push({ time: str(bucket.time), total: num(bucket.total), blocked: num(bucket.blocked) })
-  }
-  return out
+  return items.filter(function(bucket) { return !!bucket })
+    .map(function(bucket) { return { time: str(bucket.time), total: num(bucket.total), blocked: num(bucket.blocked) } })
 }
 
-// The action the lists describe. Values are the API's, and the labels are the
-// dashboard's tabs.
+// The action the lists describe: the API's values, the dashboard's labels.
 var ACTION_BLOCKED = 0
 var ACTION_BYPASSED = 1
 var ACTION_REDIRECTED = 2
@@ -582,13 +500,9 @@ function actionOptions() {
   ]
 }
 
-// What the activity log is filtered to: one chip per verdict, and every row
-// under exactly one of them. Blocked is the default, being the verdict you
-// come to the log for when a site will not load. Bypassed has its own chip
-// because its rows are actionable -- the glyph there blocks the host -- and
-// "Others" is where a redirect or a spoof is visible at all: among a page of
-// blocked and bypassed it would never be found. Empty most days, which is
-// itself the answer.
+// One chip per verdict, every row under exactly one. Bypassed earns its own
+// because those rows are actionable -- the glyph there blocks the host -- and
+// "Others" is the only place a redirect or a spoof is ever visible.
 function activityFilterOptions() {
   return [
     { value: "blocked", label: "Blocked" },
@@ -597,16 +511,14 @@ function activityFilterOptions() {
   ]
 }
 
-// How far back a chip looks. A redirect or a spoof may be the only one all
-// day, so the rare chip reaches further: at six hours it would report that
-// none happened when one did, which is a different claim.
+// A redirect or a spoof may be the only one all day, so the rare chip reaches
+// further: at six hours it would report that none happened when one did.
 function activityHours(filter) {
   return str(filter) === "others" ? 24 : 6
 }
 
-// The verdicts a chip asks for. The API takes `action[]` repeatedly, so even
-// "Others" narrows server side: a page filtered to a verdict is a page of it,
-// not the handful that survive a client-side sieve.
+// The API takes `action[]` repeatedly, so even "Others" narrows server side: a
+// page of a verdict, not the handful that survive a client-side sieve.
 function activityActions(filter) {
   switch (str(filter)) {
   case "bypassed": return [ACTION_BYPASSED]
@@ -635,18 +547,14 @@ function meterRatio(count, rows) {
   return Math.max(0, Math.min(1, num(count) / max))
 }
 
-// Query counts run to five and six digits, and the panel has one column for
-// them: 9500 -> "9.5K", 21432 -> "21K". The decimal stops paying for itself
-// once the whole number is two digits wide.
+// One column for five- and six-digit counts: 9500 -> "9.5K", 21432 -> "21K".
+// The decimal stops paying for itself once the whole number is two digits.
 function formatCount(value) {
   var n = num(value)
   if (n < 1000) return String(n)
-  if (n < 1000000) {
-    var thousands = n / 1000
-    return (thousands < 10 ? thousands.toFixed(1) : Math.round(thousands)) + "K"
-  }
-  var millions = n / 1000000
-  return (millions < 10 ? millions.toFixed(1) : Math.round(millions)) + "M"
+  var unit = n < 1000000 ? "K" : "M"
+  var scaled = n < 1000000 ? n / 1000 : n / 1000000
+  return (scaled < 10 ? scaled.toFixed(1) : Math.round(scaled)) + unit
 }
 
 function blockedShare(total, blocked) {
@@ -655,8 +563,7 @@ function blockedShare(total, blocked) {
   return Math.round((num(blocked) / t) * 100) + "%"
 }
 
-// ISO 3166-1 alpha-2 to everyday country name, generated from the iso-codes
-// package so the panel can spell out what analytics reports as two letters.
+// ISO 3166-1 alpha-2 to everyday country name, generated from the iso-codes package.
 var COUNTRY_NAMES = {
   AD:"Andorra", AE:"United Arab Emirates", AF:"Afghanistan", AG:"Antigua and Barbuda",
   AI:"Anguilla", AL:"Albania", AM:"Armenia", AO:"Angola",
@@ -723,52 +630,46 @@ var COUNTRY_NAMES = {
   ZW:"Zimbabwe"
 }
 
-// Analytics reports countries as codes. Spell them where we know them, and
-// keep the code when we do not rather than showing nothing.
+// Keep the code when we do not know it, rather than showing nothing.
 function countryName(code) {
   var key = str(code).toUpperCase()
   if (key === "") return ""
   return COUNTRY_NAMES[key] || key
 }
 
-// Filter ids come back as slugs; the dashboard shows titles we do not have,
-// so make the slug readable rather than inventing a name.
+// Filter ids come back as slugs; the dashboard shows titles we do not have, so
+// make the slug readable rather than inventing a name.
 function filterLabel(value) {
   var name = str(value).replace(/^x-/, "").replace(/[-_]+/g, " ").trim()
   return name === "" ? "unknown" : name.charAt(0).toUpperCase() + name.slice(1)
 }
 
-// scripts/activity.py returns the endpoint's most recent lookups, newest
-// first, with the rows for one host and verdict already folded into a single
-// entry carrying a tally.
+// scripts/activity.py returns the endpoint's most recent lookups, newest first,
+// with the rows for one host and verdict folded into one entry and a tally.
 function parseActivity(raw) {
   var parsed = parseJson(raw)
-  if (!parsed.ok || !parsed.value || typeof parsed.value !== "object") {
+  if (!parsed.ok || !parsed.value || typeof parsed.value !== "object")
     return { ok: false, queries: [], error: parsed.error || "bad activity output" }
-  }
   var v = parsed.value
   if (v.ok !== true) return { ok: false, queries: [], error: str(v.error) || "activity log failed" }
-  var out = []
   var list = v.queries instanceof Array ? v.queries : []
-  for (var i = 0; i < list.length; i++) {
-    var q = list[i]
-    if (!q || str(q.question) === "") continue
-    out.push({
-      time: str(q.time),
-      question: str(q.question),
-      action: num(q.action, -1),
-      trigger: str(q.trigger),
-      triggerValue: str(q.triggerValue),
-      protocol: str(q.protocol),
-      types: q.types instanceof Array ? q.types.map(str) : [],
-      repeats: num(q.repeats, 1)
+  var out = list.filter(function(q) { return q && str(q.question) !== "" })
+    .map(function(q) {
+      return {
+        time: str(q.time),
+        question: str(q.question),
+        action: num(q.action, -1),
+        trigger: str(q.trigger),
+        triggerValue: str(q.triggerValue),
+        protocol: str(q.protocol),
+        types: q.types instanceof Array ? q.types.map(str) : [],
+        repeats: num(q.repeats, 1)
+      }
     })
-  }
   return { ok: true, queries: out, error: "" }
 }
 
-// Analytics reports the verdict as an integer; the rest of the panel speaks
-// the names cdctl uses.
+// Analytics reports the verdict as an integer; the panel speaks cdctl's names.
 function actionName(action) {
   switch (num(action, -1)) {
   case 0: return "block"
@@ -779,8 +680,7 @@ function actionName(action) {
   }
 }
 
-// Wall clock for a log row. Local time, since the reader is looking at what
-// their own machine just did.
+// Local time, since the reader is looking at what their own machine just did.
 function clockTime(iso) {
   var text = str(iso)
   if (text === "") return ""
@@ -799,73 +699,50 @@ function activityDetail(query) {
   if (query.triggerValue !== "") parts.push(filterLabel(query.triggerValue))
   else if (query.trigger !== "") parts.push(query.trigger)
   if (query.types.length > 0) parts.push(query.types.join("/"))
-  // How many times this host was asked for in the window. One row and a count
-  // beats a screenful of the same name.
   if (query.repeats > 1) parts.push("x" + query.repeats)
   return parts.join(" · ")
 }
 
-// Rows the profile has since overruled. The log is a record of lookups, so
-// allowing a host leaves every lookup it was blocked on standing -- and the
-// blocked view would go on listing a host that is no longer blocked, with the
-// glyph saying so. A row whose host now has a rule pointing the other way is
-// history the view is not for.
+// Rows the profile has since overruled. The log records lookups, so allowing a
+// host leaves the ones it was blocked on standing in the blocked view.
 function dropOverridden(queries, rules) {
-  var list = queries || []
-  var out = []
-  for (var i = 0; i < list.length; i++) {
-    var rule = findRule(rules, list[i].question)
-    if (rule !== null && rule.enabled && rule.action !== actionName(list[i].action)) continue
-    out.push(list[i])
-  }
-  return out
+  return (queries || []).filter(function(q) {
+    var rule = findRule(rules, q.question)
+    return rule === null || !rule.enabled || rule.action === actionName(q.action)
+  })
 }
 
-// A row acted on stays in the log even once the fetch stops returning it:
-// bypassing a host means it stops being blocked, so the very act of using the
-// blocked view removes what you just used it on, and with it the only way to
-// take the override back. Merged by time so the row keeps its place rather
-// than jumping to the top.
+// A row acted on is held even once the fetch drops it: bypassing a host stops
+// it being blocked, so using the blocked view removes what you just used it on,
+// and with it the only way back. Merged by time so the row keeps its place.
 function mergeSticky(queries, sticky, actions) {
   var out = (queries || []).slice()
   var held = sticky || []
   var want = actions || []
   for (var i = 0; i < held.length; i++) {
     var q = held[i]
-    // Only into the view whose verdict it is: a blocked row held for its undo
-    // does not belong under Bypassed just because that is what is on screen.
-    var fits = want.length === 0
-    for (var w = 0; w < want.length; w++) if (want[w] === q.action) { fits = true; break }
-    if (!fits) continue
-    var seen = false
-    for (var j = 0; j < out.length; j++)
-      if (out[j].question === q.question && out[j].action === q.action) { seen = true; break }
+    // Only into the view whose verdict it is, not whatever is on screen.
+    if (want.length > 0 && want.indexOf(q.action) === -1) continue
+    var seen = out.some(function(row) { return row.question === q.question && row.action === q.action })
     if (!seen) out.push(q)
   }
   out.sort(function(a, b) { return str(b.time).localeCompare(str(a.time)) })
   return out
 }
 
-// What the add form will hand to cdctl. The API does the real validation;
-// this only keeps the obvious mistakes from becoming a failed request: a URL
-// pasted whole, a stray space, an empty box. A leading "*." is legal and is
-// the only place a wildcard may sit.
+// The API does the real validation; this only keeps the obvious mistakes from
+// becoming a failed request. A leading "*." is the only place a wildcard sits.
 function validHostname(text) {
   var host = str(text).trim().toLowerCase()
-  if (host === "" || host.length > 253) return false
-  if (/[\s\/:]/.test(host)) return false
+  if (host === "" || host.length > 253 || /[\s\/:]/.test(host)) return false
   var body = host.indexOf("*.") === 0 ? host.substring(2) : host
-  if (body.indexOf("*") !== -1) return false
-  if (!/^[a-z0-9.-]+$/.test(body)) return false
+  if (!/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/.test(body)) return false
   if (body.indexOf("..") !== -1) return false
-  if (body.charAt(0) === "." || body.charAt(0) === "-") return false
-  if (body.charAt(body.length - 1) === "." || body.charAt(body.length - 1) === "-") return false
   return body.indexOf(".") > 0
 }
 
-// The override an activity row offers: the opposite of what happened to it.
-// Only the two verdicts a custom rule can reverse. A redirect or a spoof is
-// already somebody's deliberate rule, and unmatched means nothing decided.
+// The opposite of what happened to a row, for the two verdicts a custom rule
+// can reverse. A redirect or spoof is already a rule; unmatched decided nothing.
 function overrideAction(query) {
   if (!query) return ""
   if (query.action === 0) return "bypass"
@@ -873,16 +750,14 @@ function overrideAction(query) {
   return ""
 }
 
-// One spelling of a hostname to compare by. The log reports whatever the
-// resolver was asked, which may be upper case or fully qualified with a
-// trailing dot; neither names a different host.
+// One spelling to compare by: the log reports whatever the resolver was asked,
+// upper case or trailing dot included, and neither names a different host.
 function canonicalHost(hostname) {
   return str(hostname).trim().toLowerCase().replace(/\.+$/, "")
 }
 
-// The rule this profile already holds for a hostname, if any. Exact matches
-// only: a rule on the parent domain covers this host too, but it is not this
-// host's rule and removing it would reach further than the row asked.
+// Exact matches only: a rule on the parent domain covers this host too, but it
+// is not this host's rule and removing it would reach further than the row asked.
 function findRule(rules, hostname) {
   var want = canonicalHost(hostname)
   if (want === "") return null
@@ -892,16 +767,13 @@ function findRule(rules, hostname) {
   return null
 }
 
-// What pressing the row's action does, given what the profile already says.
-// A host this profile has a rule for offers to have it taken away, whichever
-// way the log now reads: once a bypass takes effect the row turns up bypassed,
-// and inverting it there would quietly turn an allow into a deny. Everything
-// else offers the opposite of the verdict recorded.
+// A host with a rule offers to have it taken away, whichever way the log now
+// reads: once a bypass takes effect the row turns up bypassed, and inverting it
+// there would turn an allow into a deny. Everything else offers the opposite.
 function ruleIntent(query, rules) {
   var action = overrideAction(query)
-  if (action === "") return { action: "", verb: "", hostname: "" }
   var host = canonicalHost(query ? query.question : "")
-  if (host === "") return { action: "", verb: "", hostname: "" }
+  if (action === "" || host === "") return { action: "", verb: "", hostname: "" }
   var rule = findRule(rules, host)
   if (rule === null) return { action: action, verb: "create", hostname: host }
   // The rule's own spelling, not the log's: this becomes an argv entry, and
@@ -909,16 +781,12 @@ function ruleIntent(query, rules) {
   return { action: rule.action, verb: "delete", hostname: rule.hostname }
 }
 
-// What a row offers when the profile already holds a rule for it. Naming the
-// operation rather than drawing the verdict it would leave behind: removing a
-// rule hands the host back to whatever else decides, and the panel does not
-// know what that will say.
+// Removing a rule hands the host back to whatever else decides, which the panel
+// cannot predict, so the glyph names the operation instead of a verdict.
 var UNDO_GLYPH = "\udb81\udd4c"
 
-// A rule's own row offers to switch it off, or back on, and to delete it.
-// Toggling does not change what the rule does, so there is no verdict to
-// preview: the glyph names the operation, and says which way it runs -- pause
-// on a rule that is running, play on one that is not.
+// Toggling changes nothing about what a rule does, so these name the operation
+// too: pause on a rule that is running, play on one that is not.
 var PAUSE_GLYPH = "\udb80\udfe4"
 var PLAY_GLYPH = "\udb81\udc0a"
 var TRASH_GLYPH = "\udb82\ude7a"

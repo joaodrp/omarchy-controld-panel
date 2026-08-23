@@ -1,16 +1,14 @@
 // Unit tests for Model.js, run with `node test/model.test.js`.
 // Model.js is a QML .js file (no exports), so it is evaluated into a shared
-// scope the same way the QML engine does it.
+// scope the same way the QML engine does it: every declaration lands on `m`.
 
 const assert = require("node:assert/strict")
 const fs = require("node:fs")
 const path = require("node:path")
 const vm = require("node:vm")
 
-const src = fs.readFileSync(path.join(__dirname, "..", "Model.js"), "utf8")
-const M = {}
-vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, groupRules, flattenGroups, countRules, limitRuleRows, activityFilterOptions, activityActions, activityHours, actionGlyph, mergeSticky, overrideAction, findRule, ruleIntent, validHostname, dropOverridden, ruleDetail, accountLine, matchEndpoint, controldPresent, controldLive, ctrldActive, resolverLabel, resolverUnknown, parseDevices, parseDevice, replaceDevice, deviceProtected, analyticsReadable, endpointState, ENDPOINT_PENDING, ENDPOINT_NONE, ENDPOINT_UNKNOWN, ENDPOINT_MACHINE, activeProfile, parseStats, formatCount, blockedShare, meterRatio, filterLabel, countryName, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
-const m = M.__exports
+const m = {}
+vm.runInNewContext(fs.readFileSync(path.join(__dirname, "..", "Model.js"), "utf8"), m)
 
 // vm-realm arrays fail strict deepEqual on prototype identity, so both sides
 // round-trip through JSON to shed the realm. Comparing the parsed values
@@ -22,6 +20,9 @@ function same(a, b) {
 
 const tests = []
 function test(name, fn) { tests.push([name, fn]) }
+
+const rulesOf = (...list) => m.parseRules(JSON.stringify(list)).rules
+const devicesOf = (...list) => m.parseDevices(JSON.stringify(list)).devices
 
 test("parseError reads the cdctl JSON envelope", () => {
   const err = m.parseError(JSON.stringify({ error: { code: "auth.invalid", message: "token rejected", hint: "run cdctl auth login", retryable: false } }), 4)
@@ -164,12 +165,11 @@ test("dropOverridden drops rows a current rule contradicts", () => {
     { question: "d.example", action: 0 },   // blocked, no rule     -> stays
     { question: "e.example", action: 0 }    // blocked, disabled rule -> stays
   ]
-  const rules = m.parseRules(JSON.stringify([
+  const rules = rulesOf(
     { hostname: "a.example", action: "bypass", enabled: true, order: 1 },
     { hostname: "b.example", action: "block", enabled: true, order: 2 },
     { hostname: "c.example", action: "bypass", enabled: true, order: 3 },
-    { hostname: "e.example", action: "bypass", enabled: false, order: 4 }
-  ])).rules
+    { hostname: "e.example", action: "bypass", enabled: false, order: 4 })
   same(m.dropOverridden(rows, rules).map(q => q.question),
        ["b.example", "c.example", "d.example", "e.example"])
   same(m.dropOverridden(rows, []).map(q => q.question),
@@ -220,12 +220,10 @@ test("ruleIntent offers the opposite verdict, then offers to undo it", () => {
   same([2, 3, -1].map(a => m.overrideAction({ action: a })), ["", "", ""])
   assert.equal(m.overrideAction(null), "")
 
-  const none = m.parseRules("[]").rules
+  const none = rulesOf()
   same(m.ruleIntent(blocked, none), { action: "bypass", verb: "create", hostname: "ads.example" })
 
-  const mine = m.parseRules(JSON.stringify([
-    { hostname: "ads.example", action: "bypass", enabled: true, order: 1 }
-  ])).rules
+  const mine = rulesOf({ hostname: "ads.example", action: "bypass", enabled: true, order: 1 })
   // The rule this row would have written: pressing again removes it.
   same(m.ruleIntent(blocked, mine), { action: "bypass", verb: "delete", hostname: "ads.example" })
   // And once the bypass takes effect the host turns up bypassed. That row is
@@ -240,15 +238,17 @@ test("ruleIntent offers the opposite verdict, then offers to undo it", () => {
     { action: "bypass", verb: "delete", hostname: "ads.example" })
   same(m.ruleIntent({ action: 0, question: "ads.example." }, mine),
     { action: "bypass", verb: "delete", hostname: "ads.example" })
+  // And the rule's own spelling wins over the canonical one when they differ:
+  // only the name cdctl stored will match the rule it is asked to remove.
+  const odd = rulesOf({ hostname: "Ads.Example.", action: "bypass", enabled: true, order: 1 })
+  same(m.ruleIntent(blocked, odd), { action: "bypass", verb: "delete", hostname: "Ads.Example." })
   // A create carries the canonical spelling too.
   assert.equal(m.ruleIntent({ action: 0, question: "NEW.EXAMPLE." }, none).hostname, "new.example")
   // No question is no intent, whatever the verdict says.
   same(m.ruleIntent({ action: 0, question: "" }, mine), { action: "", verb: "", hostname: "" })
 
   // Matching is exact: a parent rule covers the host but is not its rule.
-  const parent = m.parseRules(JSON.stringify([
-    { hostname: "example", action: "bypass", enabled: true, order: 1 }
-  ])).rules
+  const parent = rulesOf({ hostname: "example", action: "bypass", enabled: true, order: 1 })
   assert.equal(m.findRule(parent, "ads.example"), null)
   assert.equal(m.findRule(mine, "ADS.EXAMPLE").action, "bypass")
   assert.equal(m.findRule(mine, ""), null)
@@ -271,7 +271,6 @@ test("activityActions narrows each chip server side", () => {
   assert.equal(m.activityHours("bypassed"), 6)
 })
 
-
 test("groupRules with no folders", () => {
   const rules = m.parseRules(rulesJson).rules.slice(0, 2)
   const rows = m.flattenGroups(m.groupRules(rules, []))
@@ -282,7 +281,7 @@ test("groupRules with no folders", () => {
 // resolver we know how to read.
 const probe = (s) => Object.keys(s).map(k => `@@${k}\n${s[k]}\n`).join("")
 
-const probedDevices = m.parseDevices(JSON.stringify([
+const probedDevices = devicesOf(
   { id: "dev0000001", name: "laptop", status: "active", profile: { id: "p1", name: "Home" },
     resolvers: { doh: "https://dns.controld.com/dev0000001",
       dot: "dev0000001.dns.controld.com", v4: [],
@@ -290,8 +289,7 @@ const probedDevices = m.parseDevices(JSON.stringify([
   { id: "dev0000002", name: "desktop", status: "active", profile: { id: "p1", name: "Home" },
     resolvers: { doh: "https://dns.controld.com/dev0000002",
       dot: "dev0000002.dns.controld.com", v4: ["76.76.20.20"],
-      v6: ["2606:1a40:0:9:4444:5555:6666:0"] } }
-])).devices
+      v6: ["2606:1a40:0:9:4444:5555:6666:0"] } })
 
 function matched(text, devices) {
   const r = m.matchEndpoint(devices === undefined ? probedDevices : devices, text)
@@ -385,15 +383,12 @@ test("resolverLabel names what talks to Control D, or admits it cannot", () => {
   // The account still carries a ctrld version for a device that no longer runs
   // one: the local probe wins, which is the whole point of this row.
   assert.equal(m.resolverLabel("resolved", false, "v1.5.5"), "systemd-resolved")
-  assert.equal(m.resolverLabel("nm", false, ""), "NetworkManager")
-  assert.equal(m.resolverLabel("dnscrypt", false, ""), "dnscrypt-proxy")
-  assert.equal(m.resolverLabel("stubby", false, ""), "stubby")
-  assert.equal(m.resolverLabel("unbound", false, ""), "unbound")
-  assert.equal(m.resolverLabel("dnsmasq", false, ""), "dnsmasq")
-  // Something wrote the stub and we cannot tell what: the honest answer, and
-  // the one the panel offers to have reported.
-  assert.equal(m.resolverLabel("resolvconf", false, ""), "unknown")
-  assert.equal(m.resolverLabel("", false, ""), "--")
+  // No daemon here, so every source answers with its own name. "resolvconf" is
+  // the stub nothing claims, and "" is nothing found at all.
+  const labels = { nm: "NetworkManager", dnscrypt: "dnscrypt-proxy", stubby: "stubby",
+    unbound: "unbound", dnsmasq: "dnsmasq", resolved: "systemd-resolved",
+    ctrld: "ctrld", resolvconf: "unknown", "": "--" }
+  same(Object.keys(labels).map(k => m.resolverLabel(k, false, "")), Object.keys(labels).map(k => labels[k]))
   assert.equal(m.resolverUnknown("resolvconf"), true)
   assert.equal(m.resolverUnknown("resolved"), false)
 })
@@ -402,7 +397,7 @@ test("parseDevices reads cdctl's normalized device list", () => {
   const raw = JSON.stringify([
     { id: "abc123", name: "laptop", status: "active", analytics: "full",
       profile: { id: "p1", name: "Home" }, ctrld: { version: "v1.5.5", last_fetch: "2026-08-15T12:32:13Z" },
-      resolvers: { dot: "abc123.dns.controld.com", doh: "https://dns.controld.com/abc123", v4: [], v6: [] } },
+      resolvers: { dot: "abc123.dns.controld.com", doh: "https://dns.controld.com/abc123", v4: ["", "76.76.20.20"], v6: [] } },
     // Every optional field null at once: cdctl sends nulls, not absences.
     { id: "def456", name: "phone", status: "pending", analytics: null, clients: null,
       profile: { id: "p2", name: "Kids" }, ctrld: null, resolvers: { v4: [], v6: [] } },
@@ -416,6 +411,8 @@ test("parseDevices reads cdctl's normalized device list", () => {
   assert.equal(r.devices[0].profileName, "Home")
   assert.equal(r.devices[0].ctrldVersion, "v1.5.5")
   assert.equal(r.devices[1].ctrldVersion, "")
+  // A blank address names no endpoint and must not reach the resolver list.
+  same(r.devices[0].v4, ["76.76.20.20"])
   assert.equal(m.parseDevices("{}").ok, false)
   assert.equal(m.parseDevices("nope").ok, false)
 })
@@ -423,9 +420,8 @@ test("parseDevices reads cdctl's normalized device list", () => {
 // `device update` answers with the device it verified, so the switch settles on
 // that rather than waiting for the next list fetch to agree.
 test("parseDevice and replaceDevice fold a verified write back into the list", () => {
-  const devices = m.parseDevices(JSON.stringify([
-    { id: "a", name: "one", status: "active" }, { id: "b", name: "two", status: "active" }
-  ])).devices
+  const devices = devicesOf({ id: "a", name: "one", status: "active" },
+                            { id: "b", name: "two", status: "active" })
   const written = m.parseDevice(JSON.stringify({ id: "b", name: "two", status: "soft-disabled" }))
   assert.equal(written.ok, true)
   assert.equal(written.device.status, "soft-disabled")
@@ -450,17 +446,15 @@ test("a rule with no action is not a rule", () => {
   // ruleIntent reads any matching rule as an offer to remove it, and the
   // delete command never looks at the action, so an actionless row would
   // turn a click into a deletion.
-  same(m.parseRules('[{"hostname":"a.example","enabled":true,"order":1}]').rules, [])
-  assert.equal(m.parseRules('[{"hostname":"a.example","action":"block","enabled":true,"order":1}]').rules.length, 1)
+  same(rulesOf({ hostname: "a.example", enabled: true, order: 1 }), [])
+  assert.equal(rulesOf({ hostname: "a.example", action: "block", enabled: true, order: 1 }).length, 1)
 })
 
 // Only the two disabled states are a pause. "pending" is a device that has
 // never made a query, which reads as protected rather than stood down.
 test("deviceProtected reads the account's view of the device", () => {
-  const devices = m.parseDevices(JSON.stringify([
-    { id: "a", status: "active" }, { id: "b", status: "soft-disabled" },
-    { id: "c", status: "hard-disabled" }, { id: "d", status: "pending" }, { id: "e" }
-  ])).devices
+  const devices = devicesOf({ id: "a", status: "active" }, { id: "b", status: "soft-disabled" },
+    { id: "c", status: "hard-disabled" }, { id: "d", status: "pending" }, { id: "e" })
   same(devices.map(d => m.deviceProtected(d)), [true, false, false, true, true])
   assert.equal(m.deviceProtected(null), false)
 })
@@ -468,18 +462,11 @@ test("deviceProtected reads the account's view of the device", () => {
 // "none" is the only answer that hides the analytics sections. An unreported
 // level is unknown, and the fetch is what settles it.
 test("analyticsReadable treats an unreported level as unknown, not off", () => {
-  const devices = m.parseDevices(JSON.stringify([
-    { id: "a", analytics: "full" }, { id: "b", analytics: "some" },
-    { id: "c", analytics: "none" }, { id: "d", analytics: null }, { id: "e" }
-  ])).devices
-  assert.equal(m.analyticsReadable(devices[0]), true)
-  assert.equal(m.analyticsReadable(devices[1]), true)
-  assert.equal(m.analyticsReadable(devices[2]), false)
-  assert.equal(m.analyticsReadable(devices[3]), true)
-  assert.equal(m.analyticsReadable(devices[4]), true)
+  const devices = devicesOf({ id: "a", analytics: "full" }, { id: "b", analytics: "some" },
+    { id: "c", analytics: "none" }, { id: "d", analytics: null }, { id: "e" })
+  same(devices.map(d => m.analyticsReadable(d)), [true, true, false, true, true])
   assert.equal(m.analyticsReadable(null), false)
 })
-
 
 test("endpointState says why this machine has no endpoint", () => {
   const device = { id: "abc123", name: "laptop" }
@@ -517,9 +504,7 @@ test("parseStats carries the window and the verdict it was asked for", () => {
   // caption every chip with the same window.
   const doc = (h, a) => m.parseStats(JSON.stringify({ ok: true, hours: h, action: a,
     totals: {}, series: [], domains: [], filters: [], networks: [], countries: [] }))
-  assert.equal(doc(6, 1).hours, 6)
-  assert.equal(doc(6, 1).action, 1)
-  assert.equal(doc(720, 0).hours, 720)
+  same([doc(6, 1).hours, doc(6, 1).action, doc(720, 0).hours], [6, 1, 720])
 })
 
 test("parseStats validates the helper's document", () => {
