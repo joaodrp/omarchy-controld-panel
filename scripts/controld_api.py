@@ -83,7 +83,7 @@ def get(host, path, params, token):
         detail = ""
         try:
             detail = (json.load(exc).get("error") or {}).get("message") or ""
-        except Exception:
+        except (ValueError, AttributeError):
             pass
         raise RuntimeError("HTTP %s from analytics%s" % (exc.code, ": " + detail if detail else ""))
     except urllib.error.URLError as exc:
@@ -92,4 +92,10 @@ def get(host, path, params, token):
         raise RuntimeError("bad analytics response: %s" % exc)
     if not payload.get("success"):
         raise RuntimeError((payload.get("error") or {}).get("message") or "analytics request failed")
-    return payload.get("body") or {}
+    # A success we cannot read is not an empty result. Falling back to {} here
+    # reports zero queries and empty lists, which is exactly what a genuinely
+    # quiet endpoint looks like, so a shape change would read as good news.
+    body = payload.get("body")
+    if not isinstance(body, dict):
+        raise RuntimeError("analytics returned no readable body for %s" % path)
+    return body
