@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "author": "João Pereira",
   "license": "MIT",
-  "description": "What Control D is doing on this machine, in the Omarchy bar, powered by cdctl.",
+  "description": "What Control D is doing on your machine, in the Omarchy bar, powered by cdctl.",
   "kinds": [
     "bar-widget"
   ],
@@ -14,7 +14,7 @@
   },
   "barWidget": {
     "displayName": "Control D",
-    "description": "Report what Control D is doing on this machine: its endpoint, profile, statistics and rules.",
+    "description": "What Control D is doing on your machine: your endpoint, its profile, statistics and rules.",
     "category": "Network",
     "allowMultiple": false,
     "defaultSection": "right",
