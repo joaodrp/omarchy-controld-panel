@@ -12,8 +12,13 @@ const M = {}
 vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, groupRules, flattenGroups, countRules, limitRuleRows, rulesCaption, activityFilterOptions, activityActions, activityHours, actionGlyph, mergeSticky, overrideAction, findRule, ruleIntent, validHostname, dropOverridden, ruleDetail, accountLine, matchEndpoint, controldPresent, controldLive, ctrldActive, resolverLabel, resolverUnknown, parseDevices, parseDevice, replaceDevice, deviceProtected, analyticsReadable, endpointLine, endpointState, ENDPOINT_PENDING, ENDPOINT_NONE, ENDPOINT_UNKNOWN, ENDPOINT_MACHINE, activeProfile, parseStats, formatCount, blockedShare, meterRatio, filterLabel, countryName, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
 const m = M.__exports
 
-// vm-realm arrays fail strict deepEqual on prototype identity; compare by value.
-function same(a, b) { assert.equal(JSON.stringify(a), JSON.stringify(b)) }
+// vm-realm arrays fail strict deepEqual on prototype identity, so both sides
+// round-trip through JSON to shed the realm. Comparing the parsed values
+// rather than the strings keeps key order from being load-bearing.
+function same(a, b) {
+  const plain = (x) => JSON.parse(JSON.stringify(x))
+  assert.deepEqual(plain(a), plain(b))
+}
 
 const tests = []
 function test(name, fn) { tests.push([name, fn]) }
@@ -38,8 +43,11 @@ test("parseError marks exit 8 retryable", () => {
 })
 
 test("errorLine elides long messages", () => {
-  const long = "x".repeat(300)
-  assert.equal(m.errorLine({ message: long }).length, 140)
+  const long = "abcdefghij".repeat(30)
+  const cut = m.errorLine({ message: long })
+  assert.equal(cut.length, 140)
+  // A length check alone would pass on 140 characters of anything.
+  assert.equal(long.indexOf(cut.slice(0, -3)), 0)
   assert.equal(m.errorLine(null, "fallback"), "fallback")
   assert.equal(m.errorLine({ message: "" }, "fallback"), "fallback")
 })
@@ -120,8 +128,11 @@ test("limitRuleRows caps rules, not rows, and drops headers left with nothing", 
 
   // Two rules in, the "Ads" header has not earned its place yet.
   same(m.limitRuleRows(rows, 2).map(r => r.kind), ["rule", "rule"])
-  // Three rules in, it has.
+  // Three rules in, it has. Kinds alone would pass on a cap that kept the
+  // right number of the wrong rules, so name them too.
   same(m.limitRuleRows(rows, 3).map(r => r.kind), ["rule", "rule", "folder", "rule"])
+  same(m.limitRuleRows(rows, 3).filter(r => r.kind === "rule").map(r => r.rule.hostname),
+    rows.filter(r => r.kind === "rule").slice(0, 3).map(r => r.rule.hostname))
   // Room for everything: the empty "Empty" folder keeps its header, which is
   // the whole point of showing empty folders.
   same(m.limitRuleRows(rows, 4).map(r => r.kind), rows.map(r => r.kind))
@@ -502,6 +513,16 @@ test("activeProfile prefers the endpoint's profile over the browsed one", () => 
   assert.equal(m.activeProfile([], "p1", "p1"), null)
 })
 
+test("parseStats carries the window and the verdict it was asked for", () => {
+  // Both are echoed back for the caption to name, so a hardcoded pair would
+  // caption every chip with the same window.
+  const doc = (h, a) => m.parseStats(JSON.stringify({ ok: true, hours: h, action: a,
+    totals: {}, series: [], domains: [], filters: [], networks: [], countries: [] }))
+  assert.equal(doc(6, 1).hours, 6)
+  assert.equal(doc(6, 1).action, 1)
+  assert.equal(doc(720, 0).hours, 720)
+})
+
 test("parseStats validates the helper's document", () => {
   const raw = JSON.stringify({
     ok: true, hours: 24, action: 0,
@@ -618,7 +639,11 @@ test("actionGlyph has a fallback", () => {
 let failed = 0
 for (const [name, fn] of tests) {
   try {
-    fn()
+    const returned = fn()
+    // An async body resolves after the runner has moved on, so its assertions
+    // would never be seen and the test would report ok having checked nothing.
+    if (returned && typeof returned.then === "function")
+      throw new Error("async test body: assertions would not be awaited")
     console.log("ok   " + name)
   } catch (e) {
     failed++
