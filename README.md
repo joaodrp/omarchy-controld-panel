@@ -7,7 +7,22 @@ lookups and rules. Block or bypass a host straight from the log.
 Backed by [`cdctl`](https://github.com/joaodrp/controld-cli), an independent command-line
 client for Control D.
 
+> [!IMPORTANT]
+> An independent project, not affiliated with Control D.
+
 <img src="preview.png" alt="The panel open in the Omarchy bar, showing the endpoint, its profile, and blocked-query statistics" width="380">
+
+## Highlights
+
+- 🚫 A site will not load? Find it in the log, press `b`, and it resolves. Press again to put the block back.
+- 🔀 Switch which profile your endpoint enforces without leaving the bar.
+- ✍️ Add, switch off and delete custom rules in place, with deletes behind a confirmation.
+- ⏸️ Stand Control D down and bring it back from the hero switch: your own command when you have one, the account when you do not.
+- 🔎 Finds your endpoint by reading the resolver actually in use, so it reports what resolves rather than what the account believes. `ctrld`, `stubby`, `dnscrypt-proxy`, `unbound`, `dnsmasq`, NetworkManager, systemd-resolved, or a bare IPv6 address.
+- 📊 Queries over time, the blocked share, and the domains and filters doing the blocking, for the window you pick.
+- ⌨️ Keyboard first: every actionable row has a key, and `?` shows them all.
+- 🤖 Stuck? `A` hands the panel to Omarchy's agent, pointed at `cdctl` and this plugin, so it can read your setup and fix it.
+- 🔒 Every write goes through `cdctl`, which reads the account back to confirm it landed. Your API token never touches a command line.
 
 ## Install
 
@@ -137,22 +152,18 @@ Set through the bar's widget settings, or inline on the widget's `shell.json` en
 
 ## Will it find my setup?
 
-The panel identifies your endpoint by reading the DNS config on the machine, so it works whether
-Control D is held by `ctrld`, `stubby`, `dnscrypt-proxy`, `unbound`, `dnsmasq`, NetworkManager or
-systemd-resolved -- including a plain IPv6 resolver with nothing in between.
+If the panel finds a Control D resolver it cannot attribute, the resolver row reads `unknown` and
+links to the issue tracker. **Please open an issue** so your setup can be added. Filtering done on
+a router or upstream is invisible from the machine, and no local probe changes that.
 
-If it finds a Control D resolver it cannot attribute, the resolver row reads `unknown` and links to
-the issue tracker. **Please open an issue** so your setup can be added. Filtering on a router
-or upstream is invisible from the machine, and no local probe changes that.
-
-[How endpoint detection works](docs/how-it-works.md#endpoint-detection) has the details.
+[How endpoint detection works](docs/how-it-works.md#endpoint-detection) lists what it reads.
 
 ## Your API token
 
 Statistics and activity come from an origin `cdctl` cannot reach, so two small Python helpers call
-it directly. They read your token the same way `cdctl` does and send it in a request header only --
-never a process argument, which is world readable on Linux, and never in output. Nothing is sent
-anywhere but Control D.
+it directly. They read your token the same way `cdctl` does, send it in a request header, and put
+it nowhere else: not a process argument, which is world readable on Linux, and not the output.
+Nothing goes anywhere but Control D.
 
 [The full account](docs/how-it-works.md#the-two-origins) of what is called and how the token is
 resolved.
@@ -192,8 +203,6 @@ omarchy plugin remove io.github.joaodrp.controld
 ## Icons
 
 The bar and hero mark is the Control D logo, and the artwork belongs to Control D.
-
-This is an independent project. It is not affiliated with, endorsed by, or supported by Control D.
 
 ## License
 
