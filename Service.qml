@@ -295,6 +295,7 @@ Item {
     enforceError = ""
     pendingProfileId = id
     enforceProcess.command = cdctl(["-y", "device", "update", endpoint.id, "--enforce", id])
+    writeWatchdog.restart()
     enforceProcess.running = true
   }
 
@@ -312,6 +313,7 @@ Item {
     var args = ["rule", intent.verb, intent.hostname, "--profile", activeProfile.id]
     if (intent.verb !== "delete") args = args.concat(["--action", intent.action])
     ruleProcess.command = cdctl(["-y"].concat(args))
+    writeWatchdog.restart()
     ruleProcess.running = true
   }
 
@@ -342,6 +344,7 @@ Item {
     _ruleIntent = null
     ruleProcess.command = cdctl(["-y", "rule", "update", rule.hostname,
       "--profile", activeProfile.id, rule.enabled ? "--disabled" : "--enabled"])
+    writeWatchdog.restart()
     ruleProcess.running = true
   }
 
@@ -355,6 +358,7 @@ Item {
     _ruleIntent = null
     ruleProcess.command = cdctl(["-y", "rule", "create", host,
       "--action", String(action || "block"), "--profile", activeProfile.id])
+    writeWatchdog.restart()
     ruleProcess.running = true
   }
 
@@ -367,6 +371,7 @@ Item {
     pendingRuleHost = rule.hostname
     _ruleIntent = null
     ruleProcess.command = cdctl(["-y", "rule", "delete", rule.hostname, "--profile", activeProfile.id])
+    writeWatchdog.restart()
     ruleProcess.running = true
   }
 
@@ -380,6 +385,7 @@ Item {
       // Through a shell, so the setting can be a real command line rather than
       // a bare path. It is the user's own config, run as they wrote it.
       pauseProcess.command = ["sh", "-c", on ? resumeCommand : pauseCommand]
+      writeWatchdog.restart()
       pauseProcess.running = true
       return
     }
@@ -388,6 +394,7 @@ Item {
     // because there is no terminal here to answer a prompt.
     devicePauseProcess.command = cdctl(["-y", "device", "update", endpoint.id,
       "--status", on ? "active" : "soft-disabled"])
+    writeWatchdog.restart()
     devicePauseProcess.running = true
   }
 
@@ -573,6 +580,42 @@ Item {
     }
   }
 
+  Timer {
+    // A read that never returns is covered by the next poll, which overwrites
+    // whatever it left behind. A write is not: the panel shows the state the
+    // user asked for from the moment they ask, and only the write's own exit
+    // takes that back. Without this the switch sits where it was put, the hero
+    // names a profile nothing enforces, and the clicked row stays marked, for
+    // as long as the shell runs.
+    id: writeWatchdog
+    interval: 30000
+    repeat: false
+    onTriggered: {
+      // Only a process still running is one that failed to answer. `ruleBusy`
+      // outlives its own write on purpose, waiting on the rules list to agree.
+      if (ruleProcess.running) {
+        root.reap(ruleProcess)
+        root.ruleBusy = false
+        root.pendingRuleHost = ""
+        root._ruleIntent = null
+        root.ruleError = "The rule write did not answer"
+      }
+      if (enforceProcess.running) {
+        root.reap(enforceProcess)
+        root.enforceBusy = false
+        root.pendingProfileId = ""
+        root.enforceError = "The profile switch did not answer"
+      }
+      if (devicePauseProcess.running || pauseProcess.running) {
+        root.reap(devicePauseProcess)
+        root.reap(pauseProcess)
+        root.pauseBusy = false
+        root._pauseDesired = -1
+        root.pauseError = "The pause command did not answer"
+      }
+    }
+  }
+
   Process {
     // The shell inherits Hyprland's environment, which usually lacks the
     // cargo and ~/.local bin dirs cdctl installs into.
@@ -617,12 +660,13 @@ Item {
     onTriggered: root.refresh()
   }
 
-  Process {
+  Reapable {
     id: ruleProcess
     running: false
     command: []
     stderr: StdioCollector { id: ruleStderr; waitForEnd: true }
     onExited: function(exitCode) {
+      if (root.reaped(ruleProcess)) return
       if (exitCode !== 0) {
         root.ruleBusy = false
         root.pendingRuleHost = ""
@@ -641,7 +685,7 @@ Item {
     }
   }
 
-  Process {
+  Reapable {
     // Same verified read-back as the pause: the device cdctl prints is the one
     // the account holds, so the profile the panel describes follows it and the
     // rules for it reload without a re-list.
@@ -651,6 +695,7 @@ Item {
     stdout: StdioCollector { id: enforceStdout; waitForEnd: true }
     stderr: StdioCollector { id: enforceStderr; waitForEnd: true }
     onExited: function(exitCode) {
+      if (root.reaped(enforceProcess)) return
       root.enforceBusy = false
       // Cleared either way: the device below carries the confirmed profile, and
       // a failure has to fall back to what the account still says rather than
@@ -670,7 +715,7 @@ Item {
     }
   }
 
-  Process {
+  Reapable {
     // Standing the device down through the account. cdctl verifies the write
     // by re-reading the device, so what it prints replaces what the list
     // fetched and the switch settles on that rather than on a re-probe.
@@ -680,6 +725,7 @@ Item {
     stdout: StdioCollector { id: devicePauseStdout; waitForEnd: true }
     stderr: StdioCollector { id: devicePauseStderr; waitForEnd: true }
     onExited: function(exitCode) {
+      if (root.reaped(devicePauseProcess)) return
       root.pauseBusy = false
       root._pauseDesired = -1
       if (exitCode !== 0) {
@@ -696,7 +742,7 @@ Item {
     }
   }
 
-  Process {
+  Reapable {
     // The host's own way of standing Control D down and bringing it back. It
     // may need a password, so the command is expected to escalate itself.
     id: pauseProcess
@@ -704,6 +750,7 @@ Item {
     command: []
     stderr: StdioCollector { id: pauseStderr; waitForEnd: true }
     onExited: function(exitCode) {
+      if (root.reaped(pauseProcess)) return
       root.pauseBusy = false
       if (exitCode !== 0) {
         root._pauseDesired = -1
