@@ -14,9 +14,14 @@ function str(value) {
   return value === undefined || value === null ? "" : String(value)
 }
 
+// A missing value is not a zero. `Number(null)` and `Number("")` are both 0
+// and both finite, so testing the conversion alone hands back a number the
+// caller never had and swallows the fallback it asked for.
 function num(value, fallback) {
+  var fall = fallback === undefined ? 0 : fallback
+  if (typeof value !== "number" && (typeof value !== "string" || value.trim() === "")) return fall
   var n = Number(value)
-  return isFinite(n) ? n : (fallback === undefined ? 0 : fallback)
+  return isFinite(n) ? n : fall
 }
 
 function strList(value) {

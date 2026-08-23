@@ -567,6 +567,20 @@ test("parseActivity reads the collapsed log", () => {
   assert.equal(m.parseActivity("").ok, false)
 })
 
+test("a missing number falls back rather than becoming zero", () => {
+  // Number(null) is 0 and 0 is finite, so a bare isFinite test would read a
+  // verdict-less row as action 0, which is "blocked". That row would then
+  // offer to bypass a host nothing had blocked.
+  const row = m.parseActivity('{"ok":true,"queries":[{"question":"a.example","action":null}]}').queries[0]
+  assert.equal(row.action, -1)
+  assert.equal(row.repeats, 1)
+  assert.equal(m.actionName(null), "")
+  assert.equal(m.overrideAction(row), "")
+  same(m.ruleIntent(row, []), { action: "", verb: "", hostname: "" })
+  // The stats window keeps its default rather than collapsing to zero hours.
+  assert.equal(m.parseStats('{"ok":true,"hours":null,"totals":{},"series":[],"domains":[],"filters":[],"networks":[],"countries":[]}').hours, 24)
+})
+
 test("actionName maps the analytics verdicts", () => {
   assert.equal(m.actionName(0), "block")
   assert.equal(m.actionName(1), "bypass")
