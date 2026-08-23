@@ -32,7 +32,6 @@ block on a device long after the daemon is gone.
 An endpoint found only in `/etc/resolv.conf` means something outside this list set it: the resolver
 row reads `unknown` and links to the issue tracker.
 
-Adding a resolver means one more section in the probe and one more entry in `RESOLVERS`.
 
 ## The two origins
 

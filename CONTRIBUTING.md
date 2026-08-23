@@ -79,6 +79,7 @@ current state, never the change -- git history holds that.
 
 ## Gotchas
 
+- **Adding a resolver** means one more section in the probe and one more entry in `RESOLVERS`.
 - **`cdctl api` rejects `--json`** and emits the upstream body verbatim, so it needs its own
   command builder. Its field names are upstream's, not the CLI's normalized schema.
 - **`Shape` with `layer.enabled` loses its antialiasing** when scaled down: the layer caches at the

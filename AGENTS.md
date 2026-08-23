@@ -15,9 +15,8 @@ Read these first, and do not restate them here:
 
 ## Working here
 
-**The account is real.** Rule, profile and pause actions write to a live Control D account. Read
-the state back before and after each action rather than trusting a sequence, and restore whatever
-you changed.
+**The account is real.** Read the state back before and after each action rather than trusting a
+sequence. CONTRIBUTING.md's Gotchas has the rest.
 
 **Green tests prove very little.** `Model.js` is covered; `Panel.qml` and `Service.qml` are not,
 and cannot be without a running shell. A passing suite says the parsing is right, not that the

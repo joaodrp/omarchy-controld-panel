@@ -14,17 +14,11 @@ would let anyone resolve through that endpoint.
 
 ## Install
 
+Needs [`cdctl`](https://github.com/joaodrp/controld-cli) installed and signed in
+(`cdctl auth login --token-stdin`), plus the [requirements](#requirements) below.
+
 ```sh
 omarchy plugin add https://github.com/joaodrp/omarchy-controld-panel.git --enable
-```
-
-Needs `cdctl` installed and signed in (`cdctl auth login --token-stdin`). Full
-[requirements](#requirements) below.
-
-Move it to another section of the bar:
-
-```sh
-omarchy bar move io.github.joaodrp.controld --section right
 ```
 
 ## What it shows
@@ -37,7 +31,7 @@ endpoint is not in your account, or a failed device lookup.
 | --- | --- |
 | Bar icon | Account state: dimmed when unavailable, badged when `cdctl` needs a login, crossed when `cdctl` is missing or nothing here is protected |
 | Hero | Your endpoint and the profile it enforces, or the signed-in account when there is no endpoint; the mark opens the Control D dashboard, where everything the panel cannot do lives |
-| MACHINE | Endpoint ID (click to copy), protocol, resolver, unmatched action; the resolver is probed locally, never taken from the account, so it names `ctrld` and its version whenever `ctrld` holds the endpoint |
+| MACHINE | Endpoint ID (click to copy), protocol, resolver, unmatched action; the resolver is probed on the machine rather than read from the account, so it reports what actually resolves |
 | STATISTICS | Queries over time with the blocked share shaded under it, totals, and top domains, filters and destinations as meter rows; fetched only while the panel is open |
 | ACTIVITY | Your most recent lookups, refreshed every 15s while the panel is open |
 | RULES | The enforced profile's custom rules, root first then one group per folder, with action, spoof or redirect target, and disabled state |
@@ -58,7 +52,7 @@ reading the account back:
 <img src="docs/images/statistics.png" alt="The statistics section: queries over time, totals, and top domains and filters" width="380">
 
 Pick the window (1h/24h/7d/30d) and the verdict (blocked/bypassed/redirected); destinations switch
-between networks and countries, spelled out from ISO 3166-1. The verdict governs domains and
+between networks and countries. The verdict governs domains and
 filters, not destinations: a blocked query never reaches one, so destinations are the traffic that
 was allowed. Domain rows copy the hostname; filter, network and country rows are inert, since
 nothing takes those as input.
@@ -74,7 +68,7 @@ nothing takes those as input.
   chatty telemetry endpoint cannot fill the section. Off keeps each lookup, in sequence.
 - Bypass a blocked host, or block a bypassed one, from the row itself: the verdict glyph turns
   into the action on hover, `b` and `B` do the same from the keyboard. Pressing again removes the
-  rule. The list is drawn short with a `+N` expander that costs no extra request.
+  rule. The list is drawn short, with a `+N` expander for the rest.
 
 ### Rules
 
