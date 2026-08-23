@@ -34,15 +34,15 @@ Panel {
   // This panel describes one machine: the endpoint it resolves through and the
   // profile that endpoint enforces. Every section hangs off that, so without an
   // identified endpoint there is nothing to show and the panel says why.
-  readonly property bool machineMode: controld.endpointState === "machine"
+  readonly property bool machineMode: controld.endpointState === Model.ENDPOINT_MACHINE
   readonly property bool showEndpoint: controld.ready && machineMode
   readonly property bool showRules: controld.ready && machineMode && controld.activeProfile !== null
   // No Control D resolver here at all, which is the only state that means this
   // machine is unprotected.
-  readonly property bool unprotected: controld.ready && controld.endpointState === "none"
+  readonly property bool unprotected: controld.ready && controld.endpointState === Model.ENDPOINT_NONE
   // A Control D resolver we cannot put a name to: the device lookup failed, or
   // the endpoint belongs to another account. Protected, but not describable.
-  readonly property bool endpointUnknown: controld.ready && controld.endpointState === "unknown"
+  readonly property bool endpointUnknown: controld.ready && controld.endpointState === Model.ENDPOINT_UNKNOWN
   // Where to send someone who has neither the CLI nor an account set up.
   readonly property string guideUrl: "https://github.com/joaodrp/omarchy-controld-panel#readme"
   readonly property string dashboardUrl: "https://controld.com/dashboard"

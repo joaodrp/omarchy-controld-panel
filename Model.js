@@ -2,11 +2,9 @@
 // Qt-free so it runs under node (test/model.test.js); Service.qml owns the
 // processes and Panel.qml owns the rendering.
 
-// cdctl exit codes that the panel maps to a distinct UI state. Everything else
-// is a plain error line.
-var EXIT_OK = 0
-var EXIT_USAGE = 2
-var EXIT_NOT_FOUND = 3
+// The cdctl exit codes the panel treats specially: one sends the reader to
+// `cdctl auth login`, the other says the failure is worth retrying. Every
+// other code is a plain error line.
 var EXIT_AUTH = 4
 var EXIT_RETRYABLE = 8
 
@@ -268,14 +266,6 @@ function limitRuleRows(rows, maxRules) {
   return out
 }
 
-// What the RULES section says about itself. The hidden count only appears when
-// something is hidden, so the common case reads as it always did.
-function rulesCaption(count, shown) {
-  if (!count || count.total === 0) return "No custom rules in this profile."
-  if (num(shown, 0) < count.total)
-    return "showing " + num(shown, 0) + " of " + count.total + " · " + count.enabled + " enabled"
-  return count.enabled + " of " + count.total + " enabled"
-}
 
 // This machine's Control D endpoint is identified by the resolver it is
 // actually using: every device's DoT hostname and DoH path carry its own
@@ -516,14 +506,6 @@ function activeProfile(profiles, endpointProfileId, selectedId) {
   return resolveProfile(profiles, selectedId)
 }
 
-// Hero meta when this machine's endpoint is known: what it enforces and how.
-function endpointLine(device, transport) {
-  if (!device) return ""
-  var parts = []
-  if (device.profileName !== "") parts.push(device.profileName)
-  if (str(transport) !== "") parts.push(str(transport))
-  return parts.length > 0 ? parts.join(" · ") : "Control D"
-}
 
 // scripts/stats.py fans the analytics calls into one document per (window,
 // action) pair, so this only has to validate it.

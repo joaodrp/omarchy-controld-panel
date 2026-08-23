@@ -9,7 +9,7 @@ const vm = require("node:vm")
 
 const src = fs.readFileSync(path.join(__dirname, "..", "Model.js"), "utf8")
 const M = {}
-vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, groupRules, flattenGroups, countRules, limitRuleRows, rulesCaption, activityFilterOptions, activityActions, activityHours, actionGlyph, mergeSticky, overrideAction, findRule, ruleIntent, validHostname, dropOverridden, ruleDetail, accountLine, matchEndpoint, controldPresent, controldLive, ctrldActive, resolverLabel, resolverUnknown, parseDevices, parseDevice, replaceDevice, deviceProtected, analyticsReadable, endpointLine, endpointState, ENDPOINT_PENDING, ENDPOINT_NONE, ENDPOINT_UNKNOWN, ENDPOINT_MACHINE, activeProfile, parseStats, formatCount, blockedShare, meterRatio, filterLabel, countryName, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
+vm.runInNewContext(src + "\n;this.__exports = { parseJson, parseError, errorLine, elide, parseAuthStatus, parseProfiles, parseRules, parseFolders, resolveProfile, groupRules, flattenGroups, countRules, limitRuleRows, activityFilterOptions, activityActions, activityHours, actionGlyph, mergeSticky, overrideAction, findRule, ruleIntent, validHostname, dropOverridden, ruleDetail, accountLine, matchEndpoint, controldPresent, controldLive, ctrldActive, resolverLabel, resolverUnknown, parseDevices, parseDevice, replaceDevice, deviceProtected, analyticsReadable, endpointState, ENDPOINT_PENDING, ENDPOINT_NONE, ENDPOINT_UNKNOWN, ENDPOINT_MACHINE, activeProfile, parseStats, formatCount, blockedShare, meterRatio, filterLabel, countryName, parseActivity, actionName, clockTime, activityDetail, windowOptions, actionOptions, EXIT_AUTH };", M)
 const m = M.__exports
 
 // vm-realm arrays fail strict deepEqual on prototype identity, so both sides
@@ -271,11 +271,6 @@ test("activityActions narrows each chip server side", () => {
   assert.equal(m.activityHours("bypassed"), 6)
 })
 
-test("rulesCaption says what is hidden only when something is", () => {
-  assert.equal(m.rulesCaption({ total: 0, enabled: 0 }, 0), "No custom rules in this profile.")
-  assert.equal(m.rulesCaption({ total: 9, enabled: 8 }, 9), "8 of 9 enabled")
-  assert.equal(m.rulesCaption({ total: 40, enabled: 31 }, 15), "showing 15 of 40 · 31 enabled")
-})
 
 test("groupRules with no folders", () => {
   const rules = m.parseRules(rulesJson).rules.slice(0, 2)
@@ -485,14 +480,6 @@ test("analyticsReadable treats an unreported level as unknown, not off", () => {
   assert.equal(m.analyticsReadable(null), false)
 })
 
-test("endpointLine reads the matched device", () => {
-  const devices = m.parseDevices(JSON.stringify([
-    { id: "abc123", name: "laptop", profile: { id: "p1", name: "Home" } }
-  ])).devices
-  assert.equal(m.endpointLine(devices[0], "DNS-over-TLS"), "Home · DNS-over-TLS")
-  assert.equal(m.endpointLine(devices[0], ""), "Home")
-  assert.equal(m.endpointLine(null, "DNS-over-TLS"), "")
-})
 
 test("endpointState says why this machine has no endpoint", () => {
   const device = { id: "abc123", name: "laptop" }
