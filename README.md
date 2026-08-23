@@ -41,52 +41,41 @@ endpoint is not in your account, or a failed device lookup.
 
 | Area | Contents |
 | --- | --- |
-| Bar icon | Account state: dimmed when unavailable, badged when `cdctl` needs a login, crossed when `cdctl` is missing or nothing here is protected |
-| Hero | Your endpoint and the profile it enforces, or the signed-in account when there is no endpoint; the mark opens the Control D dashboard, where everything the panel cannot do lives |
-| MACHINE | Endpoint ID (click to copy), protocol, resolver, unmatched action; the resolver is probed on the machine rather than read from the account, so it reports what actually resolves |
-| STATISTICS | Queries over time with the blocked share shaded under it, totals, and top domains, filters and destinations as meter rows; fetched only while the panel is open |
+| Bar icon | Dimmed when unavailable, badged when `cdctl` needs a login, crossed when nothing here is protected |
+| Hero | Your endpoint and its profile, or the account when there is no endpoint. The mark opens the dashboard |
+| MACHINE | Endpoint ID (click to copy), protocol, resolver, unmatched action |
+| STATISTICS | Queries over time, totals, and top domains, filters and destinations. Fetched only while the panel is open |
 | ACTIVITY | Your most recent lookups, refreshed every 15s while the panel is open |
-| RULES | The enforced profile's custom rules, root first then one group per folder, with action, spoof or redirect target, and disabled state |
+| RULES | The profile's custom rules, root first then one group per folder |
 
-It is mostly a reader. It writes three things, each through `cdctl`, which verifies the write by
-reading the account back:
-
-| Write | From |
-| --- | --- |
-| Custom rules: add, delete, switch off, override a lookup | Rules section, activity rows |
-| The profile your endpoint enforces | Hero caret |
-| Your device's on/off state | Hero switch |
+It writes in three places: the rules section and activity rows, the hero caret, and the hero
+switch.
 
 ### Profile
 
 <img src="docs/images/profiles.png" alt="The profile picker open under the hero, with the enforced profile marked in force" width="380">
 
-The caret beside the profile name opens the list, and `p` does the same. Picking one enforces it
-on this endpoint. The hero shows the new name straight away and settles on whatever the account
-confirms.
+The caret beside the profile name opens the list, and `p` does the same. The hero shows your
+pick straight away, then settles on whatever the account confirms.
 
 ### Statistics
 
 <img src="docs/images/statistics.png" alt="The statistics section: queries over time, totals, and top domains and filters" width="380">
 
-Pick the window (1h/24h/7d/30d) and the verdict (blocked/bypassed/redirected); destinations switch
-between networks and countries. The verdict governs domains and
-filters, not destinations: a blocked query never reaches one, so destinations are the traffic that
-was allowed. Domain rows copy the hostname; filter, network and country rows are inert, since
-nothing takes those as input.
+Pick the window (1h/24h/7d/30d) and the verdict; destinations switch between networks and
+countries. The verdict governs domains and filters but not destinations, since a blocked query
+never reaches one. Domain rows copy the hostname; the rest are inert.
 
 ### Activity
 
 <img src="docs/images/activity.png" alt="The activity list, showing blocked lookups with their filter, record types and repeat counts" width="380">
 
-- Filtered to **blocked** by default, the verdict worth acting on when a site fails to load.
-  `Bypassed` and `Others` are the rest; `Others` is the only place a redirect or a spoof appears.
-  Filtering happens server side, so a blocked list is a full list.
-- `Grouped`, on by default, folds every row for a host into the newest with an `xN` tally, so a
-  chatty telemetry endpoint cannot fill the section. Off keeps each lookup, in sequence.
-- Bypass a blocked host, or block a bypassed one, from the row itself: the verdict glyph turns
-  into the action on hover, `b` and `B` do the same from the keyboard. Pressing again removes the
-  rule. The list is drawn short, with a `+N` expander for the rest.
+- Filtered to **blocked** by default; `Bypassed` and `Others` are the rest, and redirects and
+  spoofs appear only under `Others`. Filtering is server side, so a blocked list is a full list.
+- `Grouped`, on by default, folds a host's repeats into one row with an `xN` tally. Off keeps
+  every lookup, in sequence.
+- The verdict glyph becomes the action on hover, and `b` and `B` do the same from the keyboard.
+  Pressing again removes the rule.
 
 ### Rules
 
@@ -99,35 +88,24 @@ behind an inline confirmation, and `y` copies the hostname.
 
 <img src="docs/images/paused.png" alt="The panel with Control D paused: the mark crossed out, the switch off, and the sections replaced by the reason" width="380">
 
-The hero switch stands Control D down and brings it back.
-
-- With `pauseCommand` and `resumeCommand` set, the panel runs those; empty, it pauses your device
-  through the account instead, so the switch works with no setup. The two are not equivalent: a
-  host command changes what your machine resolves through, the account changes what Control D does
-  with what you ask of it. There is no one right host command -- `ctrld` has a service, a
-  systemd-resolved setup has a drop-in -- so the panel runs what you give it.
-- `statusCommand` answers whether it is on, inheriting any check the panel cannot make, such as a
-  link carrying its own DNS. Without one the switch falls back to the identified device, or to
-  Control D on the live resolver.
-- Paused, the panel says so instead of reporting a missing resolver.
-
-The commands are yours to write. What the panel needs from them:
+With `pauseCommand` and `resumeCommand` set the panel runs those; without them it stands your
+device down through the account, so the switch works with no setup. They are not the same: a host
+command changes what your machine resolves through, the account changes what Control D does with
+what you ask of it.
 
 | Setting | Must |
 | --- | --- |
-| `statusCommand` | Exit 0 when Control D is on, non-zero when it is not |
-| `pauseCommand` | Stand it down, and return without waiting on a terminal |
+| `statusCommand` | Exit 0 when Control D is on |
+| `pauseCommand` | Stand it down, without waiting on a terminal |
 | `resumeCommand` | Put it back |
 
-The panel runs them with no tty, so anything needing root has to escalate on its own -- `pkexec`,
-or a passwordless `sudo` rule. A command that waits for a password never returns, and the switch
-stays where you put it until the write watchdog gives up.
+The panel has no tty, so a command needing root must escalate itself with `pkexec` or a
+passwordless `sudo` rule. One that waits for a password never returns.
 
-For a `ctrld` service the three are `systemctl is-active --quiet ctrld`, `systemctl stop ctrld`
-and `systemctl start ctrld`. A systemd-resolved setup takes more care, since a link that carries
-its own DNS quietly outranks the global endpoint;
+For `ctrld`: `systemctl is-active --quiet ctrld`, `systemctl stop ctrld`, `systemctl start ctrld`.
+systemd-resolved takes more care, since a link carrying its own DNS outranks the global endpoint;
 [`dns-controld`](https://github.com/joaodrp/omarchy/blob/main/dot_local/bin/executable_dns-controld)
-is a worked example that handles it.
+is a worked example.
 
 ## Keyboard shortcuts
 
