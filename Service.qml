@@ -247,6 +247,9 @@ Item {
 
   component Reapable: Process {
     property bool expectedStop: false
+    // When a write began, so the watchdog can time each one from its own start
+    // rather than from whichever started last.
+    property double startedAt: 0
     running: false
     command: []
   }
@@ -277,22 +280,33 @@ Item {
     enforceError = ""
     pendingProfileId = id
     enforceProcess.command = cdctl(["-y", "device", "update", endpoint.id, "--enforce", id])
-    writeWatchdog.restart()
-    enforceProcess.running = true
+    beginWrite(enforceProcess)
   }
 
   // Every rule write. cdctl verifies each one by reading the profile back, so
   // a successful exit is the profile agreeing; the list is then refetched
   // rather than patched, because a rule carries an order and a folder the
   // panel does not choose.
+  // Every write goes through here so none of them starts unwatched.
+  // A write is overdue once it has run longer than the account should ever
+  // take to answer.
+  function overdue(proc) {
+    return proc.running && Date.now() - proc.startedAt >= 30000
+  }
+
+  function beginWrite(proc) {
+    proc.startedAt = Date.now()
+    proc.running = true
+    if (!writeWatchdog.running) writeWatchdog.start()
+  }
+
   function startRuleWrite(hostname, args, intent) {
     ruleBusy = true
     ruleError = ""
     pendingRuleHost = hostname
     _ruleIntent = intent || null
     ruleProcess.command = cdctl(["-y"].concat(args))
-    writeWatchdog.restart()
-    ruleProcess.running = true
+    beginWrite(ruleProcess)
   }
 
   // Apply the override an activity row offers, or take it away again.
@@ -350,14 +364,12 @@ Item {
       // Through a shell, so the setting can be a real command line rather than
       // a bare path. It is the user's own config, run as they wrote it.
       pauseProcess.command = ["sh", "-c", on ? resumeCommand : pauseCommand]
-      writeWatchdog.restart()
-      pauseProcess.running = true
+      beginWrite(pauseProcess)
       return
     }
     devicePauseProcess.command = cdctl(["-y", "device", "update", endpoint.id,
       "--status", on ? "active" : "soft-disabled"])
-    writeWatchdog.restart()
-    devicePauseProcess.running = true
+    beginWrite(devicePauseProcess)
   }
 
   onActivityHeldChanged: {
@@ -584,12 +596,15 @@ Item {
     // takes that back. Without this the switch sits where it was put and the
     // hero names a profile nothing enforces, for as long as the shell runs.
     id: writeWatchdog
-    interval: 30000
-    repeat: false
+    // Ticks while any write is outstanding and times each from its own start.
+    // A single deadline shared by all four would let a write beginning late
+    // extend one that began early, or reap it seconds after it started.
+    interval: 5000
+    repeat: true
     onTriggered: {
       // Only a process still running is one that failed to answer. `ruleBusy`
       // outlives its own write on purpose, waiting on the rules list to agree.
-      if (ruleProcess.running) {
+      if (root.overdue(ruleProcess)) {
         root.reap(ruleProcess)
         root.ruleBusy = false
         root.pendingRuleHost = ""
@@ -597,14 +612,14 @@ Item {
         root.ruleError = "The rule write did not answer"
         root.note("rule write did not answer", ruleProcess.command.join(" "))
       }
-      if (enforceProcess.running) {
+      if (root.overdue(enforceProcess)) {
         root.reap(enforceProcess)
         root.enforceBusy = false
         root.pendingProfileId = ""
         root.enforceError = "The profile switch did not answer"
         root.note("profile switch did not answer", enforceProcess.command.join(" "))
       }
-      if (devicePauseProcess.running || pauseProcess.running) {
+      if (root.overdue(devicePauseProcess) || root.overdue(pauseProcess)) {
         root.reap(devicePauseProcess)
         root.reap(pauseProcess)
         root.pauseBusy = false
@@ -612,6 +627,8 @@ Item {
         root.pauseError = "The pause command did not answer"
         root.note("pause did not answer", "")
       }
+      if (!ruleProcess.running && !enforceProcess.running
+          && !devicePauseProcess.running && !pauseProcess.running) writeWatchdog.stop()
     }
   }
 
@@ -895,9 +912,12 @@ Item {
   Collected {
     id: rulesProcess
     onExited: function(exitCode) {
+      // A reaped exit arrives after `loadRules` has already restarted this
+      // process for the next profile. The flags belong to that fetch now, so
+      // leave them alone or it commits a list neither half has returned.
+      if (root.reaped(rulesProcess)) { if (!rulesProcess.running) { root._rulesPending = false; root.commitRules() } return }
       root._rulesPending = false
-      if (root.reaped(rulesProcess) || !root.activeProfile
-        || root._rulesForProfile !== root.activeProfile.id) { root.commitRules(); return }
+      if (!root.activeProfile || root._rulesForProfile !== root.activeProfile.id) { root.commitRules(); return }
       if (exitCode !== 0) {
         root.applyError(Model.parseError(rulesProcess.err, exitCode), "Could not list rules")
         root._pendingRules = []
@@ -913,9 +933,9 @@ Item {
   Collected {
     id: foldersProcess
     onExited: function(exitCode) {
+      if (root.reaped(foldersProcess)) { if (!foldersProcess.running) { root._foldersPending = false; root.commitRules() } return }
       root._foldersPending = false
-      if (root.reaped(foldersProcess) || !root.activeProfile
-        || root._foldersForProfile !== root.activeProfile.id) { root.commitRules(); return }
+      if (!root.activeProfile || root._foldersForProfile !== root.activeProfile.id) { root.commitRules(); return }
       if (exitCode !== 0) {
         root.applyError(Model.parseError(foldersProcess.err, exitCode), "Could not list folders")
         root._pendingFolders = []
