@@ -61,6 +61,20 @@ def window(hours, endpoint, now=None):
     }
 
 
+# The panel holds whatever these return inside a long-lived shell process, so
+# a hostile or broken response must not be read without a bound. Real answers
+# are a few hundred kilobytes at the largest page size.
+MAX_BODY = 8 << 20
+MAX_ERROR_BODY = 64 << 10
+
+
+def _load_json(stream, limit, what):
+    raw = stream.read(limit + 1)
+    if len(raw) > limit:
+        raise RuntimeError("%s is larger than %d bytes" % (what, limit))
+    return json.loads(raw)
+
+
 def get(host, path, params, token):
     request = urllib.request.Request(
         "https://%s%s?%s" % (host, path, urllib.parse.urlencode(params, doseq=True)),
@@ -68,11 +82,11 @@ def get(host, path, params, token):
     )
     try:
         with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
-            payload = json.load(response)
+            payload = _load_json(response, MAX_BODY, "analytics response")
     except urllib.error.HTTPError as exc:
         detail = ""
         try:
-            detail = (json.load(exc).get("error") or {}).get("message") or ""
+            detail = (_load_json(exc, MAX_ERROR_BODY, "error body").get("error") or {}).get("message") or ""
         except (ValueError, AttributeError):
             pass
         raise RuntimeError("HTTP %s from analytics%s" % (exc.code, ": " + detail if detail else ""))

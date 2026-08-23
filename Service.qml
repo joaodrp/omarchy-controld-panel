@@ -171,10 +171,25 @@ Item {
     return n
   }
 
+  // Everything a process prints is held whole by a StdioCollector, which has no
+  // size cap, inside a shell process that outlives the panel. A hostile answer
+  // or a pathological config file would exhaust it, and the watchdogs bound
+  // time rather than bytes, so output is bounded where it is produced.
+  //
+  // `pipefail` keeps the command's own exit code, which the error handling
+  // reads, and argv goes through positional parameters so no hostname or
+  // command needs quoting. Output past the cap kills the writer, which surfaces
+  // as a failed read rather than as a shell that will not recover.
+  readonly property int outputLimit: 1048576
+
+  function bounded(argv) {
+    return ["bash", "-c", "set -o pipefail; \"$@\" | head -c " + outputLimit, "bash"].concat(argv)
+  }
+
   function cdctl(args) {
     // -q keeps info lines off stderr so a failure's stderr is only the JSON
     // envelope; --timeout bounds each request well inside the watchdog.
-    return [cdctlPath, "--json", "-q", "--timeout", "15"].concat(args)
+    return bounded([cdctlPath, "--json", "-q", "--timeout", "15"].concat(args))
   }
 
   // The helper lives beside this file in the plugin directory.
@@ -203,12 +218,12 @@ Item {
     // section that empties and flashes back is worse than stale figures.
     statsLoading = true
     _statsKey = key
-    statsProcess.command = ["python3", scriptPath("scripts/stats.py"),
+    statsProcess.command = bounded(["python3", scriptPath("scripts/stats.py"),
       "--endpoint", endpoint.id,
       "--region", region,
       "--hours", String(statsHours),
       "--action", String(statsAction),
-      "--top", String(statsRows)]
+      "--top", String(statsRows)])
     statsProcess.running = true
   }
 
@@ -225,7 +240,7 @@ Item {
     // The helper repeats these as `action[]`, so the page arrives narrowed.
     var actions = Model.activityActions(activityFilter)
     for (var i = 0; i < actions.length; i++) args = args.concat(["--action", String(actions[i])])
-    activityProcess.command = args
+    activityProcess.command = bounded(args)
     activityProcess.running = true
   }
 
@@ -363,7 +378,7 @@ Item {
     if (hostPause) {
       // Through a shell, so the setting can be a real command line rather than
       // a bare path. It is the user's own config, run as they wrote it.
-      pauseProcess.command = ["sh", "-c", on ? resumeCommand : pauseCommand]
+      pauseProcess.command = bounded(["sh", "-c", on ? resumeCommand : pauseCommand])
       beginWrite(pauseProcess)
       return
     }
@@ -449,7 +464,7 @@ Item {
     }
     if (!resolverProcess.running) resolverProcess.running = true
     if (statusCommand !== "" && !statusProcess.running) {
-      statusProcess.command = ["sh", "-c", statusCommand]
+      statusProcess.command = bounded(["sh", "-c", statusCommand])
       statusProcess.running = true
     }
     if (statsWanted) { loadStats(true); loadActivity() }
@@ -637,10 +652,10 @@ Item {
     // and ~/.local bin dirs cdctl installs into.
     id: lookupProcess
     running: false
-    command: ["sh", "-c",
+    command: root.bounded(["sh", "-c",
       "if command -v cdctl >/dev/null 2>&1; then command -v cdctl; exit 0; fi; " +
       "for p in \"$HOME/.cargo/bin/cdctl\" \"$HOME/.local/bin/cdctl\" /usr/local/bin/cdctl /usr/bin/cdctl; do " +
-      "if [ -x \"$p\" ]; then echo \"$p\"; exit 0; fi; done; exit 1"]
+      "if [ -x \"$p\" ]; then echo \"$p\"; exit 0; fi; done; exit 1"])
     stdout: StdioCollector { id: lookupStdout; waitForEnd: true }
     onExited: function(exitCode) {
       root.checkedInstall = true
@@ -753,16 +768,19 @@ Item {
     // panel can read. An endpoint configured any other way still shows up
     // under `resolvconf`, which reports itself as unknown rather than guessing.
     id: resolverProcess
-    command: ["sh", "-c",
-      "echo @@ctrld; cat /etc/controld/ctrld.toml /etc/ctrld.toml 2>/dev/null; " +
-      "echo @@stubby; cat /etc/stubby/stubby.yml 2>/dev/null; " +
-      "echo @@dnscrypt; cat /etc/dnscrypt-proxy/dnscrypt-proxy.toml 2>/dev/null; " +
-      "echo @@unbound; cat /etc/unbound/unbound.conf /etc/unbound/unbound.conf.d/*.conf 2>/dev/null; " +
-      "echo @@dnsmasq; cat /etc/dnsmasq.conf /etc/dnsmasq.d/* 2>/dev/null; " +
-      "echo @@nm; cat /etc/NetworkManager/NetworkManager.conf /etc/NetworkManager/conf.d/*.conf 2>/dev/null; " +
-      "echo @@resolved; resolvectl status 2>/dev/null; " +
-      "echo @@resolvconf; cat /etc/resolv.conf 2>/dev/null; " +
-      "echo @@daemon; systemctl is-active ctrld 2>/dev/null"]
+    // Each section is capped as well as the whole, so one large file cannot
+    // crowd out the sections after it and hide the resolver that answers.
+    command: root.bounded(["sh", "-c",
+      "s() { head -c 65536; }; " +
+      "echo @@ctrld; cat /etc/controld/ctrld.toml /etc/ctrld.toml 2>/dev/null | s; " +
+      "echo @@stubby; cat /etc/stubby/stubby.yml 2>/dev/null | s; " +
+      "echo @@dnscrypt; cat /etc/dnscrypt-proxy/dnscrypt-proxy.toml 2>/dev/null | s; " +
+      "echo @@unbound; cat /etc/unbound/unbound.conf /etc/unbound/unbound.conf.d/*.conf 2>/dev/null | s; " +
+      "echo @@dnsmasq; cat /etc/dnsmasq.conf /etc/dnsmasq.d/* 2>/dev/null | s; " +
+      "echo @@nm; cat /etc/NetworkManager/NetworkManager.conf /etc/NetworkManager/conf.d/*.conf 2>/dev/null | s; " +
+      "echo @@resolved; resolvectl status 2>/dev/null | s; " +
+      "echo @@resolvconf; cat /etc/resolv.conf 2>/dev/null | s; " +
+      "echo @@daemon; systemctl is-active ctrld 2>/dev/null | s"])
     stdout: StdioCollector { id: resolverStdout; waitForEnd: true }
     onExited: {
       if (root.reaped(resolverProcess)) return
