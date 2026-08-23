@@ -5,28 +5,37 @@ on **this machine**: the endpoint it resolves through, the profile that endpoint
 that profile's statistics, recent lookups and custom DNS rules. Backed by
 [`cdctl`](https://github.com/joaodrp/controld-cli), the Control D CLI.
 
-Read-only, with one exception: if the host has a way to stand Control D down, the hero gets a
-switch for it (see `pauseCommand` below). Nothing else in the panel writes.
+Mostly a reader. It writes in three places: the profile this endpoint enforces, custom rules
+(add, remove, switch off, and override a lookup straight from the log), and standing Control D
+down. Every write goes through `cdctl`, which verifies it by reading the account back.
 
 ## Features
 
 - Hero names this machine's endpoint and the profile it enforces, and links to the Control D
   dashboard for everything the panel does not do, identified from the DNS
-  resolver actually in use rather than the hostname; the account line is on hover
-- Bar icon shows account state: dimmed when unavailable, badge when `cdctl` needs a login
+  resolver actually in use rather than the hostname. With no endpoint to name, the hero says
+  which account is signed in instead
+- Bar icon shows account state: dimmed when unavailable, badge when `cdctl` needs a login,
+  crossed when `cdctl` is missing or nothing here is protected
 - The hero mark opens the Control D dashboard, which is where everything the panel cannot do
   lives. `o` does the same, `R` refreshes
-- Hero switch pauses and resumes Control D, if `pauseCommand` and `resumeCommand` say how. There
+- Hero caret switches which profile this endpoint enforces. The name changes as soon as it is
+  picked, and settles on what the account confirms
+- Hero switch pauses and resumes Control D. If `pauseCommand` and `resumeCommand` say how, the
+  panel runs those; otherwise it stands the device down through the account, so the switch is
+  there without any setup. The two are not equivalent: the host command changes what this
+  machine resolves through, the account changes what Control D does with what it is asked. There
   is no one way to do it: `ctrld` has a service, a systemd-resolved setup has a drop-in, so the
   panel runs what the host tells it rather than guessing. Paused, the panel says so instead of
   reporting a missing resolver. `statusCommand` answers whether it is on, which also inherits
   any check the panel cannot make, such as a link carrying its own DNS. Without one the switch
   falls back to the identified device or Control D on the live resolver
 - Left click opens a keyboard-friendly panel; middle click refreshes
-- Machine facts under the hero, in the built-in panels' key/value idiom: profile, unmatched
-  action, protocol, resolver, filter and service counts, and the endpoint ID (click to copy).
-  The resolver row is probed on the machine, never taken from the account, so it says
-  `ctrld v1.5.5` only when a daemon is actually running
+- Machine facts under the hero, in the built-in panels' key/value idiom: the endpoint ID (click
+  to copy), protocol, resolver, and the unmatched action. The profile is the hero's subtitle, so
+  it is not repeated here. The resolver row is probed on the machine, never taken from the
+  account, so it names `ctrld` and its version when a daemon is running or when `ctrld`'s own
+  config is what holds the endpoint
 - STATISTICS for this endpoint: a queries-over-time chart with the blocked share shaded under
   it, totals, and top domains, filters and destinations as meter rows. Pick the window
   (1h/24h/7d/30d) and the verdict (blocked/bypassed/redirected); destinations switch between
@@ -37,15 +46,22 @@ switch for it (see `pauseCommand` below). Nothing else in the panel writes.
   one, so destinations are the traffic that was allowed
 - ACTIVITY: this endpoint's most recent lookups, refreshed every 15s while the panel is open.
   Filtered to **blocked** by default, which is the verdict worth acting on when a site will not
-  load; `All` shows every verdict. Filtering happens server side, so a blocked list is a full
-  list. `Grouped`, on by default, folds every row for a host into the newest one with an `xN`
+  load; `Bypassed` and `Others` are the rest, the last being where a redirect or a spoof is
+  visible at all. Filtering happens server side, so a blocked list is a full list. `Grouped`, on by default, folds every row for a host into the newest one with an `xN`
   tally, which is what keeps a chatty telemetry endpoint from filling the section; turn it off
   to keep each lookup and read the sequence. Drawn short with a
-  `+N` at the foot: one poll already holds up to 20, so expanding costs no extra request
+  `+N` at the foot: one poll already holds up to 20, so expanding costs no extra request.
+  Bypass a blocked host, or block a bypassed one, from the row itself: the verdict glyph turns
+  into the action on hover, `b` and `B` do the same from the keyboard. The row holds its new
+  state for a few seconds so the change is visible, then leaves. Pressing again removes the rule
 - RULES: the enforced profile's custom rules, root first, then one group per folder, with
   action, spoof/redirect target, and disabled state. Capped like every other list; the caption
   says how many are hidden
+- Add a rule from the panel with the `Add` button, switch one off without deleting it, or
+  delete it behind an inline confirmation. `x` toggles the rule under the cursor
 - Copy a rule's hostname to the clipboard
+- `A` hands the panel to Omarchy's default agent, with pointers to `cdctl` and the plugin
+  rather than a dump of the account
 - Every section needs an identified endpoint. Without one the panel shows nothing but the
   reason: no Control D resolver here, a resolver whose endpoint is not in this account, or a
   device lookup that failed
@@ -63,6 +79,10 @@ Inside the panel:
 | `j` / `k` or arrows | Move the cursor through every actionable row, top to bottom |
 | `enter` / `space` | Activate the cursor row |
 | `y` | Yank what the cursor is on, or the endpoint ID when it is on nothing |
+| `p` | Open the profile picker |
+| `b` / `B` | Bypass or block the host the cursor is on, or undo the rule for it |
+| `x` | Switch the rule under the cursor on or off |
+| `A` | Hand the panel to Omarchy's default agent |
 | `R` | Refresh |
 | `esc` | Close |
 
@@ -117,6 +137,8 @@ rather than an empty shell.
   `PATH`, then in `~/.cargo/bin`, `~/.local/bin`, `/usr/local/bin`, `/usr/bin`
 - `wl-copy` for clipboard copy actions
 - `python3` for the statistics helper (standard library only)
+- `omarchy-launch-browser` to open the dashboard, and `omarchy-agent` for the `A` key. Both ship
+  with Omarchy
 
 The panel always passes `--profile <id>` explicitly, so `cdctl`'s `default_profile` does not
 have to be set.

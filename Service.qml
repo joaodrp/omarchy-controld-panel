@@ -4,8 +4,9 @@ import Quickshell.Io
 import qs.Commons
 import "Model.js" as Model
 
-// Owns every cdctl process and the state the panel renders. Read-only: it
-// lists, it never writes.
+// Owns every cdctl process and the state the panel renders. Reads through the
+// list commands; writes rules, the enforced profile and this device's status,
+// each through cdctl with -y and verified by cdctl's own read-back.
 Item {
   id: root
 

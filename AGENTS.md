@@ -8,7 +8,10 @@ An [Omarchy 4](https://omarchy.org/manual/shell-plugins/) shell plugin: a `bar-w
 Quattro Quickshell shell, id `io.github.joaodrp.controld`. It reports what Control D is doing on
 **this machine** — the endpoint, its profile, its statistics, its recent lookups, its rules.
 
-Read-only today. Every write is still done through `cdctl` or the dashboard.
+It reads the account and it writes three things: custom rules (create, delete, enable and
+disable), the profile this endpoint enforces, and this device's on/off state. Every write goes
+through `cdctl -y` and is verified by cdctl's own read-back. Anything else belongs in `cdctl` or
+the dashboard.
 
 Two backends, because Control D has two origins:
 
@@ -33,8 +36,9 @@ process argument**: `/proc/*/cmdline` is world readable.
 | `ControldIcon.qml` | The Control D mark, drawn from its SVG paths |
 | `scripts/controld_api.py` | Token resolution and HTTP for the analytics origin |
 | `scripts/stats.py` | One (window, verdict) pair of statistics, nine requests folded into one document |
-| `scripts/activity.py` | Recent lookups, one row per host with a repeat count. Returns a whole page; the panel draws a slice and expands into the rest |
+| `scripts/activity.py` | Recent lookups, one row per host with a repeat count. Returns up to 20; the panel draws a slice and expands into the rest |
 | `test/model.test.js` | Unit tests for `Model.js` |
+| `agent/SKILL.md` | What an agent handed this panel by the `A` key should read first |
 
 Logic that can live in `Model.js` belongs there rather than in QML: it is the only part with
 tests. QML owns rendering and process orchestration.
@@ -73,9 +77,12 @@ The shell hot-reloads files under `~/.config/omarchy/plugins/`, but its watcher 
 `inotifywait -r`, which does not follow a symlinked checkout. Working from a symlink means
 restarting the shell to see a change.
 
-Screenshots are how you check the work: `grim` plus `wtype` can drive and capture the panel. Do
-not kill `grim` mid-capture — it wedges the compositor's screencopy until it clears itself, and
-until then every capture with a panel open hangs.
+Screenshots are how you check the work: `grim` captures, and `wlrctl pointer` plus `wtype` drive
+the panel. Do not kill `grim` mid-capture — it wedges the compositor's screencopy until it clears
+itself, and until then every capture with a panel open hangs.
+
+The panel writes to a real account. Read the state back before and after each click rather than
+trusting a sequence, and put back whatever you change.
 
 ## Conventions
 
@@ -108,8 +115,9 @@ precedents this panel follows:
   the path's own size and Qt does not mipmap it
 - **A Repeater shares its parent with its delegates**, so rows cannot be found by counting
   children. They carry their own key
-- **Analytics verdicts**: 0 blocked, 1 bypassed, 2 redirected, and -1 in the timeseries for
-  queries that matched nothing. Destinations exist only for traffic that was allowed
+- **Analytics verdicts**: 0 blocked, 1 bypassed, 2 redirected, 3 spoofed, and -1 in the
+  timeseries for queries that matched nothing. Destinations exist only for traffic that was
+  allowed
 
 ## Scope
 
