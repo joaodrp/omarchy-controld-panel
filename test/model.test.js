@@ -42,6 +42,18 @@ test("parseError marks exit 8 retryable", () => {
   assert.equal(m.parseError("timeout", 8).retryable, true)
 })
 
+test("errorLine says when cdctl expects the failure to clear", () => {
+  // Exit 8 is cdctl's retryable code. Without this the panel presents it as
+  // a dead end, and it has no retry of its own to offer.
+  const soft = m.parseError('{"error":{"message":"upstream busy"}}', 8)
+  assert.equal(soft.retryable, true)
+  assert.equal(m.errorLine(soft, "fallback"), "upstream busy (worth retrying)")
+  const hard = m.parseError('{"error":{"message":"upstream busy"}}', 1)
+  assert.equal(m.errorLine(hard, "fallback"), "upstream busy")
+  // The suffix is inside the caption's budget, not added on top of it.
+  assert.equal(m.errorLine({ message: "y".repeat(300), retryable: true }).length, 140)
+})
+
 test("errorLine elides long messages", () => {
   const long = "abcdefghij".repeat(30)
   const cut = m.errorLine({ message: long })

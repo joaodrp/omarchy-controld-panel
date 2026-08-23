@@ -55,7 +55,9 @@ function parseError(stderr, exitCode) {
       code: str(err.code),
       message: str(err.message),
       hint: str(err.hint),
-      retryable: err.retryable === true,
+      // Exit 8 is cdctl's retryable code whether or not the envelope repeats
+      // it, and the envelope branch was the one that ignored it.
+      retryable: err.retryable === true || num(exitCode, 1) === EXIT_RETRYABLE,
       exitCode: num(exitCode, 1)
     }
   }
@@ -74,7 +76,11 @@ function errorLine(err, fallback) {
   if (!err) return str(fallback)
   var text = str(err.message)
   if (text === "") text = str(fallback)
-  return elide(text, 140)
+  // cdctl marks the failures it expects to clear on their own. Saying so is
+  // the difference between "try again" and "this will never work", and the
+  // panel has no retry of its own to offer.
+  var suffix = err.retryable ? " (worth retrying)" : ""
+  return elide(text, 140 - suffix.length) + suffix
 }
 
 function elide(text, max) {
