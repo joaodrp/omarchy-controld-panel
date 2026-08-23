@@ -25,6 +25,10 @@ The configs it reads, and the resolver each one implies:
 | `resolvectl status` | `systemd-resolved` |
 | `/etc/resolv.conf` | `unknown` |
 
+Treat your endpoint ID as a secret. It is the whole endpoint -- every resolver address is that ID
+plus a fixed suffix -- so anyone who has it can resolve through your endpoint, spending your quota
+and filling your activity log. This is why the screenshots in the README carry a placeholder.
+
 The first config naming the endpoint wins, so a manager gets credit over whatever it generates
 downstream. `ctrld` is confirmed with `systemctl is-active`, because the account keeps a `ctrld`
 block on a device long after the daemon is gone.

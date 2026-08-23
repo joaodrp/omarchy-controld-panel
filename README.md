@@ -9,9 +9,6 @@ client for Control D.
 
 <img src="preview.png" alt="The panel open in the Omarchy bar, showing the endpoint, its profile, and blocked-query statistics" width="380">
 
-The endpoint ID in these screenshots is a placeholder. A real one routes DNS, so publishing it
-would let anyone resolve through that endpoint.
-
 ## Install
 
 Needs [`cdctl`](https://github.com/joaodrp/controld-cli) installed and signed in
@@ -201,3 +198,5 @@ This is an independent project. It is not affiliated with, endorsed by, or suppo
 ## License
 
 MIT, see [LICENSE](LICENSE).
+
+<sub>The endpoint ID in the screenshots is a placeholder.</sub>
