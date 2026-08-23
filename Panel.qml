@@ -14,9 +14,8 @@ Panel {
   ipcTarget: "io.github.joaodrp.controld"
   manageIpc: false
 
-  // The cursor walks one flat list of actionable rows in document order, so
-  // j/k does the same thing wherever it is. Rows that cannot be acted on are
-  // not in it: the cursor visits exactly what hover already highlights.
+  // The cursor walks one flat list of rows in document order, so j/k does the
+  // same thing wherever it is.
   property string cursorKey: ""
   property bool cursorActive: false
   // Where the cursor was, so a row retired by a poll does not send it home.
@@ -27,28 +26,25 @@ Panel {
   readonly property color dim: Qt.darker(foreground, 1.55)
   readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
   readonly property color hoverFill: bar ? Style.hoverFillFor(bar.foreground, Color.accent) : "transparent"
-  // What is chosen, as against where the cursor is. CursorSurface paints the
-  // two differently on purpose: one highlight would say both at once.
+  // What is chosen, as against where the cursor is: one highlight would say
+  // both at once.
   readonly property color selectedFill: bar ? Style.selectedFillFor(bar.foreground, Color.accent) : "transparent"
 
-  // This panel describes one machine: the endpoint it resolves through and the
-  // profile that endpoint enforces. Every section hangs off that, so without an
-  // identified endpoint there is nothing to show and the panel says why.
+  // Every section hangs off this machine's endpoint, so without one there is
+  // nothing to show and the panel says why instead.
   readonly property bool machineMode: controld.endpointState === Model.ENDPOINT_MACHINE
   readonly property bool showEndpoint: controld.ready && machineMode
   readonly property bool showRules: controld.ready && machineMode && controld.activeProfile !== null
-  // No Control D resolver here at all, which is the only state that means this
-  // machine is unprotected.
+  // No Control D resolver at all: the only state that means this machine is
+  // unprotected.
   readonly property bool unprotected: controld.ready && controld.endpointState === Model.ENDPOINT_NONE
   // A Control D resolver we cannot put a name to: the device lookup failed, or
   // the endpoint belongs to another account. Protected, but not describable.
   readonly property bool endpointUnknown: controld.ready && controld.endpointState === Model.ENDPOINT_UNKNOWN
-  // Where to send someone who has neither the CLI nor an account set up.
   readonly property string guideUrl: "https://github.com/joaodrp/omarchy-controld-panel#readme"
   readonly property string dashboardUrl: "https://controld.com/dashboard"
   // Where an unrecognised setup goes, so the next person with it is covered.
   readonly property string issuesUrl: "https://github.com/joaodrp/omarchy-controld-panel/issues"
-  // The panel is explaining itself rather than showing content.
   readonly property bool showEmptyState: (controld.checkedInstall && !controld.installed)
     || (controld.installed && controld.needsAuth)
     || unprotected || endpointUnknown
@@ -57,22 +53,19 @@ Panel {
   readonly property bool showStats: controld.ready && machineMode && controld.statsEnabled
     && (controld.statsAvailable || controld.statsError !== "")
   property bool legendOpen: false
-  // The profile list, open under the hero. While it is open the cursor walks
-  // its rows and nothing else: picking one is a write, so it should not be
-  // possible to drift off it and press enter on something else.
+  // While the picker is open the cursor walks its rows and nothing else:
+  // picking one is a write, so drifting off it and pressing enter should not
+  // be possible.
   property bool profilePickerOpen: false
   // Which row's glyph the pointer is on, by host rather than by row. Writing a
   // rule rebuilds the list, and a rebuilt delegate's MouseArea reports no
   // hover -- the pointer never entered it, it was created underneath one. Held
-  // here, the reach survives the rebuild it causes; held by index, it would
-  // follow the position rather than the host.
+  // by host, the reach survives the rebuild it causes.
   property string hoveredGlyphHost: ""
-  // The same idea for the rules list, kept apart: a rule's hostname and an
-  // activity row's question can be the same string, and reaching for one
-  // should not light the other.
+  // Kept apart from the activity log's: a rule's hostname and a row's question
+  // can be the same string, and reaching for one should not light the other.
   property string hoveredRuleHost: ""
-  // Only the keys that exist in the state being shown: a legend that lists
-  // what does nothing here is worse than none.
+  // A legend that lists what does nothing here is worse than none.
   readonly property var legendKeys: {
     var keys = [{ key: "j/k", what: "move" }, { key: "enter", what: "activate" }, { key: "y", what: "copy" }]
     if (showStats) keys.push({ key: "s", what: "statistics" })
@@ -88,8 +81,7 @@ Panel {
     return keys
   }
 
-  // The log is drawn short and expands in place. Rows past the fold are
-  // already fetched, so this costs nothing but the space.
+  // Rows past the fold are already fetched, so expanding costs only space.
   property bool activityExpanded: false
   readonly property var visibleActivity: {
     var all = controld.activityLog
@@ -111,8 +103,8 @@ Panel {
     if (a === 2) return "redirected"
     return "blocked"
   }
-  // Each chip says nothing happened in its own words, since "no queries yet"
-  // is wrong on a tab that is simply the rare one.
+  // Each chip says nothing happened in its own words: "no queries yet" is
+  // wrong on a tab that is simply the rare one.
   readonly property string emptyActivityLine: {
     if (controld.activityFilter === "bypassed") return "nothing bypassed in this window"
     if (controld.activityFilter === "others") return "no redirects or spoofs in this window"
@@ -129,37 +121,29 @@ Panel {
   // gap between two rows does not count as leaving.
   onActivityHoveredChanged: controld.activityHeld = activityHovered
   readonly property bool activityHovered: activityColumn && activityHover.hovered
-  // Only rule rows take the cursor; folder headers are labels.
   readonly property var cursorRules: cursorRuleList()
   readonly property bool headerHasCursor: cursorActive && cursorKey === "header" && controld.installed
   readonly property color iconColor: controld.ready && !unprotected ? foreground : dim
   readonly property color barIconColor: controld.ready && !unprotected ? barForeground : Qt.darker(barForeground, 1.55)
-  // The hero names this machine's endpoint and what it enforces. With no
-  // endpoint to name it carries the reason instead.
   readonly property string heroTitle: controld.endpoint ? controld.endpoint.name : "Control D"
   readonly property string heroMeta: {
     if (!controld.installed) return "cdctl is not installed"
     if (controld.needsAuth) return "Not authenticated"
     if (controld.refreshing && !controld.authenticated) return "Checking..."
-    // The caret is the only thing saying the profile can be changed, since the
-    // hero's meta is a plain string with nowhere to hang a control. The name is
-    // the profile asked for rather than the one confirmed, so the hero answers
-    // the click at once and the ellipsis carries the wait.
+    // The caret is the only thing saying the profile can be changed: the
+    // hero's meta is a plain string with nowhere to hang a control. The name
+    // is the profile asked for rather than the one confirmed, so the hero
+    // answers the click at once and the ellipsis carries the wait.
     if (controld.endpoint) {
       var name = controld.activeProfile ? controld.activeProfile.name : ""
       if (controld.enforceBusy) return name + "..."
       return name + (controld.canEnforce ? (profilePickerOpen ? " \udb80\udd43" : " \udb80\udd40") : "")
     }
-    // With no endpoint to name, the empty state below carries the reason. The
-    // hero says which account is signed in instead, which is what the reader
-    // needs to act on it. The address alone: the region belongs to the
-    // analytics host, answers nothing anyone asks here, and is what pushed
-    // this line past the trailing controls into an ellipsis.
+    // The empty state below carries the reason, so the hero says which account
+    // is signed in instead -- what the reader needs to act on it.
     return controld.email !== "" ? controld.email : controld.statusText
   }
-  // Only what the rows cannot say for themselves: that the list is still
-  // loading, that there is nothing in it, or that it is showing fewer rules
-  // than the profile holds.
+  // Only what the rows cannot say for themselves.
   readonly property string rulesCaption: {
     if (controld.loadingRules && controld.rules.length === 0) return "Loading rules..."
     if (controld.ruleCount.total === 0) return "No custom rules in this profile."
@@ -167,8 +151,6 @@ Panel {
       return "showing " + controld.shownRuleCount + " of " + controld.ruleCount.total
     return ""
   }
-  // The machine facts above already name the profile these rules belong to.
-  readonly property string rulesTitle: "RULES"
 
   // The cursor walks what is drawn, so a capped list does not leave keys
   // pointing at rules nobody can see.
@@ -192,9 +174,8 @@ Panel {
     if (showStats && controld.stats) {
       for (var d = 0; d < controld.stats.domains.length; d++)
         items.push({ key: "domain:" + d, kind: "domain", index: d, value: controld.stats.domains[d].value })
-      // Filters, networks and countries are read, not acted on: the cursor
-      // still visits them so j/k walks the panel continuously, but they
-      // carry no value, so yank passes over them.
+      // Read, not acted on: the cursor visits them so j/k walks the panel
+      // continuously, but they carry no value, so yank passes over them.
       for (var f = 0; f < controld.stats.filters.length; f++)
         items.push({ key: "filter:" + f, kind: "reading", index: f, value: "" })
       for (var t = 0; t < destinationRows.length; t++)
@@ -222,17 +203,16 @@ Panel {
   }
 
   function ensureCursor() {
-    // Rows come and go as polls land: the activity log is rebuilt every
-    // fifteen seconds and can change length, which retires a key like
-    // "activity:7". Falling back to the first row would throw the cursor to
-    // the top of the panel mid-read, so it lands on the nearest surviving
+    // Polls rebuild the activity log and can change its length, retiring a key
+    // like "activity:7". Falling back to the first row would throw the cursor
+    // to the top of the panel mid-read, so it lands on the nearest surviving
     // row instead.
     if (cursorItems.length === 0) { cursorKey = ""; return }
     if (cursorIndex >= 0) { lastCursorIndex = cursorIndex; return }
     cursorKey = cursorItems[Math.max(0, Math.min(cursorItems.length - 1, lastCursorIndex))].key
   }
 
-  function moveCursor(dx, dy) {
+  function moveCursor(dy) {
     if (dy === 0) return
     ensureCursor()
     if (cursorItems.length === 0) return
@@ -255,8 +235,7 @@ Panel {
     if (controld.endpoint) controld.copyToClipboard(controld.endpoint.id)
   }
 
-  // What the row does when you press enter on it. Copy is the only action a
-  // read-only panel has for most of them.
+  // Copy is the only action most of these rows have.
   function activateCursor() {
     var entry = currentCursor()
     if (!entry) return
@@ -277,10 +256,9 @@ Panel {
     if (String(entry.value || "") !== "") controld.copyToClipboard(entry.value)
   }
 
-  // `b` and `B` act on the row under the cursor. The row already knows what
-  // its override is, so the key only has to say which verdict it meant: asking
-  // to bypass a host the log never blocked does nothing rather than writing a
-  // rule the row was not offering.
+  // The row already knows which override it offers, so the key only says which
+  // verdict it meant: asking to bypass a host the log never blocked does
+  // nothing rather than writing a rule the row was not offering.
   function applyRuleKey(action) {
     var entry = cursorActive ? currentCursor() : null
     if (!entry || entry.kind !== "activity") return
@@ -290,23 +268,21 @@ Panel {
   }
 
   // The one row asking to be deleted, by host: a rule write rebuilds the list,
-  // and a held object would outlive the row it came from. One at a time --
-  // opening another closes this one, which is the whole of the mutual
-  // exclusion an inline strip gets.
+  // and a held object would outlive the row it came from. Opening another
+  // question closes this one.
   property string pendingDeleteHost: ""
-  // The add form, and what it will write. Block by default: a rule you go
-  // looking for is usually one you want stopped, and a host you want allowed
-  // is normally already in the log with a glyph offering it.
+  // Block by default: a rule you go looking for is usually one you want
+  // stopped, and a host you want allowed is normally already in the log with a
+  // glyph offering it.
   property bool addRuleOpen: false
   property string addRuleAction: "block"
 
-  // Hand the panel over to whichever agent the user has made default. Pointers
-  // only: the account, the endpoint and the rules are all one `cdctl` call
-  // away, so passing them would ship a snapshot that is stale on arrival and
-  // put account identifiers in a terminal for nothing.
+  // Pointers only: the account, the endpoint and the rules are all one `cdctl`
+  // call away, so passing them would ship a snapshot that is stale on arrival
+  // and put account identifiers in a terminal for nothing.
   function askAgent() {
-    // Derived from the skill's own path: `Qt.resolvedUrl("")` answers with
-    // nothing, so the directory has to come from a file that is in it.
+    // `Qt.resolvedUrl("")` answers with nothing, so the plugin directory has to
+    // come from a file that is in it.
     var skill = String(controld.scriptPath("agent/SKILL.md"))
     var dir = skill.replace(/\/agent\/SKILL\.md$/, "")
     var prompt = "I use the Control D panel in Omarchy's bar and I want help with it.\n\n"
@@ -346,8 +322,7 @@ Panel {
     if (rule) controld.deleteRule(rule)
   }
 
-  // `x` switches the rule under the cursor off, or back on. Rules only: the
-  // key names an operation that no other row has.
+  // Rules only: no other row has an off switch.
   function toggleRuleKey() {
     var entry = cursorActive ? currentCursor() : null
     if (!entry || entry.kind !== "rule") return
@@ -377,12 +352,11 @@ Panel {
     setCursor("header")
   }
 
-  // Collapsing the log takes rows out from above the row that did it, so
-  // everything below slides up while the scroll offset stays put and the
-  // reader lands in another section. Holding that row still is what makes the
-  // list shrink under it rather than the panel move around it. Expanding needs
-  // none of this: the new rows fill the space the row is pushed out of, which
-  // is exactly what wanted seeing.
+  // Collapsing takes rows out from above the row that did it, so everything
+  // below slides up while the scroll offset stays put and the reader lands in
+  // another section. Holding that row still makes the list shrink under it
+  // rather than the panel move around it. Expanding needs none of this: the
+  // new rows fill the space the row is pushed out of.
   function toggleActivityExpanded(anchor) {
     if (!activityExpanded) { activityExpanded = true; return }
     var before = -1
@@ -419,19 +393,23 @@ Panel {
     })
   }
 
+  function sectionCursorPrefix(section) {
+    if (section === machineSection) return "endpoint"
+    if (section === statsSection) return "domain:"
+    if (section === activitySection) return "activity:"
+    if (section === rulesSection) return "rule:"
+    return ""
+  }
+
   // Section jumps: pin the section to the top of the view rather than
   // nudging it into sight, so the key lands somewhere predictable.
   function jumpTo(section) {
     if (!panelFlick || !section || !section.visible) return
-    // Put the cursor on that section's first actionable row, so j/k carries
-    // on from where the eye landed.
-    var prefix = section === rulesSection ? "rule:"
-      : section === statsSection ? "domain:"
-      : section === activitySection ? "activity:"
-      : section === machineSection ? "endpoint" : ""
+    // Land the cursor there too, so j/k carries on from where the eye did.
+    var prefix = sectionCursorPrefix(section)
     if (prefix !== "") {
       for (var i = 0; i < cursorItems.length; i++) {
-        if (cursorItems[i].key === prefix || cursorItems[i].key.indexOf(prefix) === 0) {
+        if (cursorItems[i].key.indexOf(prefix) === 0) {
           cursorKey = cursorItems[i].key
           cursorActive = true
           break
@@ -453,10 +431,9 @@ Panel {
       : 0
   }
 
-  // The item under the cursor. Rows carry their own key rather than sitting
-  // at a known index: a Repeater's delegates share their parent with the
-  // Repeater itself and any header, so counting children lands on the wrong
-  // one.
+  // The item under the cursor. Rows carry their own key rather than sitting at
+  // a known index: a Repeater's delegates share their parent with the Repeater
+  // itself and any header, so counting children lands on the wrong one.
   function cursorItem() {
     var entry = currentCursor()
     if (!entry) return null
@@ -484,8 +461,7 @@ Panel {
     scrollItemIntoView(cursorItem())
   }
 
-  // The rules column mixes folder headers and rules; find the item that
-  // renders the n-th rule.
+  // The rules column mixes folder headers and rules.
   function ruleRowItem(n) {
     if (!ruleColumn) return null
     var seen = 0
@@ -499,11 +475,10 @@ Panel {
     return null
   }
 
-  // Hover and the cursor are the same thing: pointing at a row is a way of
-  // selecting it. Moving the cursor by key scrolls the list under a
-  // stationary pointer, though, and the row that slides beneath it would
-  // otherwise steal the cursor straight back — so pointer selection waits
-  // for the pointer to actually move.
+  // Pointing at a row selects it, as walking the cursor onto it does. Moving
+  // the cursor by key scrolls the list under a stationary pointer, though, and
+  // the row sliding beneath it would steal the cursor straight back -- so
+  // pointer selection waits for the pointer to actually move.
   function setCursor(key) {
     cursorActive = true
     cursorKey = key
@@ -538,8 +513,8 @@ Panel {
 
   PointerMoveGate {
     id: pointerGate
-    // A stable frame to measure against: rows move under the pointer as the
-    // list scrolls, the viewport does not.
+    // A stable frame to measure against: rows move as the list scrolls, the
+    // viewport does not.
     referenceItem: panelFlick
   }
 
@@ -598,7 +573,7 @@ Panel {
       anchors.fill: parent
       onMoveRequested: function(dx, dy) {
         if (!root.cursorActive) { root.cursorActive = true; return }
-        root.moveCursor(dx, dy)
+        root.moveCursor(dy)
       }
       onActivateRequested: if (root.cursorActive) root.activateCursor()
       onCloseRequested: {
@@ -623,9 +598,8 @@ Panel {
         else if (t === "?") root.legendOpen = !root.legendOpen
         else if (t === "p") root.toggleProfilePicker()
         else if (t === "o") Quickshell.execDetached(["omarchy-launch-browser", root.dashboardUrl])
-        // Shift for the action, since the plain letter names a section.
+        // Shift for the actions, since the plain letters name sections.
         else if (t === "R") controld.refresh()
-        // Shift, as `R` is: this one leaves the panel entirely.
         else if (t === "A") root.askAgent()
         else if (t === "y" || t === "Y") root.yank()
         // Shift for the heavier verdict, as `r`/`R` already reads here.
@@ -640,8 +614,7 @@ Panel {
         anchors.right: parent.right
         // Reach into the card's padding so the scrollbar, which overlays the
         // right edge rather than taking space, sits in that gutter instead of
-        // over the content. The column below gives the width straight back, so
-        // nothing shifts sideways.
+        // over the content. The column gives the width straight back.
         anchors.rightMargin: -panel.padding
         anchors.top: parent.top
         anchors.bottom: legend.visible ? legend.top : parent.bottom
@@ -660,16 +633,13 @@ Panel {
           spacing: Style.space(12)
 
           Item {
-            id: header
             width: parent.width
             implicitHeight: hero.implicitHeight
-            function focusHero() { root.setCursor("header") }
 
-            // The caret on the hero's meta line has nowhere of its own to take
-            // a click: `PanelHero.meta` is a plain string. So the hero carries
-            // the click, declared before it and therefore beneath it, which
-            // leaves the mark and the switch their own. Clicks land here only
-            // where nothing above accepts them.
+            // The caret on the meta line has nowhere of its own to take a
+            // click: `PanelHero.meta` is a plain string. So the whole hero
+            // carries it, declared first and therefore beneath the mark and
+            // the switch, which keep their own clicks.
             MouseArea {
               anchors.fill: parent
               enabled: controld.canEnforce && controld.installed
@@ -677,8 +647,6 @@ Panel {
               cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
               onClicked: root.toggleProfilePicker()
             }
-            // The hero switch is a control, not a row: its hover is a
-            // deliberate pointer act, so it does not need the gate.
 
             PanelHero {
               id: hero
@@ -688,8 +656,8 @@ Panel {
               foreground: root.foreground
               fontFamily: root.fontFamily
               iconOpacity: controld.ready ? 1.0 : 0.5
-              // The mark is the panel's identity and the dashboard is where
-              // everything it cannot do lives, so the mark is the way there.
+              // The dashboard is where everything this panel cannot do lives,
+              // and the mark is the way there.
               iconComponent: Component {
                 Item {
                   implicitWidth: heroMark.implicitWidth + Style.space(10)
@@ -730,7 +698,6 @@ Panel {
 
               // The only control here, and the one that has to survive there
               // being no endpoint to describe: pausing is what removed it.
-              // Everything else the hero could carry has a key instead.
               trailingControl: Component {
                 ToggleSwitch {
                   id: protectionSwitch
@@ -738,7 +705,9 @@ Panel {
                   checked: controld.protectionActive
                   busy: controld.pauseBusy
                   foreground: hero.foreground
-                  onHovered: function(on) { if (on) header.focusHero() }
+                  // A control, not a row: reaching for it is deliberate, so
+                  // its hover skips the pointer gate.
+                  onHovered: function(on) { if (on) root.setCursor("header") }
                   onToggled: controld.setProtection(!controld.protectionActive)
 
                   PanelToolTip {
@@ -755,80 +724,53 @@ Panel {
           // Not while an empty state is up. Those say what happened and what
           // to do about it; the error line underneath them is the same failure
           // told worse, and in red.
-          Text {
+          NoticeText {
             visible: controld.lastError !== "" && !root.showEmptyState
-            width: parent.width
             text: controld.lastError
-            color: root.urgent
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.bodySmall
-            wrapMode: Text.WordWrap
           }
 
-          Text {
+          NoticeText {
             visible: controld.pauseError !== ""
-            width: parent.width
             text: controld.pauseError
-            color: root.urgent
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.bodySmall
-            wrapMode: Text.WordWrap
           }
 
           // Up here rather than in ACTIVITY, which is where the rule writes
           // are made but which hides itself when the log is empty. A refused
           // write has to be visible from wherever it was made.
-          Text {
+          NoticeText {
             visible: controld.ruleError !== ""
-            width: parent.width
             text: controld.ruleError
-            color: root.urgent
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.bodySmall
-            wrapMode: Text.WordWrap
           }
 
-          Text {
+          NoticeText {
             visible: controld.lastHint !== "" && !root.showEmptyState
-            width: parent.width
             text: controld.lastHint
             color: root.dim
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.bodySmall
-            wrapMode: Text.WordWrap
           }
 
-          // Nothing to show until the CLI is installed and signed in, so the
-          // panel spends its space saying how to get there.
           EmptyState {
-            width: parent.width
             visible: controld.checkedInstall && !controld.installed
             title: "Install the Control D CLI"
             message: "This panel reads your account through cdctl. Install it, then sign in."
           }
 
           EmptyState {
-            width: parent.width
             visible: controld.installed && controld.needsAuth
             title: "Sign in to Control D"
             message: "Run cdctl auth login --token-stdin with a token from the Control D dashboard, then reopen this panel."
           }
 
-          // Paused on purpose looks identical to never set up, so the host
-          // having a way to turn it back on is what tells them apart. The
-          // action is the switch in the hero, so this state carries no button.
+          // Paused on purpose looks identical to never set up, so this state
+          // exists to tell them apart. No button: the action is the switch in
+          // the hero.
           EmptyState {
-            width: parent.width
             visible: root.unprotected && controld.canPause
             title: "Control D is paused"
             message: "This machine is resolving DNS without it, so there is nothing to report until it is back on. Use the switch above."
             actionText: ""
           }
 
-          // Signed in, but this machine's DNS goes somewhere else, so there is
-          // no endpoint for the sections below to describe.
           EmptyState {
-            width: parent.width
             visible: root.unprotected && !controld.canPause
             title: "No Control D resolver on this machine"
             message: "Nothing in this host's DNS config points at Control D, so there is no endpoint to report on. A router or network that filters upstream would not show up here either."
@@ -836,10 +778,9 @@ Panel {
             actionUrl: root.guideUrl
           }
 
-          // A Control D resolver we cannot name. The two causes need different
-          // things from the reader, so the panel names which one it hit.
+          // The two causes need different things from the reader, so the panel
+          // names which one it hit.
           EmptyState {
-            width: parent.width
             visible: root.endpointUnknown
             title: "This machine could not be identified"
             message: controld.devicesError !== ""
@@ -850,9 +791,8 @@ Panel {
             actionUrl: root.dashboardUrl
           }
 
-          // Machine facts, in the built-in panels' key/value idiom: attributes
-          // sit under the hero without a header, and only the interactive
-          // lists below get their own separated section.
+          // The built-in panels' key/value idiom: attributes sit under the
+          // hero without a header of their own.
           Column {
             id: machineSection
             visible: root.showEndpoint
@@ -862,10 +802,8 @@ Panel {
             FactGrid {
               width: parent.width
 
-              // Read across, then down: what this machine is, how it talks,
-              // what does the talking, and what it does with a domain no rule
-              // covers. No Profile row: the hero's subtitle is that. The id is
-              // the whole endpoint: every resolver address is that id plus a
+              // No Profile row: the hero's subtitle is that. The id is the
+              // whole endpoint -- every resolver address is that id plus a
               // constant suffix, and Protocol says which form it takes.
               InfoLabel { text: "Endpoint" }
               DetailValue {
@@ -876,26 +814,24 @@ Panel {
               InfoLabel { text: "Protocol" }
               DetailValue { text: controld.endpointTransport !== "" ? controld.endpointTransport : "--" }
 
-              // What on this machine talks to Control D, probed here rather
-              // than taken from the account's record of the device. When the
-              // probe names the endpoint but nothing that manages it, the row
-              // says so and offers to have the setup reported.
+              // Probed on this machine rather than taken from the account's
+              // record of the device. A probe that names no manager says so,
+              // and offers to have the setup reported.
               InfoLabel { text: "Resolver" }
               DetailValue {
                 text: controld.resolverLine
                 linkUrl: controld.resolverUnknown ? root.issuesUrl : ""
                 tooltipText: "Resolver not recognised. Report your setup on GitHub so it can be added."
               }
-              // The profile's default action: what happens to a domain that
-              // matches no rule, filter or service.
+              // What happens to a domain that matches no rule, filter or
+              // service.
               InfoLabel { text: "Unmatched" }
               DetailValue { text: controld.activeProfile ? Model.actionLabel(controld.activeProfile.defaultAction) : "--" }
             }
           }
 
-          // The account's profiles, under the hero that names the one in force.
           // Only while picking: a list of what could be enforced is noise next
-          // to what is.
+          // to the hero, which names what is.
           Column {
             id: profilePicker
             visible: root.profilePickerOpen
@@ -905,11 +841,10 @@ Panel {
             Repeater {
               model: root.profilePickerOpen ? controld.profiles : []
 
-              // CursorSurface, so where the cursor is and what is in force are
-              // two different paints. Its contract forbids reading the mouse
-              // for colour: hover moves the panel's cursor, and the cursor is
-              // what the row draws from, so there is one highlight on screen
-              // however you are driving it.
+              // CursorSurface paints where the cursor is and what is in force
+              // differently, and never reads the mouse: hover moves the
+              // panel's cursor and the row draws from that, so there is one
+              // highlight on screen however you are driving it.
               CursorSurface {
                 id: profileRow
                 required property var modelData
@@ -944,25 +879,17 @@ Panel {
                   font.bold: profileRow.enforced
                 }
 
-                Text {
+                CaptionText {
                   id: profileStatus
                   anchors.right: parent.right
                   anchors.rightMargin: Style.space(8)
                   anchors.verticalCenter: parent.verticalCenter
                   visible: profileRow.enforced
                   text: profileRow.switching ? "switching..." : "in force"
-                  color: root.dim
-                  font.family: root.fontFamily
-                  font.pixelSize: Style.font.caption
                 }
 
-                MouseArea {
-                  id: profileMouse
-                  anchors.fill: parent
-                  hoverEnabled: true
-                  cursorShape: Qt.PointingHandCursor
-                  onEntered: root.setCursorFromPointer(profileRow.cursorKey, profileRow, { x: profileMouse.mouseX, y: profileMouse.mouseY })
-                  onPositionChanged: function(mouse) { root.setCursorFromPointer(profileRow.cursorKey, profileRow, mouse) }
+                RowMouseArea {
+                  cursorKey: profileRow.cursorKey
                   enabled: !controld.enforceBusy
                   onClicked: {
                     controld.setEnforcedProfile(profileRow.modelData.id)
@@ -973,14 +900,9 @@ Panel {
             }
           }
 
-          Text {
-            width: parent.width
+          NoticeText {
             visible: controld.enforceError !== ""
             text: controld.enforceError
-            color: root.urgent
-            font.family: root.fontFamily
-            font.pixelSize: Style.font.bodySmall
-            wrapMode: Text.WordWrap
           }
 
           PanelSeparator {
@@ -995,38 +917,21 @@ Panel {
             spacing: Style.space(10)
 
             // The window governs everything in this section, so it sits with
-            // the section's own title, as the destinations control sits with
-            // its list.
-            RowLayout {
-              width: parent.width
-              spacing: Style.space(8)
+            // the section's own title.
+            SectionHeader {
+              text: "STATISTICS"
 
-              PanelSectionHeader {
-                text: "STATISTICS"
-                foreground: root.foreground
-                fontFamily: root.fontFamily
-              }
-
-              Item { Layout.fillWidth: true }
-
-              ButtonGroup {
+              ChipGroup {
                 options: Model.windowOptions()
                 value: String(controld.statsHours)
-                foreground: root.foreground
-                accent: Color.accent
-                fontFamily: root.fontFamily
-                fontSize: Style.font.caption
                 onChanged: function(v) { controld.setStatsWindow(v) }
               }
             }
 
-            Text {
+            CaptionText {
               width: parent.width
               visible: root.statsCaption !== ""
               text: root.statsCaption
-              color: root.dim
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
             }
 
             Sparkline {
@@ -1052,13 +957,10 @@ Panel {
               }
             }
 
-            Text {
+            CaptionText {
               width: parent.width
               visible: controld.statsError !== ""
               text: controld.statsError
-              color: root.dim
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
               wrapMode: Text.WordWrap
             }
 
@@ -1070,43 +972,27 @@ Panel {
               spacing: Style.space(10)
               topPadding: Style.space(4)
 
-              RowLayout {
-                width: parent.width
-                spacing: Style.space(8)
+              SectionHeader {
+                text: "BREAKDOWN"
 
-                PanelSectionHeader {
-                  text: "BREAKDOWN"
-                  foreground: root.foreground
-                  fontFamily: root.fontFamily
-                }
-
-                Item { Layout.fillWidth: true }
-
-                ButtonGroup {
+                ChipGroup {
                   options: Model.actionOptions()
                   value: String(controld.statsAction)
-                  foreground: root.foreground
-                  accent: Color.accent
-                  fontFamily: root.fontFamily
-                  fontSize: Style.font.caption
                   onChanged: function(v) { controld.setStatsAction(v) }
                 }
               }
 
-              Text {
+              CaptionText {
                 width: parent.width
                 visible: root.actionRows.length === 0 && controld.statsError === ""
                 text: "Nothing " + root.actionWord + " in this window."
-                color: root.dim
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
               }
 
               MeterList {
                 id: domainList
                 width: parent.width
                 title: "DOMAINS"
-                rows: controld.stats ? controld.stats.domains : []
+                rows: root.actionRows
                 // A hostname is the one value here that goes straight into
                 // `cdctl rule create`, a browser, or a dig.
                 copyable: true
@@ -1128,25 +1014,12 @@ Panel {
               visible: root.destinationRows.length > 0
               spacing: Style.space(6)
 
-              RowLayout {
-                width: parent.width
-                spacing: Style.space(8)
+              SectionHeader {
+                text: "DESTINATIONS"
 
-                PanelSectionHeader {
-                  text: "DESTINATIONS"
-                  foreground: root.foreground
-                  fontFamily: root.fontFamily
-                }
-
-                Item { Layout.fillWidth: true }
-
-                ButtonGroup {
+                ChipGroup {
                   options: [{ value: "networks", label: "Networks" }, { value: "countries", label: "Countries" }]
                   value: root.destinationView
-                  foreground: root.foreground
-                  accent: Color.accent
-                  fontFamily: root.fontFamily
-                  fontSize: Style.font.caption
                   onChanged: function(v) { root.destinationView = v }
                 }
               }
@@ -1173,46 +1046,30 @@ Panel {
             width: parent.width
             spacing: Style.space(8)
 
-            // The verdict governs the whole log, so it sits with the
-            // section's own title, as the window does for statistics.
-            RowLayout {
-              width: parent.width
-              spacing: Style.space(8)
+            // The verdict governs the whole log, so it sits with the section's
+            // own title, as the window does for statistics.
+            SectionHeader {
+              text: "ACTIVITY"
 
-              PanelSectionHeader {
-                text: "ACTIVITY"
-                foreground: root.foreground
-                fontFamily: root.fontFamily
-              }
-
-              Item { Layout.fillWidth: true }
-
-              ButtonGroup {
+              ChipGroup {
                 options: Model.activityFilterOptions()
                 value: controld.activityFilter
-                foreground: root.foreground
-                accent: Color.accent
-                fontFamily: root.fontFamily
-                fontSize: Style.font.caption
                 onChanged: function(v) { controld.setActivityFilter(v) }
               }
             }
 
-            // One chip per verdict fills the title row, as it does under
-            // STATISTICS and BREAKDOWN, so the switch takes a line of its own
-            // rather than pushing the last chip off the panel.
+            // A line of its own: the verdict chips already fill the title row,
+            // and squeezing the switch in there would push the last chip off
+            // the panel.
             RowLayout {
               width: parent.width
               spacing: Style.space(8)
 
               Item { Layout.fillWidth: true }
 
-              Text {
+              CaptionText {
                 Layout.alignment: Qt.AlignVCenter
                 text: "Grouped"
-                color: root.dim
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
               }
 
               ToggleSwitch {
@@ -1230,14 +1087,14 @@ Panel {
               }
             }
 
-            Text {
+            CaptionText {
               width: parent.width
               visible: text !== ""
-              text: controld.activityError !== "" ? controld.activityError
-                : (controld.activityLog.length === 0 ? root.emptyActivityLine : "")
+              text: {
+                if (controld.activityError !== "") return controld.activityError
+                return controld.activityLog.length === 0 ? root.emptyActivityLine : ""
+              }
               color: controld.activityError !== "" ? root.urgent : root.dim
-              font.family: root.fontFamily
-              font.pixelSize: Style.font.caption
               wrapMode: Text.WordWrap
             }
 
@@ -1246,12 +1103,11 @@ Panel {
               width: parent.width
               spacing: Style.space(6)
 
-              // The log repolls every fifteen seconds and new lookups arrive at
-              // the top, so every row below shifts down -- under whatever the
-              // pointer was aiming at. These rows write account rules, so that
-              // is not a flicker, it is a rule against the wrong host. While
-              // the pointer is in the list the rows it is choosing between hold
-              // still, and the newer page lands once it leaves.
+              // New lookups arrive at the top on every repoll, so every row
+              // below shifts down under whatever the pointer was aiming at.
+              // These rows write account rules, so that is not a flicker, it is
+              // a rule against the wrong host. The list holds still while the
+              // pointer is in it, and takes the newer page once it leaves.
               HoverHandler { id: activityHover }
 
               Repeater {
@@ -1286,49 +1142,32 @@ Panel {
             width: parent.width
             spacing: Style.space(10)
 
-            RowLayout {
-              width: parent.width
-              spacing: Style.space(8)
+            // The machine facts above already name the profile these rules
+            // belong to.
+            SectionHeader {
+              text: "RULES"
 
-              PanelSectionHeader {
-                text: root.rulesTitle
-                foreground: root.foreground
-                fontFamily: root.fontFamily
-              }
-
-              Item { Layout.fillWidth: true }
-
-              Text {
+              CaptionText {
                 Layout.alignment: Qt.AlignVCenter
                 Layout.maximumWidth: parent.width * 0.6
                 visible: root.rulesCaption !== ""
                 text: root.rulesCaption
-                color: root.dim
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
                 elide: Text.ElideRight
               }
 
               // A word in a bordered box, as every other control at the right
-              // of a section header here is: a bare glyph belongs in a row,
-              // and one in the header reads as a row control that drifted up.
-              Button {
-                // What it does, which is not the same when the form is open:
-                // two buttons reading "Add" on one screen, one opening a form
-                // and one submitting it, is a guess the reader should not make.
+              // of a section header here is: a bare glyph reads as a row
+              // control that drifted up. It renames itself rather than leave
+              // two buttons reading "Add" on one screen.
+              ChipButton {
                 text: root.addRuleOpen ? "Cancel" : "Add"
-                bordered: true
-                foreground: root.foreground
-                accent: Color.accent
-                fontFamily: root.fontFamily
-                fontSize: Style.font.caption
                 Layout.alignment: Qt.AlignVCenter
                 onClicked: root.toggleAddRule()
               }
             }
 
-            // Opens under the header it belongs to, the way the profile list
-            // opens under the hero and the delete question under its row.
+            // Opens under its own header, as the profile list does under the
+            // hero and the delete question under its row.
             Column {
               id: addRuleForm
               visible: root.addRuleOpen
@@ -1349,26 +1188,17 @@ Panel {
                 width: parent.width
                 spacing: Style.space(8)
 
-                ButtonGroup {
+                ChipGroup {
                   options: [{ value: "block", label: "Block" }, { value: "bypass", label: "Bypass" }]
                   value: root.addRuleAction
-                  foreground: root.foreground
-                  accent: Color.accent
-                  fontFamily: root.fontFamily
-                  fontSize: Style.font.caption
                   onChanged: function(v) { root.addRuleAction = v }
                 }
 
                 Item { Layout.fillWidth: true }
 
-                Button {
+                ChipButton {
                   text: "Add"
                   enabled: Model.validHostname(addRuleHost.text) && !controld.ruleBusy
-                  foreground: root.foreground
-                  accent: Color.accent
-                  fontFamily: root.fontFamily
-                  fontSize: Style.font.caption
-                  bordered: true
                   onClicked: root.submitAddRule()
                 }
               }
@@ -1410,8 +1240,8 @@ Panel {
         }
       }
 
-      // Keys are invisible by nature, so ? reveals them without spending
-      // room on a legend nobody asked for.
+      // Keys are invisible by nature, so ? reveals them rather than a legend
+      // sitting there uninvited.
       Column {
         id: legend
         visible: root.legendOpen
@@ -1439,21 +1269,14 @@ Panel {
               Layout.fillWidth: true
               Layout.preferredWidth: 1
 
-              Text {
+              CaptionText {
                 width: Style.space(30)
                 horizontalAlignment: Text.AlignRight
                 text: modelData.key
                 color: Qt.darker(root.foreground, 1.25)
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
               }
 
-              Text {
-                text: modelData.what
-                color: root.dim
-                font.family: root.fontFamily
-                font.pixelSize: Style.font.caption
-              }
+              CaptionText { text: modelData.what }
             }
           }
         }
@@ -1469,8 +1292,131 @@ Panel {
     return n
   }
 
-  // A section header with an optional right-aligned caption. No icon: the
-  // built-in panels label their sections with text alone.
+  // Panel-wide text defaults, so each use says only what makes it different.
+  component CaptionText: Text {
+    color: root.dim
+    font.family: root.fontFamily
+    font.pixelSize: Style.font.caption
+  }
+
+  component BodyText: Text {
+    color: root.foreground
+    font.family: root.fontFamily
+    font.pixelSize: Style.font.body
+  }
+
+  // A line across the panel: a failure, or the hint that follows one.
+  component NoticeText: Text {
+    width: parent.width
+    color: root.urgent
+    font.family: root.fontFamily
+    font.pixelSize: Style.font.bodySmall
+    wrapMode: Text.WordWrap
+  }
+
+  // A section title, with whatever governs the section at the right of it. No
+  // icon: the built-in panels label their sections with text alone.
+  component SectionHeader: RowLayout {
+    id: sectionHeader
+    property string text: ""
+
+    width: parent.width
+    spacing: Style.space(8)
+
+    PanelSectionHeader {
+      text: sectionHeader.text
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+    }
+
+    Item { Layout.fillWidth: true }
+  }
+
+  component ChipGroup: ButtonGroup {
+    foreground: root.foreground
+    accent: Color.accent
+    fontFamily: root.fontFamily
+    fontSize: Style.font.caption
+  }
+
+  component ChipButton: Button {
+    bordered: true
+    foreground: root.foreground
+    accent: Color.accent
+    fontFamily: root.fontFamily
+    fontSize: Style.font.caption
+  }
+
+  // Fills the row it is declared in: pointing at a row selects it, and the
+  // gate is what stops a row that slid under a stationary pointer from taking
+  // the cursor back.
+  component RowMouseArea: MouseArea {
+    id: rowArea
+    property string cursorKey: ""
+
+    anchors.fill: parent
+    hoverEnabled: true
+    cursorShape: Qt.PointingHandCursor
+    onEntered: if (rowArea.cursorKey !== "")
+      root.setCursorFromPointer(rowArea.cursorKey, rowArea.parent, { x: rowArea.mouseX, y: rowArea.mouseY })
+    onPositionChanged: function(mouse) {
+      if (rowArea.cursorKey !== "") root.setCursorFromPointer(rowArea.cursorKey, rowArea.parent, mouse)
+    }
+  }
+
+  // The glyph at the head of an activity or rule row, and the click that acts
+  // on it.
+  component RowGlyph: Item {
+    id: rowGlyph
+    property string glyph: ""
+    property color glyphColor: root.foreground
+    property real glyphOpacity: 1.0
+    property bool actionable: true
+    // The glyph's own hover, not the row's: crossing a row on the way
+    // somewhere else should not flicker every glyph it passes, and a control
+    // reading the row's hover would put itself away as the pointer arrived.
+    property bool reached: false
+    property string tooltipText: ""
+    signal hovered(bool on)
+    signal clicked()
+
+    // A fixed cell, not the glyph's own width: these glyphs do not all advance
+    // the same, so sizing to the one on show would slide the hostname sideways
+    // whenever the pointer changes it.
+    Layout.preferredWidth: Style.space(22)
+    Layout.preferredHeight: glyphText.implicitHeight
+    Layout.alignment: Qt.AlignVCenter
+
+    Text {
+      id: glyphText
+      anchors.centerIn: parent
+      text: rowGlyph.glyph
+      color: rowGlyph.glyphColor
+      opacity: rowGlyph.glyphOpacity
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.icon
+    }
+
+    MouseArea {
+      anchors.fill: parent
+      // Left enabled while a write is in flight: taking the mouse area away
+      // under the pointer drops its hover, and giving it back does not restore
+      // it until the pointer moves, so the row just acted on would drop to its
+      // resting glyph. The write turns a second click away on its own.
+      enabled: rowGlyph.actionable
+      hoverEnabled: enabled
+      cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+      onEntered: rowGlyph.hovered(true)
+      onExited: rowGlyph.hovered(false)
+      onClicked: rowGlyph.clicked()
+    }
+
+    PanelToolTip {
+      visible: rowGlyph.reached
+      text: rowGlyph.tooltipText
+      fontFamily: root.fontFamily
+    }
+  }
 
   component FolderRow: Item {
     id: folderRow
@@ -1479,7 +1425,7 @@ Panel {
 
     implicitHeight: folderInner.implicitHeight + Style.space(6)
 
-    Row {
+    RowLayout {
       id: folderInner
       anchors.left: parent.left
       anchors.right: parent.right
@@ -1488,37 +1434,30 @@ Panel {
       anchors.rightMargin: Style.space(6)
       spacing: Style.space(8)
 
-      Text {
+      CaptionText {
         text: "󰉋"
-        color: root.dim
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.caption
-        width: Style.space(22)
+        Layout.preferredWidth: Style.space(22)
+        Layout.alignment: Qt.AlignVCenter
         horizontalAlignment: Text.AlignHCenter
-        anchors.verticalCenter: parent.verticalCenter
       }
 
-      Text {
-        width: parent.width - Style.space(30)
+      CaptionText {
+        Layout.fillWidth: true
+        Layout.alignment: Qt.AlignVCenter
         text: {
           var name = folderRow.group ? folderRow.group.name.toUpperCase() : ""
           var suffix = folderRow.ruleTotal + (folderRow.ruleTotal === 1 ? " RULE" : " RULES")
           if (folderRow.group && folderRow.group.folder && !folderRow.group.folder.enabled) suffix += " · DISABLED"
           return name + "  ·  " + suffix
         }
-        color: root.dim
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.caption
         font.bold: true
         elide: Text.ElideRight
-        anchors.verticalCenter: parent.verticalCenter
       }
     }
   }
 
   // One geometry for every key/value block, so a label in one lines up with
-  // the label in the next. Sized rather than left to each grid's own content,
-  // which lands the blocks a few pixels apart.
+  // the label in the next.
   component FactGrid: GridLayout {
     columns: 4
     columnSpacing: Style.space(12)
@@ -1540,10 +1479,9 @@ Panel {
     font.family: root.fontFamily
     font.pixelSize: Style.font.bodySmall
     // Deliberately not elided. Every value here comes from a closed set -- an
-    // endpoint id, a protocol name, a resolver from `RESOLVERS`, an action --
-    // and letting the text keep its own width is what makes the grid lend the
-    // long ones room from the labels. `systemd-resolved` fits only because of
-    // that lending, and eliding would cut it.
+    // endpoint id, a protocol name, a resolver, an action -- and letting the
+    // text keep its own width is what makes the grid lend the long ones room
+    // from the labels. `systemd-resolved` fits only by that lending.
     property bool copyable: false
     // Set instead of `copyable` when the value is worth acting on rather than
     // taking: the glyph and the click follow.
@@ -1558,7 +1496,7 @@ Panel {
     // does not shift sideways under the pointer.
     rightPadding: actionable ? copyGlyph.width + Style.space(4) : 0
 
-    Text {
+    CaptionText {
       id: copyGlyph
       visible: detailValue.actionable
       anchors.right: parent.right
@@ -1566,8 +1504,6 @@ Panel {
       text: detailValue.linkUrl !== "" ? "󰏌" : "󰆏"
       color: detailValue.color
       opacity: valueMouse.containsMouse ? 1.0 : 0.45
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.caption
 
       Behavior on opacity {
         NumberAnimation { duration: 120; easing.type: Easing.OutQuad }
@@ -1644,8 +1580,8 @@ Panel {
     }
   }
 
-  // A titled list of rows whose background is filled in proportion to the
-  // biggest row, so the bar is the row rather than a rule beneath it.
+  // A titled list of rows filled in proportion to the biggest row, so the bar
+  // is the row rather than a rule beneath it.
   component MeterList: Column {
     id: meterList
     property string title: ""
@@ -1663,12 +1599,9 @@ Panel {
     spacing: Style.space(1)
 
     // A level below the block headers above it: same shape, less weight.
-    Text {
+    CaptionText {
       text: meterList.title
       visible: meterList.title !== ""
-      color: Qt.darker(root.foreground, 1.55)
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.caption
       bottomPadding: Style.space(4)
       topPadding: Math.ceil(Style.font.caption * 0.15)
     }
@@ -1693,8 +1626,7 @@ Panel {
   }
 
   // Label, bar, value on one line, as the agents panel lays out its tokens by
-  // day. The bar keeps a fixed share of the row so long domain names have
-  // room to read.
+  // day.
   component MeterRow: Item {
     id: meterRow
     property string label: ""
@@ -1711,7 +1643,7 @@ Panel {
     // reach. Hover still lights up only what can be acted on.
     readonly property bool hot: hasCursor || (interactive && rowMouse.containsMouse)
 
-    Text {
+    BodyText {
       id: rowLabel
       anchors.left: parent.left
       anchors.right: meterTrack.left
@@ -1719,8 +1651,6 @@ Panel {
       anchors.verticalCenter: parent.verticalCenter
       text: meterRow.label
       color: meterRow.hot ? root.foreground : Qt.darker(root.foreground, 1.25)
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.body
       elide: Text.ElideMiddle
     }
 
@@ -1750,7 +1680,7 @@ Panel {
       }
     }
 
-    Text {
+    BodyText {
       id: rowValue
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
@@ -1758,18 +1688,13 @@ Panel {
       horizontalAlignment: Text.AlignRight
       text: Model.formatCount(meterRow.hits)
       color: root.dim
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.body
     }
 
-    MouseArea {
+    RowMouseArea {
       id: rowMouse
-      anchors.fill: parent
-      hoverEnabled: true
+      cursorKey: meterRow.cursorKey
       cursorShape: meterRow.interactive ? Qt.PointingHandCursor : Qt.ArrowCursor
       acceptedButtons: meterRow.interactive ? Qt.LeftButton : Qt.NoButton
-      onEntered: if (meterRow.cursorKey !== "") root.setCursorFromPointer(meterRow.cursorKey, meterRow, { x: rowMouse.mouseX, y: rowMouse.mouseY })
-      onPositionChanged: function(mouse) { if (meterRow.cursorKey !== "") root.setCursorFromPointer(meterRow.cursorKey, meterRow, mouse) }
       onClicked: controld.copyToClipboard(meterRow.copyValue)
     }
 
@@ -1791,6 +1716,7 @@ Panel {
     property string actionText: "Open setup guide"
     property string actionUrl: root.guideUrl
 
+    width: parent.width
     spacing: Style.space(6)
 
     Text {
@@ -1802,23 +1728,16 @@ Panel {
       wrapMode: Text.WordWrap
     }
 
-    Text {
+    BodyText {
       width: emptyState.width
       text: emptyState.message
       color: root.dim
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.body
       wrapMode: Text.WordWrap
     }
 
-    Text {
-      width: emptyState.width
+    NoticeText {
       visible: emptyState.detail !== ""
       text: emptyState.detail
-      color: root.urgent
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.bodySmall
-      wrapMode: Text.WordWrap
     }
 
     Row {
@@ -1828,33 +1747,24 @@ Panel {
       spacing: Style.space(8)
       topPadding: Style.space(4)
 
-      Button {
+      ChipButton {
         text: emptyState.actionText
-        bordered: true
-        foreground: root.foreground
-        accent: Color.accent
-        fontFamily: root.fontFamily
         fontSize: Style.font.body
         onClicked: Quickshell.execDetached(["omarchy-launch-browser", emptyState.actionUrl])
       }
 
       // Offered here rather than everywhere: a panel that is working has
       // nothing to ask about, and this is where somebody stuck already is.
-      Button {
+      ChipButton {
         text: "Ask an agent"
-        bordered: true
-        foreground: root.foreground
-        accent: Color.accent
-        fontFamily: root.fontFamily
         fontSize: Style.font.body
         onClicked: root.askAgent()
       }
     }
   }
 
-  // The foot of a list that draws short: what is left, and a way to see it.
-  // Reads as a control rather than a row, since it is the one thing there that
-  // acts on the list instead of belonging to it.
+  // The foot of a list that draws short. Reads as a control rather than a row,
+  // being the one thing there that acts on the list instead of belonging to it.
   component MoreRow: Item {
     id: moreRow
     property string text: ""
@@ -1865,27 +1775,21 @@ Panel {
 
     implicitHeight: moreLabel.implicitHeight + Style.spacing.sm * 2
 
-    Text {
+    CaptionText {
       id: moreLabel
       anchors.left: parent.left
       anchors.verticalCenter: parent.verticalCenter
       text: moreRow.text
       color: moreRow.hot ? root.foreground : root.dim
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.caption
 
       Behavior on color {
         ColorAnimation { duration: 120; easing.type: Easing.OutQuad }
       }
     }
 
-    MouseArea {
+    RowMouseArea {
       id: moreMouse
-      anchors.fill: parent
-      hoverEnabled: true
-      cursorShape: Qt.PointingHandCursor
-      onEntered: root.setCursorFromPointer(moreRow.cursorKey, moreRow, { x: moreMouse.mouseX, y: moreMouse.mouseY })
-      onPositionChanged: function(mouse) { root.setCursorFromPointer(moreRow.cursorKey, moreRow, mouse) }
+      cursorKey: moreRow.cursorKey
       onClicked: moreRow.activated()
     }
   }
@@ -1899,9 +1803,6 @@ Panel {
     readonly property string question: query ? query.question : ""
     readonly property bool blocked: query && query.action === 0
     readonly property bool hasCursor: cursorKey !== "" && root.cursorActive && root.cursorKey === cursorKey
-    // The glyph's own hover counts: without it, moving onto the control takes
-    // hover off the row, and a control that reads the row's hover would put
-    // itself away exactly as the pointer arrives.
     readonly property bool glyphReached: question !== "" && root.hoveredGlyphHost === question
     readonly property bool hot: activityMouse.containsMouse || glyphReached || hasCursor
     // The override this row offers, given what the profile already says.
@@ -1915,18 +1816,33 @@ Panel {
     readonly property bool superseded: applied && intent.action !== verdictName
     readonly property bool pending: controld.ruleBusy && controld.pendingRuleHost === question
 
+    // Where the host stands: the override if this profile holds one, else what
+    // the log recorded.
+    readonly property string restingGlyph: Model.actionGlyph(applied ? intent.action : verdictName)
+    // What the click will do. A row with no rule shows the verdict the click
+    // writes -- exact, since the rule is what decides it -- and a row with one
+    // shows undo, which is all the click promises. So the glyph answers "what
+    // is it" until you reach for it, then "what will this do".
+    readonly property string reachedGlyph: applied ? Model.UNDO_GLYPH : Model.actionGlyph(intent.action)
+    // Accent only at rest, where it is the one thing telling your rule from an
+    // ordinary bypass. Under the pointer the glyph has already changed shape,
+    // and saying it twice just makes it louder.
+    property color verdictColor: {
+      if (glyphReached && actionable) return root.foreground
+      if (applied) return Color.accent
+      return blocked ? root.foreground : root.dim
+    }
+
+    Behavior on verdictColor { ColorAnimation { duration: 60 } }
+
     implicitHeight: activityText.implicitHeight + Style.spacing.sm * 2
 
     // Declared before the row's contents and therefore beneath them, so the
-    // action button takes its own clicks and everything else falls through to
-    // the row. Filling the row over the top would swallow the button.
-    MouseArea {
+    // glyph takes its own clicks and everything else falls through to the row.
+    // Filling the row over the top would swallow the glyph.
+    RowMouseArea {
       id: activityMouse
-      anchors.fill: parent
-      hoverEnabled: true
-      cursorShape: Qt.PointingHandCursor
-      onEntered: if (activityRow.cursorKey !== "") root.setCursorFromPointer(activityRow.cursorKey, activityRow, { x: activityMouse.mouseX, y: activityMouse.mouseY })
-      onPositionChanged: function(mouse) { if (activityRow.cursorKey !== "") root.setCursorFromPointer(activityRow.cursorKey, activityRow, mouse) }
+      cursorKey: activityRow.cursorKey
       onClicked: controld.copyToClipboard(activityRow.question)
     }
 
@@ -1936,74 +1852,21 @@ Panel {
       anchors.verticalCenter: parent.verticalCenter
       spacing: Style.space(8)
 
-      // The verdict, and the control that reverses it. At rest the glyph is
-      // where the host stands now -- the log's verdict, or the override this
-      // profile holds over it. Under the pointer or the cursor it becomes what
-      // clicking will make it, which on an overridden row is the way back. So
-      // the glyph answers "what is it" until you reach for it, then "what will
-      // this do", and the accent says the answer came from a rule you wrote
-      // rather than from the log.
-      Item {
-        // A fixed cell, not the glyph's own width: these glyphs do not all
-        // advance the same, so sizing to the one on show would slide the
-        // hostname sideways whenever the pointer changes it.
-        Layout.preferredWidth: Style.space(22)
-        Layout.preferredHeight: verdictGlyph.implicitHeight
-        Layout.alignment: Qt.AlignVCenter
-
-        Text {
-          id: verdictGlyph
-          readonly property string verdict: activityRow.verdictName
-          // Where the host stands: the override if this profile holds one,
-          // else what the log recorded.
-          readonly property string atRest: activityRow.applied ? activityRow.intent.action : verdict
-          anchors.centerIn: parent
-          // The glyph's own hover, not the row's: crossing a row on the way
-          // somewhere else should not make every verdict it passes flicker
-          // into its opposite. On reach, a row with no rule shows the verdict
-          // the click writes -- exact, since the rule is what decides it --
-          // and a row with one shows undo, which is all the click promises.
-          text: {
-            if (!activityRow.actionable || !activityRow.glyphReached)
-              return Model.actionGlyph(atRest)
-            return activityRow.applied ? Model.UNDO_GLYPH : Model.actionGlyph(activityRow.intent.action)
-          }
-          // Accent only at rest, where it is the one thing telling your rule
-          // from an ordinary bypass. Under the pointer the glyph has already
-          // changed shape, and saying it twice just makes it louder.
-          color: activityRow.glyphReached && activityRow.actionable ? root.foreground
-            : (activityRow.applied ? Color.accent
-              : (activityRow.blocked ? root.foreground : root.dim))
-          opacity: activityRow.pending ? 0.4 : 1.0
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.icon
-
-          Behavior on color { ColorAnimation { duration: 60 } }
+      RowGlyph {
+        glyph: activityRow.actionable && activityRow.glyphReached
+          ? activityRow.reachedGlyph : activityRow.restingGlyph
+        glyphColor: activityRow.verdictColor
+        glyphOpacity: activityRow.pending ? 0.4 : 1.0
+        actionable: activityRow.actionable
+        reached: activityRow.glyphReached
+        tooltipText: activityRow.applied
+          ? ("Remove this " + activityRow.intent.action + " rule")
+          : (activityRow.intent.action + " this host")
+        onHovered: function(on) {
+          if (on) root.hoveredGlyphHost = activityRow.question
+          else if (root.hoveredGlyphHost === activityRow.question) root.hoveredGlyphHost = ""
         }
-
-        MouseArea {
-          id: verdictMouse
-          anchors.fill: parent
-          // Not disabled while a write is in flight: taking the mouse area
-          // away under the pointer drops its hover, and giving it back does
-          // not restore it until the pointer moves -- so the row it just acted
-          // on would go back to showing its resting glyph. `applyRuleIntent`
-          // turns a second click away on its own.
-          enabled: activityRow.actionable
-          hoverEnabled: enabled
-          cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-          onEntered: root.hoveredGlyphHost = activityRow.question
-          onExited: if (root.hoveredGlyphHost === activityRow.question) root.hoveredGlyphHost = ""
-          onClicked: controld.applyRuleIntent(activityRow.intent)
-        }
-
-        PanelToolTip {
-          visible: activityRow.glyphReached
-          text: activityRow.applied
-            ? ("Remove this " + activityRow.intent.action + " rule")
-            : (activityRow.intent.action + " this host")
-          fontFamily: root.fontFamily
-        }
+        onClicked: controld.applyRuleIntent(activityRow.intent)
       }
 
       ColumnLayout {
@@ -2011,7 +1874,7 @@ Panel {
         Layout.fillWidth: true
         spacing: Style.space(1)
 
-        Text {
+        BodyText {
           Layout.fillWidth: true
           text: activityRow.question
           color: activityRow.hot ? root.foreground : Qt.darker(root.foreground, 1.25)
@@ -2019,26 +1882,18 @@ Panel {
           // which a row you just acted on is not. A line through it says the
           // verdict it records no longer stands.
           font.strikeout: activityRow.superseded
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.body
           elide: Text.ElideMiddle
         }
 
-        Text {
+        CaptionText {
           Layout.fillWidth: true
           text: Model.activityDetail(activityRow.query)
-          color: root.dim
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
           elide: Text.ElideRight
         }
       }
 
-      Text {
+      CaptionText {
         text: Model.clockTime(activityRow.query ? activityRow.query.time : "")
-        color: root.dim
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.caption
         Layout.alignment: Qt.AlignVCenter
       }
     }
@@ -2075,13 +1930,9 @@ Panel {
     implicitHeight: ruleContent.implicitHeight + Style.spacing.rowPaddingX
       + (confirming ? confirmStrip.implicitHeight + Style.space(8) : 0)
 
-    MouseArea {
+    RowMouseArea {
       id: ruleMouse
-      anchors.fill: parent
-      hoverEnabled: true
-      cursorShape: Qt.PointingHandCursor
-      onEntered: root.setCursorFromPointer("rule:" + ruleRow.rowIndex, ruleRow, { x: ruleMouse.mouseX, y: ruleMouse.mouseY })
-      onPositionChanged: function(mouse) { root.setCursorFromPointer("rule:" + ruleRow.rowIndex, ruleRow, mouse) }
+      cursorKey: "rule:" + ruleRow.rowIndex
       onClicked: if (ruleRow.rule) controld.copyToClipboard(ruleRow.rule.hostname)
     }
 
@@ -2095,43 +1946,23 @@ Panel {
       anchors.rightMargin: Style.space(8)
       spacing: Style.space(8)
 
-      // The rule's action, and the switch that turns the rule off. At rest it
-      // says what the rule does; reaching for it says what the click does,
-      // which is not the same question -- toggling leaves the action alone.
-      Item {
-        Layout.preferredWidth: Style.space(22)
-        Layout.preferredHeight: ruleGlyph.implicitHeight
-        Layout.alignment: Qt.AlignVCenter
-
-        Text {
-          id: ruleGlyph
-          anchors.centerIn: parent
-          // Pause on a rule that is running, play on one that is not: the
-          // glyph says which way the click goes, not merely that it toggles.
-          text: ruleRow.glyphReached
-            ? (ruleRow.ruleEnabled ? Model.PAUSE_GLYPH : Model.PLAY_GLYPH)
-            : Model.actionGlyph(ruleRow.rule ? ruleRow.rule.action : "")
-          color: ruleRow.ruleEnabled || ruleRow.glyphReached ? root.foreground : root.dim
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.icon
-          opacity: ruleRow.pending ? 0.4 : (ruleRow.ruleEnabled || ruleRow.glyphReached ? 1.0 : 0.6)
+      // At rest the glyph says what the rule does; reaching for it says what
+      // the click does, which is not the same question -- toggling leaves the
+      // action alone. Pause on a rule that is running, play on one that is
+      // not, so the glyph says which way the click goes.
+      RowGlyph {
+        glyph: ruleRow.glyphReached
+          ? (ruleRow.ruleEnabled ? Model.PAUSE_GLYPH : Model.PLAY_GLYPH)
+          : Model.actionGlyph(ruleRow.rule ? ruleRow.rule.action : "")
+        glyphColor: ruleRow.ruleEnabled || ruleRow.glyphReached ? root.foreground : root.dim
+        glyphOpacity: ruleRow.pending ? 0.4 : (ruleRow.ruleEnabled || ruleRow.glyphReached ? 1.0 : 0.6)
+        reached: ruleRow.glyphReached
+        tooltipText: ruleRow.ruleEnabled ? "Pause this rule" : "Resume this rule"
+        onHovered: function(on) {
+          if (on) root.hoveredRuleHost = ruleRow.hostname
+          else if (root.hoveredRuleHost === ruleRow.hostname) root.hoveredRuleHost = ""
         }
-
-        MouseArea {
-          id: ruleGlyphMouse
-          anchors.fill: parent
-          hoverEnabled: true
-          cursorShape: Qt.PointingHandCursor
-          onEntered: root.hoveredRuleHost = ruleRow.hostname
-          onExited: if (root.hoveredRuleHost === ruleRow.hostname) root.hoveredRuleHost = ""
-          onClicked: controld.toggleRule(ruleRow.rule)
-        }
-
-        PanelToolTip {
-          visible: ruleRow.glyphReached
-          text: ruleRow.ruleEnabled ? "Pause this rule" : "Resume this rule"
-          fontFamily: root.fontFamily
-        }
+        onClicked: controld.toggleRule(ruleRow.rule)
       }
 
       ColumnLayout {
@@ -2139,24 +1970,19 @@ Panel {
         Layout.fillWidth: true
         spacing: Style.space(1)
 
-        Text {
+        BodyText {
           Layout.fillWidth: true
           text: ruleRow.hostname
           color: ruleRow.ruleEnabled ? root.foreground : root.dim
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.body
           elide: Text.ElideRight
           // The same line the activity log draws through a verdict a rule has
           // overruled. A rule switched off is the same claim about itself.
           font.strikeout: !ruleRow.ruleEnabled
         }
 
-        Text {
+        CaptionText {
           Layout.fillWidth: true
           text: Model.ruleDetail(ruleRow.rule)
-          color: root.dim
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
           elide: Text.ElideRight
         }
       }
@@ -2166,7 +1992,6 @@ Panel {
       // reached, and no louder there -- the confirmation is what guards this,
       // and a red icon on every row makes the list look alarming at rest.
       PanelActionButton {
-        id: ruleDelete
         iconText: Model.TRASH_GLYPH
         // Silenced while the confirmation is up: the pointer is still on this
         // button, and its tooltip would sit over the answer it is asking for.
@@ -2182,8 +2007,7 @@ Panel {
     }
 
     // Under the row rather than over the panel: the rule being deleted stays
-    // legible directly above the question, which is what a card naming it in
-    // text was standing in for.
+    // legible directly above the question that names it.
     RowLayout {
       id: confirmStrip
       visible: ruleRow.confirming
@@ -2195,33 +2019,23 @@ Panel {
       anchors.rightMargin: Style.space(8)
       spacing: Style.space(8)
 
-      Text {
+      CaptionText {
         text: "Delete this rule?"
         color: root.foreground
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.caption
         Layout.alignment: Qt.AlignVCenter
       }
 
       Item { Layout.fillWidth: true }
 
-      Button {
+      ChipButton {
         text: "Keep"
-        foreground: root.foreground
-        accent: Color.accent
-        fontFamily: root.fontFamily
-        fontSize: Style.font.caption
-        bordered: true
         onClicked: root.pendingDeleteHost = ""
       }
 
-      Button {
+      ChipButton {
         text: "Delete"
         foreground: root.urgent
         accent: root.urgent
-        fontFamily: root.fontFamily
-        fontSize: Style.font.caption
-        bordered: true
         onClicked: root.confirmDeleteRule()
       }
     }
