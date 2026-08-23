@@ -5,7 +5,7 @@ description: Help with the Control D Omarchy panel, or with the Control D accoun
 
 # Control D panel
 
-A Quickshell bar widget for Omarchy showing what Control D is doing for **this
+A Quickshell bar widget for Omarchy showing what [Control D](https://controld.com) is doing for **this
 machine**: which endpoint it resolves through, what that endpoint enforces, and
 what it has been deciding lately. It reads the account, and it writes rules,
 this device's profile, and this device's on/off state.

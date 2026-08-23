@@ -3,7 +3,7 @@
 Bug reports, resolver setups the panel cannot attribute, and pull requests are all welcome.
 
 If the panel reads `unknown` in its resolver row, that is a setup worth an issue: say which
-program holds your Control D endpoint and how it is configured.
+program holds your [Control D](https://controld.com) endpoint and how it is configured.
 
 ## Layout
 

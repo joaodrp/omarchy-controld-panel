@@ -1,7 +1,7 @@
 # How it works
 
 Detail behind the [README](../README.md): how the panel finds your endpoint, and how it reaches
-the two halves of Control D.
+the two halves of [Control D](https://controld.com).
 
 ## Endpoint detection
 
