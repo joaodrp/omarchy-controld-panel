@@ -25,10 +25,10 @@ import controld_api as api
 # expanding cost nothing. The ceiling is small on purpose: past twenty or so a
 # bar panel is the wrong place to be reading a log.
 #
-# The page is the API's maximum because folding by host costs rows: this
-# endpoint's last hundred blocked lookups are four hosts, one of them eighty
-# times over. Five hundred is what it takes to fill the ceiling with names
-# worth reading, and it is still one request.
+# The page is the largest the endpoint accepts, because folding by host costs
+# rows: a hundred blocked lookups can be a handful of hosts, one of them most
+# of the tally. A page this size is what it takes to fill the ceiling with
+# names worth reading, and it is still one request.
 PAGE_SIZE = 500
 MAX_ROWS = 20
 # How far back the log reaches. Recent is the whole point, and the panel polls
@@ -100,8 +100,6 @@ def main():
 
     try:
         token = api.read_token()
-        # Ask for more than we keep: collapsing several raw rows into one means
-        # a page of 100 can be worth far fewer entries.
         params = dict(api.window(args.hours, args.endpoint), pageSize=PAGE_SIZE)
         # Narrowing server side is what keeps the list full: a page filtered to
         # blocked is a page of blocked, not the handful that survive a client

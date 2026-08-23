@@ -21,8 +21,8 @@ Item {
   readonly property real viewHeight: 38
   // The blades ink only x 1..42 and y 2..32 of that viewBox, and the slack is
   // uneven: 2 above the mark, 6 below. Both the scale and the offset therefore
-  // come from the ink box. Driving them from the viewBox instead drew the mark
-  // at 71% of the height asked for, sitting 5% of it too high.
+  // come from the ink box. The viewBox would scale the mark to 71% of the
+  // height asked for and sit it 5% too high.
   readonly property real inkX: 1
   readonly property real inkY: 2
   readonly property real inkWidth: 41

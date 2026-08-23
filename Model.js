@@ -185,8 +185,8 @@ function parseFolders(raw) {
 }
 
 // Which profile the panel shows: the persisted id if it still exists, else
-// the first one. `preferred` may also be a name, since that is what a user
-// would type into the settings form.
+// the first one. A name is accepted as well as an id, so a profile can be
+// asked for by what it is called.
 function resolveProfile(profiles, preferred) {
   var list = profiles || []
   if (list.length === 0) return null
@@ -584,8 +584,8 @@ function actionOptions() {
 
 // What the activity log is filtered to: one chip per verdict, and every row
 // under exactly one of them. Blocked is the default, being the verdict you
-// come to the log for when a site will not load. Bypassed earns its own chip
-// now that its rows are actionable -- the glyph there blocks the host -- and
+// come to the log for when a site will not load. Bypassed has its own chip
+// because its rows are actionable -- the glyph there blocks the host -- and
 // "Others" is where a redirect or a spoof is visible at all: among a page of
 // blocked and bypassed it would never be found. Empty most days, which is
 // itself the answer.
@@ -636,7 +636,8 @@ function meterRatio(count, rows) {
 }
 
 // Query counts run to five and six digits, and the panel has one column for
-// them: 21432 -> "21.4K".
+// them: 9500 -> "9.5K", 21432 -> "21K". The decimal stops paying for itself
+// once the whole number is two digits wide.
 function formatCount(value) {
   var n = num(value)
   if (n < 1000) return String(n)
@@ -738,7 +739,8 @@ function filterLabel(value) {
 }
 
 // scripts/activity.py returns the endpoint's most recent lookups, newest
-// first, with the A/AAAA pairs of one lookup already collapsed.
+// first, with the rows for one host and verdict already folded into a single
+// entry carrying a tally.
 function parseActivity(raw) {
   var parsed = parseJson(raw)
   if (!parsed.ok || !parsed.value || typeof parsed.value !== "object") {

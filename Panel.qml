@@ -157,9 +157,9 @@ Panel {
     // this line past the trailing controls into an ellipsis.
     return controld.email !== "" ? controld.email : controld.statusText
   }
-  // Only what the plus cannot say: that the list is still loading, that there
-  // is nothing in it, or that it is showing fewer rules than the profile has.
-  // The plain "5 of 6 enabled" is what the rows already tell you.
+  // Only what the rows cannot say for themselves: that the list is still
+  // loading, that there is nothing in it, or that it is showing fewer rules
+  // than the profile holds.
   readonly property string rulesCaption: {
     if (controld.loadingRules && controld.rules.length === 0) return "Loading rules..."
     if (controld.ruleCount.total === 0) return "No custom rules in this profile."
@@ -623,7 +623,7 @@ Panel {
         else if (t === "?") root.legendOpen = !root.legendOpen
         else if (t === "p") root.toggleProfilePicker()
         else if (t === "o") Quickshell.execDetached(["omarchy-launch-browser", root.dashboardUrl])
-        // Shift for the action, since the plain letter now names a section.
+        // Shift for the action, since the plain letter names a section.
         else if (t === "R") controld.refresh()
         // Shift, as `R` is: this one leaves the panel entirely.
         else if (t === "A") root.askAgent()
@@ -731,7 +731,7 @@ Panel {
 
               // The only control here, and the one that has to survive there
               // being no endpoint to describe: pausing is what removed it.
-              // Everything else the hero used to carry has a key.
+              // Everything else the hero could carry has a key instead.
               trailingControl: Component {
                 ToggleSwitch {
                   id: protectionSwitch
@@ -1157,8 +1157,7 @@ Panel {
                 width: parent.width
                 rows: root.destinationRows
                 cursorPrefix: "destination:"
-                // Codes name nothing on their own; the copied value stays the
-                // code the API reports.
+                // Codes name nothing on their own, so the row spells them out.
                 labelFor: root.destinationView === "countries" ? "country" : ""
               }
             }
@@ -1521,7 +1520,7 @@ Panel {
 
   // One geometry for every key/value block, so a label in one lines up with
   // the label in the next. Sized rather than left to each grid's own content,
-  // which is what made the second block sit a few pixels off the first.
+  // which lands the blocks a few pixels apart.
   component FactGrid: GridLayout {
     columns: 4
     columnSpacing: Style.space(12)
@@ -1545,8 +1544,8 @@ Panel {
     // Deliberately not elided. Every value here comes from a closed set -- an
     // endpoint id, a protocol name, a resolver from `RESOLVERS`, an action --
     // and letting the text keep its own width is what makes the grid lend the
-    // long ones room from the labels. Eliding cut `systemd-resolved`, which
-    // fits only because of that lending.
+    // long ones room from the labels. `systemd-resolved` fits only because of
+    // that lending, and eliding would cut it.
     property bool copyable: false
     // Set instead of `copyable` when the value is worth acting on rather than
     // taking: the glyph and the click follow.
@@ -1654,7 +1653,7 @@ Panel {
     property string title: ""
     property var rows: []
     // Filter ids arrive as slugs and country codes as two letters; both read
-    // badly raw. The copied value is always what the API reported.
+    // badly raw.
     property bool pretty: false
     property string labelFor: ""
     // Only rows whose value can be acted on elsewhere offer to be copied.
@@ -1948,8 +1947,8 @@ Panel {
       // rather than from the log.
       Item {
         // A fixed cell, not the glyph's own width: these glyphs do not all
-        // advance the same, so sizing to the one on show slid the hostname
-        // sideways every time the pointer changed it.
+        // advance the same, so sizing to the one on show would slide the
+        // hostname sideways whenever the pointer changes it.
         Layout.preferredWidth: Style.space(22)
         Layout.preferredHeight: verdictGlyph.implicitHeight
         Layout.alignment: Qt.AlignVCenter

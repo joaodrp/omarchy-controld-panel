@@ -32,7 +32,7 @@ import controld_api as api
 # The verdict analytics records per query. Values match the dashboard's tabs.
 ACTIONS = {"blocked": 0, "bypassed": 1, "redirected": 2}
 # Buckets in the series. The API decides the interval from the window and this
-# cap, and returns one more bucket than asked for.
+# cap. The last bucket may still be filling, so series() drops it when it is.
 SERIES_BUCKETS = 24
 
 
@@ -49,7 +49,7 @@ def series(body, now):
     """Total and blocked per bucket, which is all the sparkline draws.
 
     The last bucket is still filling when the window ends at now, so it lands
-    a fraction of the others and would draw as a cliff. Drop it.
+    a fraction of the others and would draw as a cliff. Dropped when it is.
     """
     out = []
     for bucket in (body.get("queries") or []):

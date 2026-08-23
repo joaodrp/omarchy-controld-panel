@@ -62,7 +62,7 @@ Item {
   readonly property string endpointState: Model.endpointState(resolverChecked, usingControld, devicesChecked, endpoint)
 
   // Analytics for this endpoint. Fetched only while the panel is open: the
-  // numbers are not visible otherwise, and they cost three requests.
+  // numbers are not visible otherwise, and they cost nine requests.
   property bool statsWanted: false
   property var stats: null
   property bool statsLoading: false
@@ -661,7 +661,7 @@ Item {
 
   Timer {
     // A resolver takes a moment to settle after the command returns, so the
-    // panel re-probes rather than waiting for the next poll two minutes out.
+    // panel re-probes rather than waiting for the next poll, which may be minutes out.
     id: pauseSettleTimer
     interval: 3000
     repeat: true

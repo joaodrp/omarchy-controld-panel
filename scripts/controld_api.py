@@ -28,7 +28,7 @@ def config_path():
 
 
 def read_token():
-    """The environment wins, exactly as cdctl resolves it."""
+    """The environment wins, matching how cdctl resolves it."""
     env = os.environ.get("CONTROLD_API_TOKEN")
     if env:
         return env
