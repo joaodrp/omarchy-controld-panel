@@ -12,7 +12,6 @@ Item {
 
   property var settings: ({})
 
-  // Resolved once; "" until the lookup runs, and stays "" when cdctl is absent.
   property string cdctlPath: ""
   property bool installed: false
   property bool checkedInstall: false
@@ -23,8 +22,7 @@ Item {
   property string region: ""
 
   property var profiles: []
-  // The profile this machine's endpoint enforces, which is the only one the
-  // panel describes.
+  // The profile this endpoint enforces, and the only one the panel describes.
   readonly property var activeProfile: Model.activeProfile(profiles, enforcedProfileId, "")
   property var rules: []
   property var folders: []
@@ -34,11 +32,10 @@ Item {
   readonly property var ruleCount: Model.countRules(rules)
   readonly property int shownRuleCount: visibleRuleRows.filter(function(r) { return r.kind === "rule" }).length
 
-  // This machine as Control D sees it, resolved from the DNS resolver it is
-  // actually using rather than from its hostname. The probe text is kept whole
-  // because the device list is what turns it into an identity: a device
-  // publishes itself as a DoT name, a DoH URL and its own addresses, and only
-  // the account knows which are which.
+  // This machine as Control D sees it, identified by the resolver it uses
+  // rather than by its hostname. The probe is kept whole because only the
+  // device list can read an identity out of it: a device publishes itself as a
+  // DoT name, a DoH URL and its own addresses.
   property string resolverProbe: ""
   property var devices: []
   readonly property var endpointMatch: Model.matchEndpoint(devices, resolverProbe)
@@ -51,13 +48,11 @@ Item {
   // The endpoint is named but nothing local says what manages it.
   readonly property bool resolverUnknown: endpoint !== null && Model.resolverUnknown(resolverSource)
   readonly property string endpointProfileId: endpoint ? endpoint.profileId : ""
-  // Control D is answering here even when no device matched: a legacy shared
-  // resolver, an endpoint owned by another account, or a device list we could
-  // not read.
+  // Also true when no device matched: a legacy shared resolver, an endpoint
+  // owned by another account, or a device list we could not read.
   readonly property bool usingControld: Model.controldPresent(resolverProbe)
   property bool resolverChecked: false
-  // Whether the device lookup has answered, which is what separates "still
-  // loading" from "asked, and this endpoint is not one of ours".
+  // Separates "still loading" from "asked, and this endpoint is not one of ours".
   property bool devicesChecked: false
   property string devicesError: ""
   readonly property string endpointState: Model.endpointState(resolverChecked, usingControld, devicesChecked, endpoint)
@@ -68,29 +63,23 @@ Item {
   property var stats: null
   property bool statsLoading: false
   property string statsError: ""
-  // The window and the verdict the lists describe, both driven from the panel.
   property int statsHours: 24
   property int statsAction: 0
-  // Answers are cached per window and action so flipping a tab back is free.
   property var statsCache: ({})
   property string _statsKey: ""
   readonly property bool statsAvailable: Model.analyticsReadable(endpoint)
 
-  // The endpoint's most recent lookups. Polled only while the panel is open,
-  // and faster than the rest, since "recent" is the whole point. Filtered to
-  // blocked by default: that is the verdict worth reading, and the one a site
-  // that will not load sends you looking for.
+  // The endpoint's recent lookups, polled faster than the rest and, like the
+  // statistics, only while the panel is open. Blocked by default: that is the
+  // verdict a site which will not load sends you looking for.
   property var activity: []
   // Set while the pointer is inside the list. A page that lands then is kept
   // back rather than dropped: the rows are choosing targets for a write, and
   // moving them under the pointer is how the wrong host gets a rule.
   property bool activityHeld: false
   property var _pendingActivity: null
-  property bool activityLoading: false
   property string activityError: ""
   property string activityFilter: "blocked"
-  // Fold every row for a host into one with a tally, rather than keeping each
-  // lookup. On by default: which hosts were blocked is what the section is for.
   property bool activityGrouped: true
 
   property bool refreshing: false
@@ -104,69 +93,57 @@ Item {
   readonly property bool statsEnabled: setting("showStatistics", true) !== false
   readonly property bool activityEnabled: setting("showActivity", true) !== false
   readonly property int activityRows: intSetting("activityRows", 10, 3, 20)
-  // Standing Control D down has two answers, and the host's wins. A machine
-  // with its own way of doing it says so through these settings and the panel
-  // runs that; anything else goes through the account, which needs no setup
-  // and is why every user gets the switch rather than only those who configure
-  // one. The two are not equivalent: the host command changes what this
+  // Standing Control D down has two answers, and the host's wins when these
+  // are set. They are not equivalent: the host command changes what this
   // machine resolves through, the account changes what Control D does with
-  // what it is asked.
+  // what it is asked. Only a machine with its own way of doing it configures
+  // one, so the account is the fallback and every user gets the switch.
   readonly property string pauseCommand: String(setting("pauseCommand", "") || "").trim()
   readonly property string resumeCommand: String(setting("resumeCommand", "") || "").trim()
   readonly property bool hostPause: pauseCommand !== "" && resumeCommand !== ""
-  // Whether Control D is on here. A host that knows says so; `dns-controld
-  // --status` is one. Without it the panel reads what it can see, and which
-  // that is follows whichever way the switch acts. Never `usingControld`,
-  // which is true of a config file merely mentioning Control D and stays true
-  // through a pause.
+  // The host's own answer to whether Control D is on here; `dns-controld
+  // --status` is one. Never `usingControld`, which is true of a config file
+  // merely mentioning Control D and stays true through a pause.
   readonly property string statusCommand: String(setting("statusCommand", "") || "").trim()
   readonly property bool canPause: hostPause || endpoint !== null
   property bool pauseBusy: false
   property string pauseError: ""
-  // Overriding one host's verdict from the activity log, which is the panel's
-  // reason to exist: a page fails, you find what was blocked, you allow it.
   property string pendingRuleHost: ""
   property bool ruleBusy: false
   property string ruleError: ""
-  // Rows held in the log because an override was applied to them. Long enough
-  // to see what happened and take it back, then gone: bypassing a host is
-  // supposed to take it out of the blocked view, and a row that outstayed that
-  // would be reporting a block that no longer happens.
+  // Rows held in the log because an override was applied to them, long enough
+  // to take it back: bypassing a host is supposed to remove it from the
+  // blocked view.
   property var stickyActivity: []
-  // Overruled rows go, then the held ones come back: the row you just acted on
-  // is exactly the one a rule now contradicts, and holding it is what gives you
-  // the moment to change your mind.
+  // Overruled rows go, then the held ones come back: the row just acted on is
+  // exactly the one a rule now contradicts.
   readonly property var activityLog: Model.mergeSticky(
     Model.dropOverridden(activity, rules), stickyActivity,
     Model.activityActions(activityFilter))
   property var _ruleIntent: null
 
-  // Switching which profile this endpoint enforces. Only offered when the
-  // account has somewhere else to switch to.
   readonly property bool canEnforce: endpoint !== null && profiles.length > 1
   property bool enforceBusy: false
   property string enforceError: ""
   // What was just asked for, until the account confirms it. The write takes a
   // second or two, and a panel that says nothing for that long reads as a
-  // click that missed: the reader opens the list again and picks again.
+  // click that missed.
   property string pendingProfileId: ""
   readonly property string enforcedProfileId: pendingProfileId !== "" ? pendingProfileId : endpointProfileId
   property int _statusExit: -1
   readonly property bool protectionObserved: {
     if (statusCommand !== "") return _statusExit === 0
-    // The account cannot see a machine-local pause, so it only answers when
-    // the account is also what the switch acts on.
+    // The account cannot see a machine-local pause, so it only answers when the
+    // account is also what the switch acts on.
     if (hostPause) return endpoint !== null || Model.controldLive(resolverProbe)
     return Model.deviceProtected(endpoint)
   }
-  // What the user just asked for, until the machine agrees. The knob throws
+  // What the user just asked for, until the machine agrees: the knob throws
   // immediately rather than after a systemd restart settles.
   property int _pauseDesired: -1
   property int _pauseSettles: 0
   readonly property bool protectionActive: _pauseDesired >= 0 ? _pauseDesired === 1 : protectionObserved
 
-  // Rows per statistics list (domains, filters, destinations), and the cap on
-  // the rules list. Every list in the panel is a top-N; these are the Ns.
   readonly property int statsRows: intSetting("statsRows", 5, 3, 20)
   readonly property int ruleLimit: intSetting("ruleRows", 15, 5, 100)
   readonly property bool busy: lookupProcess.running || authProcess.running || profilesProcess.running || rulesProcess.running || foldersProcess.running || resolverProcess.running || devicesProcess.running
@@ -205,9 +182,8 @@ Item {
     return String(Qt.resolvedUrl(name)).replace(/^file:\/\//, "")
   }
 
-  // The endpoint belongs in the key: the numbers are its own, and a machine
-  // whose resolver changes mid-session would otherwise be shown the previous
-  // device's figures.
+  // The endpoint belongs in the key: a machine whose resolver changes
+  // mid-session would otherwise be shown the previous device's figures.
   function statsKey(hours, action) {
     return String(endpoint ? endpoint.id : "") + ":" + String(hours) + ":" + String(action)
   }
@@ -223,8 +199,8 @@ Item {
       return
     }
     if (statsProcess.running) return
-    // Keep the previous numbers on screen while the next window loads; an
-    // empty section that flashes back is worse than slightly stale figures.
+    // The previous numbers stay on screen while the next window loads: a
+    // section that empties and flashes back is worse than stale figures.
     statsLoading = true
     _statsKey = key
     statsProcess.command = ["python3", scriptPath("scripts/stats.py"),
@@ -238,29 +214,25 @@ Item {
 
   function loadActivity() {
     if (!activityEnabled || !statsAvailable || region === "") return
-    // Still running when the next tick arrives means it is stuck; reaping it
-    // here is what keeps a wedged poll from stalling the section for good.
+    // Still running when the next tick arrives means stuck, and reaping it is
+    // what keeps a wedged poll from stalling the section for good.
     reap(activityProcess)
-    activityLoading = true
-    // How many to keep is the helper's business: it hands back a whole page so
-    // the panel can expand into it without asking again.
     var args = ["python3", scriptPath("scripts/activity.py"),
       "--endpoint", endpoint.id,
-      "--region", region]
-    // One `--action` per verdict the chip asks for; the helper repeats them as
-    // `action[]` so the page comes back already narrowed.
-    args = args.concat(["--hours", String(Model.activityHours(activityFilter))])
+      "--region", region,
+      "--hours", String(Model.activityHours(activityFilter)),
+      "--group", activityGrouped ? "host" : "lookup"]
+    // The helper repeats these as `action[]`, so the page arrives narrowed.
     var actions = Model.activityActions(activityFilter)
     for (var i = 0; i < actions.length; i++) args = args.concat(["--action", String(actions[i])])
-    args = args.concat(["--group", activityGrouped ? "host" : "lookup"])
     activityProcess.command = args
     activityProcess.running = true
   }
 
-  // A process we stop is not a process that failed. Empty output is not proof
-  // of that: a kill or a crash before the first write looks identical, so the
-  // stop is recorded here and every handler asks `reaped` before trusting what
-  // it collected.
+  // A process we stop is not a process that failed, and empty output proves
+  // neither: a kill and a crash before the first write look identical. The
+  // stop is recorded here, and every handler asks `reaped` before trusting
+  // what it collected.
   function reap(proc) {
     if (!proc.running) return
     proc.expectedStop = true
@@ -279,13 +251,19 @@ Item {
     command: []
   }
 
+  component Collected: Reapable {
+    property alias out: collectedOut.text
+    property alias err: collectedErr.text
+    stdout: StdioCollector { id: collectedOut; waitForEnd: true }
+    stderr: StdioCollector { id: collectedErr; waitForEnd: true }
+  }
+
   function setActivityFilter(value) {
     var next = String(value || "")
     if (next === "" || next === activityFilter) return
     activityFilter = next
-    // Leave the rows on screen while the next page loads. Emptying the list
-    // collapses the panel's content height, which drags the scroll to the top
-    // and loses the reader's place.
+    // The rows stay on screen while the next page loads: emptying the list
+    // collapses the content height, which drags the scroll to the top.
     loadActivity()
   }
 
@@ -303,26 +281,30 @@ Item {
     enforceProcess.running = true
   }
 
-  // Apply the override an activity row offers, or take it away again. cdctl
-  // verifies every rule write by reading the profile back, so a successful
-  // exit is the profile agreeing; the list is refetched rather than patched
-  // because a rule carries an order and a folder the panel does not choose.
-  function applyRuleIntent(intent) {
-    if (!activeProfile || ruleBusy) return
-    if (!intent || intent.verb === "" || intent.hostname === "") return
+  // Every rule write. cdctl verifies each one by reading the profile back, so
+  // a successful exit is the profile agreeing; the list is then refetched
+  // rather than patched, because a rule carries an order and a folder the
+  // panel does not choose.
+  function startRuleWrite(hostname, args, intent) {
     ruleBusy = true
     ruleError = ""
-    pendingRuleHost = intent.hostname
-    _ruleIntent = intent
-    var args = ["rule", intent.verb, intent.hostname, "--profile", activeProfile.id]
-    if (intent.verb !== "delete") args = args.concat(["--action", intent.action])
+    pendingRuleHost = hostname
+    _ruleIntent = intent || null
     ruleProcess.command = cdctl(["-y"].concat(args))
     writeWatchdog.restart()
     ruleProcess.running = true
   }
 
-  // Hold the row an override was just applied to, or let go of one whose
-  // override was just taken back.
+  // Apply the override an activity row offers, or take it away again.
+  function applyRuleIntent(intent) {
+    if (!activeProfile || ruleBusy) return
+    if (!intent || intent.verb === "" || intent.hostname === "") return
+    var args = ["rule", intent.verb, intent.hostname, "--profile", activeProfile.id]
+    if (intent.verb !== "delete") args = args.concat(["--action", intent.action])
+    startRuleWrite(intent.hostname, args, intent)
+  }
+
+  // Hold the row just acted on, or let go of one whose override was undone.
   function holdActedRow(intent) {
     if (!intent) return
     var next = []
@@ -338,45 +320,24 @@ Item {
   }
 
   // Switch a rule off, or back on. Not delete: a rule here may be older than
-  // this panel, and disabling it is undone in place, whereas removing it is
-  // not recoverable from anything the panel shows.
+  // this panel, and disabling it is undone in place, whereas removing it is not
+  // recoverable from anything the panel shows.
   function toggleRule(rule) {
     if (!activeProfile || ruleBusy || !rule) return
-    ruleBusy = true
-    ruleError = ""
-    pendingRuleHost = rule.hostname
-    _ruleIntent = null
-    ruleProcess.command = cdctl(["-y", "rule", "update", rule.hostname,
-      "--profile", activeProfile.id, rule.enabled ? "--disabled" : "--enabled"])
-    writeWatchdog.restart()
-    ruleProcess.running = true
+    startRuleWrite(rule.hostname, ["rule", "update", rule.hostname,
+      "--profile", activeProfile.id, rule.enabled ? "--disabled" : "--enabled"], null)
   }
 
-  // Add a rule by hand, for a host the log has not shown you.
   function createRule(hostname, action) {
     var host = String(hostname || "").trim().toLowerCase()
     if (!activeProfile || ruleBusy || !Model.validHostname(host)) return
-    ruleBusy = true
-    ruleError = ""
-    pendingRuleHost = host
-    _ruleIntent = null
-    ruleProcess.command = cdctl(["-y", "rule", "create", host,
-      "--action", String(action || "block"), "--profile", activeProfile.id])
-    writeWatchdog.restart()
-    ruleProcess.running = true
+    startRuleWrite(host, ["rule", "create", host,
+      "--action", String(action || "block"), "--profile", activeProfile.id], null)
   }
 
-  // Remove a rule outright. Behind a confirmation in the panel, because unlike
-  // switching one off this cannot be undone from anything the panel shows.
   function deleteRule(rule) {
     if (!activeProfile || ruleBusy || !rule) return
-    ruleBusy = true
-    ruleError = ""
-    pendingRuleHost = rule.hostname
-    _ruleIntent = null
-    ruleProcess.command = cdctl(["-y", "rule", "delete", rule.hostname, "--profile", activeProfile.id])
-    writeWatchdog.restart()
-    ruleProcess.running = true
+    startRuleWrite(rule.hostname, ["rule", "delete", rule.hostname, "--profile", activeProfile.id], null)
   }
 
   function setProtection(on) {
@@ -393,9 +354,6 @@ Item {
       pauseProcess.running = true
       return
     }
-    // `device update` re-reads the device after writing and prints what it
-    // verified, so this needs no settling: the answer is in the output. `-y`
-    // because there is no terminal here to answer a prompt.
     devicePauseProcess.command = cdctl(["-y", "device", "update", endpoint.id,
       "--status", on ? "active" : "soft-disabled"])
     writeWatchdog.restart()
@@ -416,8 +374,8 @@ Item {
   }
 
   // One tick per probe. A command can exit 0 and change nothing, so the knob
-  // is given a few rounds to be proved right and then dropped: showing what
-  // was asked for forever is worse than admitting it did not take.
+  // gets a few rounds to be proved right and is then dropped: showing what was
+  // asked for forever is worse than admitting it did not take.
   function noteProtectionProbe() {
     if (_pauseDesired < 0 || !hostPause) return
     if (protectionObserved === (_pauseDesired === 1)) {
@@ -505,8 +463,8 @@ Item {
     _foldersPending = true
     foldersProcess.command = cdctl(["folder", "list", "--profile", id])
     foldersProcess.running = true
-    // Restarted, not started: these are new processes, and an already-armed
-    // watchdog would otherwise reap them with whatever is left of its run.
+    // Restarted: an already-armed watchdog would reap these new processes with
+    // whatever is left of its run.
     pollWatchdog.restart()
   }
 
@@ -525,9 +483,31 @@ Item {
     console.warn("controld:", what, String(detail || ""))
   }
 
+  function writeError(label, text, exitCode, fallback) {
+    var line = Model.errorLine(Model.parseError(text, exitCode), fallback)
+    note(label, line)
+    return line
+  }
+
+  // cdctl re-reads the device after writing and prints what it verified, so
+  // the list takes that rather than waiting on a re-probe or another list.
+  function acceptDevice(text) {
+    var parsed = Model.parseDevice(text)
+    if (!parsed.ok) return false
+    devices = Model.replaceDevice(devices, parsed.device)
+    return true
+  }
+
+  // A failed poll keeps the rows on screen and says why in the section itself,
+  // never as a panel-wide error.
+  function sectionError(parsed, text, fallback) {
+    if (parsed.error !== "") return Model.elide(parsed.error, 120)
+    var stderr = String(text || "").trim()
+    return Model.elide(stderr !== "" ? stderr : fallback, 120)
+  }
+
   // A write failure is only news until the panel has read the world again.
-  // Otherwise the next open redisplays an error from ten minutes ago as if it
-  // had just happened.
+  // Otherwise the next open redisplays an error from ten minutes ago.
   function clearWriteErrors() {
     ruleError = ""
     pauseError = ""
@@ -558,7 +538,6 @@ Item {
 
   Component.onCompleted: statsHours = statsWindowHours
 
-  // A fresh window setting resets the runtime choice and everything cached.
   onStatsWindowHoursChanged: {
     statsCache = ({})
     statsHours = statsWindowHours
@@ -583,20 +562,15 @@ Item {
   }
 
   Timer {
-    // A poll that never exits would otherwise block every later refresh, since
-    // each is skipped while its process is still running.
+    // A poll that never exits would block every later refresh, since each is
+    // skipped while its process is still running.
     id: pollWatchdog
     interval: 25000
     repeat: false
     onTriggered: {
-      root.reap(authProcess)
-      root.reap(profilesProcess)
-      root.reap(rulesProcess)
-      root.reap(foldersProcess)
-      root.reap(resolverProcess)
-      root.reap(devicesProcess)
-      root.reap(statsProcess)
-      root.reap(statusProcess)
+      var polls = [authProcess, profilesProcess, rulesProcess, foldersProcess,
+        resolverProcess, devicesProcess, statsProcess, statusProcess]
+      for (var i = 0; i < polls.length; i++) root.reap(polls[i])
       root.refreshing = false
       root.loadingRules = false
       root.statsLoading = false
@@ -607,9 +581,8 @@ Item {
     // A read that never returns is covered by the next poll, which overwrites
     // whatever it left behind. A write is not: the panel shows the state the
     // user asked for from the moment they ask, and only the write's own exit
-    // takes that back. Without this the switch sits where it was put, the hero
-    // names a profile nothing enforces, and the clicked row stays marked, for
-    // as long as the shell runs.
+    // takes that back. Without this the switch sits where it was put and the
+    // hero names a profile nothing enforces, for as long as the shell runs.
     id: writeWatchdog
     interval: 30000
     repeat: false
@@ -643,8 +616,8 @@ Item {
   }
 
   Process {
-    // The shell inherits Hyprland's environment, which usually lacks the
-    // cargo and ~/.local bin dirs cdctl installs into.
+    // The shell inherits Hyprland's environment, which usually lacks the cargo
+    // and ~/.local bin dirs cdctl installs into.
     id: lookupProcess
     running: false
     command: ["sh", "-c",
@@ -666,8 +639,7 @@ Item {
   }
 
   Reapable {
-    // The host's own answer to whether Control D is on. Exit code only; the
-    // output is the host's business.
+    // Exit code only; the output is the host's business.
     id: statusProcess
     onExited: function(exitCode) {
       if (root.reaped(statusProcess)) return
@@ -678,7 +650,7 @@ Item {
 
   Timer {
     // A resolver takes a moment to settle after the command returns, so the
-    // panel re-probes rather than waiting for the next poll, which may be minutes out.
+    // panel re-probes rather than waiting for the next poll, minutes out.
     id: pauseSettleTimer
     interval: 3000
     repeat: true
@@ -688,86 +660,56 @@ Item {
 
   Reapable {
     id: ruleProcess
-    running: false
-    command: []
     stderr: StdioCollector { id: ruleStderr; waitForEnd: true }
     onExited: function(exitCode) {
       if (root.reaped(ruleProcess)) return
       if (exitCode !== 0) {
         root.ruleBusy = false
         root.pendingRuleHost = ""
-        root.ruleError = Model.errorLine(Model.parseError(ruleStderr.text, exitCode),
+        root.ruleError = root.writeError("rule write failed", ruleStderr.text, exitCode,
           "Could not change this rule")
-        root.note("rule write failed", root.ruleError)
         return
       }
       root.ruleError = ""
       root.holdActedRow(root._ruleIntent)
       root._ruleIntent = null
-      // Still busy: the write has landed but the row goes on looking unacted
-      // on until the rules it reads from agree, which is a second or two more.
+      // Still busy: the write has landed, but the row goes on looking unacted
+      // on until the rules it reads from agree, a second or two more.
       // `commitRules` releases it, so the glyph stays marked for the whole
       // operation rather than for the fast half of it.
       root.loadRules(root.activeProfile.id)
     }
   }
 
-  Reapable {
-    // Same verified read-back as the pause: the device cdctl prints is the one
-    // the account holds, so the profile the panel describes follows it and the
-    // rules for it reload without a re-list.
+  Collected {
     id: enforceProcess
-    running: false
-    command: []
-    stdout: StdioCollector { id: enforceStdout; waitForEnd: true }
-    stderr: StdioCollector { id: enforceStderr; waitForEnd: true }
     onExited: function(exitCode) {
       if (root.reaped(enforceProcess)) return
       root.enforceBusy = false
-      // Cleared either way: the device below carries the confirmed profile, and
-      // a failure has to fall back to what the account still says rather than
-      // leaving the panel describing a switch that did not happen.
+      // Cleared either way: on success the device below carries the confirmed
+      // profile, and on failure the panel falls back to what the account says.
       root.pendingProfileId = ""
       if (exitCode !== 0) {
-        root.enforceError = Model.errorLine(Model.parseError(enforceStderr.text, exitCode),
+        root.enforceError = root.writeError("profile switch failed", enforceProcess.err, exitCode,
           "Could not switch this device's profile")
-        root.note("profile switch failed", root.enforceError)
         return
       }
-      var parsed = Model.parseDevice(enforceStdout.text)
-      if (!parsed.ok) {
-        root.enforceError = "Could not read this device back"
-        return
-      }
-      root.devices = Model.replaceDevice(root.devices, parsed.device)
+      if (!root.acceptDevice(enforceProcess.out)) root.enforceError = "Could not read this device back"
     }
   }
 
-  Reapable {
-    // Standing the device down through the account. cdctl verifies the write
-    // by re-reading the device, so what it prints replaces what the list
-    // fetched and the switch settles on that rather than on a re-probe.
+  Collected {
     id: devicePauseProcess
-    running: false
-    command: []
-    stdout: StdioCollector { id: devicePauseStdout; waitForEnd: true }
-    stderr: StdioCollector { id: devicePauseStderr; waitForEnd: true }
     onExited: function(exitCode) {
       if (root.reaped(devicePauseProcess)) return
       root.pauseBusy = false
       root._pauseDesired = -1
       if (exitCode !== 0) {
-        root.pauseError = Model.errorLine(Model.parseError(devicePauseStderr.text, exitCode),
+        root.pauseError = root.writeError("device pause failed", devicePauseProcess.err, exitCode,
           "Could not change this device")
-        root.note("device pause failed", root.pauseError)
         return
       }
-      var parsed = Model.parseDevice(devicePauseStdout.text)
-      if (!parsed.ok) {
-        root.pauseError = "Could not read this device back"
-        return
-      }
-      root.devices = Model.replaceDevice(root.devices, parsed.device)
+      if (!root.acceptDevice(devicePauseProcess.out)) root.pauseError = "Could not read this device back"
     }
   }
 
@@ -775,17 +717,14 @@ Item {
     // The host's own way of standing Control D down and bringing it back. It
     // may need a password, so the command is expected to escalate itself.
     id: pauseProcess
-    running: false
-    command: []
     stderr: StdioCollector { id: pauseStderr; waitForEnd: true }
     onExited: function(exitCode) {
       if (root.reaped(pauseProcess)) return
       root.pauseBusy = false
       if (exitCode !== 0) {
         root._pauseDesired = -1
-        root.pauseError = Model.errorLine(Model.parseError(pauseStderr.text, exitCode),
+        root.pauseError = root.writeError("pause command failed", pauseStderr.text, exitCode,
           "The pause command failed")
-        root.note("pause command failed", root.pauseError)
       }
       // Re-probe: the resolver is the only thing that says whether it worked.
       root.refresh()
@@ -793,15 +732,10 @@ Item {
   }
 
   Reapable {
-    // Where this machine's DNS actually points, and what is doing the pointing.
-    // Sections are labelled because the answer depends on which config holds
-    // the endpoint, and because a running ctrld is a fact about this machine
-    // that the account's device record outlives.
+    // Where this machine's DNS actually points, one section per resolver the
+    // panel can read. An endpoint configured any other way still shows up
+    // under `resolvconf`, which reports itself as unknown rather than guessing.
     id: resolverProcess
-    // One section per resolver the panel can read. The list is deliberately
-    // short: these are the documented Linux setups, and an endpoint found
-    // anywhere else still shows up under `resolvconf`, which reports itself as
-    // unknown rather than guessing.
     command: ["sh", "-c",
       "echo @@ctrld; cat /etc/controld/ctrld.toml /etc/ctrld.toml 2>/dev/null; " +
       "echo @@stubby; cat /etc/stubby/stubby.yml 2>/dev/null; " +
@@ -817,8 +751,7 @@ Item {
       if (root.reaped(resolverProcess)) return
       root.resolverProbe = resolverStdout.text
       root.resolverChecked = true
-      // The device list is what turns the probe into an identity, so it is
-      // fetched whether or not the probe looks like Control D: a device
+      // Fetched whether or not the probe looks like Control D: a device
       // publishes itself as addresses too, and only the account knows them.
       if (!devicesProcess.running) {
         root.devicesChecked = false
@@ -828,20 +761,17 @@ Item {
     }
   }
 
-  Reapable {
-    // A failure here costs the panel every machine-specific section, so the
-    // reason is kept rather than swallowed.
+  Collected {
+    // A failure here costs every machine-specific section, so it is reported.
     id: devicesProcess
-    stdout: StdioCollector { id: devicesStdout; waitForEnd: true }
-    stderr: StdioCollector { id: devicesStderr; waitForEnd: true }
     onExited: function(exitCode) {
       if (root.reaped(devicesProcess)) return
       root.devicesChecked = true
       if (exitCode !== 0) {
         root.devices = []
-        root.devicesError = Model.errorLine(Model.parseError(devicesStderr.text, exitCode), "Could not read your devices")
+        root.devicesError = Model.errorLine(Model.parseError(devicesProcess.err, exitCode), "Could not read your devices")
       } else {
-        var parsed = Model.parseDevices(devicesStdout.text)
+        var parsed = Model.parseDevices(devicesProcess.out)
         root.devices = parsed.ok ? parsed.devices : []
         root.devicesError = parsed.ok ? "" : "Could not read your devices"
       }
@@ -851,14 +781,12 @@ Item {
   }
 
   Timer {
-    // One window for every held row rather than one each: they are all things
-    // done moments ago, and the last of them is what the reader is still
-    // looking at.
+    // One window for every held row rather than one each: the last of them is
+    // what the reader is still looking at.
     id: stickyTimer
     interval: 10000
     repeat: false
-    // Letting go of a held row moves every row beneath it, so that waits for
-    // the pointer as well.
+    // Letting go moves every row beneath, so it waits for the pointer too.
     onTriggered: {
       if (root.activityHeld) { stickyTimer.restart(); return }
       root.stickyActivity = []
@@ -874,94 +802,80 @@ Item {
     onTriggered: root.loadActivity()
   }
 
-  Reapable {
+  Collected {
     id: activityProcess
-    stdout: StdioCollector { id: activityStdout; waitForEnd: true }
-    stderr: StdioCollector { id: activityStderr; waitForEnd: true }
     onExited: function(exitCode) {
-      root.activityLoading = false
       if (root.reaped(activityProcess)) return
-      var parsed = Model.parseActivity(activityStdout.text)
-      if (parsed.ok) {
-        if (root.activityHeld) root._pendingActivity = parsed.queries
-        else root.activity = parsed.queries
-        root.activityError = ""
+      var parsed = Model.parseActivity(activityProcess.out)
+      if (!parsed.ok) {
+        root.activityError = root.sectionError(parsed, activityProcess.err, "activity unavailable")
         return
       }
-      // Keep the rows already on screen: a failed poll should not blank a log
-      // the user is reading.
-      var stderr = String(activityStderr.text || "").trim()
-      root.activityError = Model.elide(parsed.error !== "" ? parsed.error : (stderr !== "" ? stderr : "activity unavailable"), 120)
+      if (root.activityHeld) root._pendingActivity = parsed.queries
+      else root.activity = parsed.queries
+      root.activityError = ""
     }
   }
 
-  Reapable {
+  Collected {
     // Analytics is a different origin than the REST API, so this goes through
-    // the plugin's own helper rather than cdctl. Failures are reported in the
-    // section itself, never as a panel-wide error.
+    // the plugin's own helper rather than cdctl.
     id: statsProcess
-    stdout: StdioCollector { id: statsStdout; waitForEnd: true }
-    stderr: StdioCollector { id: statsStderr; waitForEnd: true }
     onExited: function(exitCode) {
       root.statsLoading = false
       if (root.reaped(statsProcess)) return
-      var parsed = Model.parseStats(statsStdout.text)
-      if (parsed.ok) {
-        var next = Object.assign({}, root.statsCache)
-        next[root._statsKey] = parsed
-        root.statsCache = next
-        // A slow answer for a window the user has already left must not
-        // overwrite what they are looking at now.
-        if (root._statsKey === root.statsKey(root.statsHours, root.statsAction)) {
-          root.stats = parsed
-          root.statsError = ""
-        }
+      var parsed = Model.parseStats(statsProcess.out)
+      if (!parsed.ok) {
+        root.stats = null
+        root.statsError = root.sectionError(parsed, statsProcess.err, "statistics unavailable")
         return
       }
-      root.stats = null
-      var stderr = String(statsStderr.text || "").trim()
-      root.statsError = Model.elide(parsed.error !== "" ? parsed.error : (stderr !== "" ? stderr : "statistics unavailable"), 120)
-    }
-  }
-
-  Reapable {
-    id: authProcess
-    stdout: StdioCollector { id: authStdout; waitForEnd: true }
-    stderr: StdioCollector { id: authStderr; waitForEnd: true }
-    onExited: function(exitCode) {
-      if (root.reaped(authProcess)) return
-      if (exitCode === 0) {
-        var parsed = Model.parseAuthStatus(authStdout.text)
-        if (!parsed.ok) {
-          root.applyError(null, "Could not read cdctl auth status")
-          return
-        }
-        root.authenticated = parsed.authenticated
-        root.needsAuth = !parsed.authenticated
-        root.email = parsed.email
-        root.region = parsed.region
-        root.statusText = Model.accountLine(parsed)
-        if (root.needsAuth) root.lastHint = "Run: cdctl auth login --token-stdin"
-      } else {
-        var err = Model.parseError(authStderr.text, exitCode)
-        root.applyError(err, "cdctl auth status failed")
-        if (err.exitCode !== Model.EXIT_AUTH) root.statusText = "Unavailable"
+      var next = Object.assign({}, root.statsCache)
+      next[root._statsKey] = parsed
+      root.statsCache = next
+      // A slow answer for a window the user has already left must not overwrite
+      // what they are looking at now.
+      if (root._statsKey === root.statsKey(root.statsHours, root.statsAction)) {
+        root.stats = parsed
+        root.statsError = ""
       }
     }
   }
 
-  Reapable {
+  Collected {
+    id: authProcess
+    onExited: function(exitCode) {
+      if (root.reaped(authProcess)) return
+      if (exitCode !== 0) {
+        var err = Model.parseError(authProcess.err, exitCode)
+        root.applyError(err, "cdctl auth status failed")
+        if (err.exitCode !== Model.EXIT_AUTH) root.statusText = "Unavailable"
+        return
+      }
+      var parsed = Model.parseAuthStatus(authProcess.out)
+      if (!parsed.ok) {
+        root.applyError(null, "Could not read cdctl auth status")
+        return
+      }
+      root.authenticated = parsed.authenticated
+      root.needsAuth = !parsed.authenticated
+      root.email = parsed.email
+      root.region = parsed.region
+      root.statusText = Model.accountLine(parsed)
+      if (root.needsAuth) root.lastHint = "Run: cdctl auth login --token-stdin"
+    }
+  }
+
+  Collected {
     id: profilesProcess
-    stdout: StdioCollector { id: profilesStdout; waitForEnd: true }
-    stderr: StdioCollector { id: profilesStderr; waitForEnd: true }
     onExited: function(exitCode) {
       root.refreshing = false
       if (root.reaped(profilesProcess)) return
       if (exitCode !== 0) {
-        root.applyError(Model.parseError(profilesStderr.text, exitCode), "Could not list profiles")
+        root.applyError(Model.parseError(profilesProcess.err, exitCode), "Could not list profiles")
         return
       }
-      var parsed = Model.parseProfiles(profilesStdout.text)
+      var parsed = Model.parseProfiles(profilesProcess.out)
       if (!parsed.ok) {
         root.applyError(null, "Could not read profile list")
         return
@@ -978,47 +892,39 @@ Item {
     }
   }
 
-  Reapable {
+  Collected {
     id: rulesProcess
-    stdout: StdioCollector { id: rulesStdout; waitForEnd: true }
-    stderr: StdioCollector { id: rulesStderr; waitForEnd: true }
     onExited: function(exitCode) {
       root._rulesPending = false
-      if (root.reaped(rulesProcess)) { root.commitRules(); return }
-      if (!root.activeProfile || root._rulesForProfile !== root.activeProfile.id) { root.commitRules(); return }
+      if (root.reaped(rulesProcess) || !root.activeProfile
+        || root._rulesForProfile !== root.activeProfile.id) { root.commitRules(); return }
       if (exitCode !== 0) {
-        root.applyError(Model.parseError(rulesStderr.text, exitCode), "Could not list rules")
+        root.applyError(Model.parseError(rulesProcess.err, exitCode), "Could not list rules")
         root._pendingRules = []
       } else {
-        var parsed = Model.parseRules(rulesStdout.text)
-        if (parsed.ok) root._pendingRules = parsed.rules
-        else {
-          root.applyError(null, "Could not read rule list")
-          root._pendingRules = []
-        }
+        var parsed = Model.parseRules(rulesProcess.out)
+        if (!parsed.ok) root.applyError(null, "Could not read rule list")
+        root._pendingRules = parsed.ok ? parsed.rules : []
       }
       root.commitRules()
     }
   }
 
-  Reapable {
+  Collected {
     id: foldersProcess
-    stdout: StdioCollector { id: foldersStdout; waitForEnd: true }
-    stderr: StdioCollector { id: foldersStderr; waitForEnd: true }
     onExited: function(exitCode) {
       root._foldersPending = false
-      if (root.reaped(foldersProcess)) { root.commitRules(); return }
-      if (!root.activeProfile || root._foldersForProfile !== root.activeProfile.id) { root.commitRules(); return }
+      if (root.reaped(foldersProcess) || !root.activeProfile
+        || root._foldersForProfile !== root.activeProfile.id) { root.commitRules(); return }
       if (exitCode !== 0) {
-        root.applyError(Model.parseError(foldersStderr.text, exitCode), "Could not list folders")
+        root.applyError(Model.parseError(foldersProcess.err, exitCode), "Could not list folders")
         root._pendingFolders = []
       } else {
-        var parsed = Model.parseFolders(foldersStdout.text)
-        root._pendingFolders = parsed.ok ? parsed.folders : []
-        // Every sibling parse reports its failure. Dropping this one leaves
-        // foldered rules under a heading `groupRules` invents from the id and
-        // empty folders gone altogether, with nothing saying so.
+        var parsed = Model.parseFolders(foldersProcess.out)
+        // Reported like every sibling parse: dropping it leaves foldered rules
+        // under a heading `groupRules` invents from the id, and nothing said.
         if (!parsed.ok) root.applyError(Model.parseError(parsed.error, exitCode), "Could not read folders")
+        root._pendingFolders = parsed.ok ? parsed.folders : []
       }
       root.commitRules()
     }
