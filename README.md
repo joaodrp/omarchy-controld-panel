@@ -38,9 +38,10 @@ omarchy plugin add https://github.com/joaodrp/omarchy-controld-panel.git --enabl
 
 ## What it shows
 
-Left click opens the panel, middle click refreshes. Every section needs an identified endpoint;
-without one the panel shows only the reason -- no Control D resolver here, a resolver whose
-endpoint is not in your account, or a failed device lookup.
+Left click opens the panel, middle click refreshes.
+
+Every section needs an identified endpoint. Without one the panel shows only the reason: no
+Control D resolver here, an endpoint that is not in your account, or a failed device lookup.
 
 | Area | Contents |
 | --- | --- |
@@ -91,10 +92,11 @@ behind an inline confirmation, and `y` copies the hostname.
 
 <img src="docs/images/paused.png" alt="The panel with Control D paused: the mark crossed out, the switch off, and the sections replaced by the reason" width="380">
 
-With `pauseCommand` and `resumeCommand` set the panel runs those; without them it stands your
-device down through the account, so the switch works with no setup. They are not the same: a host
-command changes what your machine resolves through, the account changes what Control D does with
-what you ask of it.
+With `pauseCommand` and `resumeCommand` set, the panel runs those. Without them it stands your
+device down through the account, so the switch works with no setup.
+
+The two are not the same. A host command changes what your machine resolves through; the account
+changes what Control D does with what you ask of it.
 
 | Setting | Must |
 | --- | --- |
@@ -106,7 +108,8 @@ The panel has no tty, so a command needing root must escalate itself with `pkexe
 passwordless `sudo` rule. One that waits for a password never returns.
 
 For `ctrld`: `systemctl is-active --quiet ctrld`, `systemctl stop ctrld`, `systemctl start ctrld`.
-systemd-resolved takes more care, since a link carrying its own DNS outranks the global endpoint;
+
+systemd-resolved takes more care, since a link carrying its own DNS outranks the global endpoint.
 [`dns-controld`](https://github.com/joaodrp/omarchy/blob/main/dot_local/bin/executable_dns-controld)
 is a worked example.
 
@@ -160,8 +163,9 @@ a router or upstream is invisible from the machine, and no local probe changes t
 ## Your API token
 
 Statistics and activity come from an origin `cdctl` cannot reach, so two small Python helpers call
-it directly. They read your token the same way `cdctl` does, send it in a request header, and put
-it nowhere else: not a process argument, which is world readable on Linux, and not the output.
+it directly. They read your token the same way `cdctl` does and send it in a request header.
+
+It never goes in a process argument, which is world readable on Linux, and never into the output.
 Nothing goes anywhere but Control D.
 
 [The full account](docs/how-it-works.md#the-two-origins) of what is called and how the token is
