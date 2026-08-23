@@ -208,4 +208,4 @@ The bar and hero mark is the Control D logo, and the artwork belongs to Control 
 
 MIT, see [LICENSE](LICENSE).
 
-<sub>Identifiers in the screenshots are placeholders.</sub>
+<sub>The endpoint ID and email address in the screenshots are placeholders.</sub>
