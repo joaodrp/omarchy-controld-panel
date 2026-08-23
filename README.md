@@ -45,7 +45,13 @@ reading the account back:
 | The profile your endpoint enforces | Hero caret |
 | Your device's on/off state | Hero switch |
 
+### Profile
+
 <img src="docs/images/profiles.png" alt="The profile picker open under the hero, with the enforced profile marked in force" width="380">
+
+The caret beside the profile name opens the list, and `p` does the same. Picking one enforces it
+on this endpoint. The hero shows the new name straight away and settles on whatever the account
+confirms.
 
 ### Statistics
 
@@ -156,13 +162,12 @@ resolved.
 
 ## Requirements
 
-- [`cdctl`](https://github.com/joaodrp/controld-cli), installed and authenticated. The panel
-  looks on `PATH`, then in `~/.cargo/bin`,
-  `~/.local/bin`, `/usr/local/bin`, `/usr/bin`
-- `wl-copy` for clipboard actions
-- `python3` for the analytics helpers, standard library only
-- `omarchy-launch-browser` to open the dashboard, `omarchy-agent` for the `A` key. Both ship with
-  Omarchy
+[`cdctl`](https://github.com/joaodrp/controld-cli) is the only thing to install. The panel looks
+for it on `PATH`, then in `~/.cargo/bin`, `~/.local/bin`, `/usr/local/bin` and `/usr/bin`.
+
+Everything else already ships with Omarchy: `wl-copy` for clipboard actions, `python3` for the
+analytics helpers (standard library only), `omarchy-launch-browser` for the dashboard, and
+`omarchy-agent` for the `A` key.
 
 The panel always passes `--profile <id>` explicitly, so `cdctl`'s `default_profile` need not be
 set. Installed but not signed in, the panel shows what to do rather than an empty shell.
