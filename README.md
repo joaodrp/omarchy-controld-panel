@@ -203,9 +203,12 @@ Bug reports and pull requests welcome -- see [CONTRIBUTING.md](CONTRIBUTING.md) 
 omarchy plugin remove io.github.joaodrp.controld
 ```
 
-## Icons
+## Trademarks
 
-The bar and hero mark is the Control D logo, and the artwork belongs to Control D.
+Control D and the Control D logo are trademarks of ControlD Inc. They appear here only to identify
+the service this plugin works with. ControlD Inc does not sponsor or endorse this project.
+
+The bar and hero mark is drawn from the Control D logo.
 
 ## License
 
