@@ -210,6 +210,18 @@ test("ruleIntent offers the opposite verdict, then offers to undo it", () => {
   // into a block, which would turn an allow into a deny in one click.
   same(m.ruleIntent(bypassed, mine), { action: "bypass", verb: "delete", hostname: "ads.example" })
 
+  // The log reports the question as it was asked. Upper case and a trailing
+  // dot are the same host, and this hostname becomes an argv entry, so it has
+  // to be the rule's own spelling rather than the log's.
+  same(m.ruleIntent({ action: 0, question: "ADS.EXAMPLE" }, mine),
+    { action: "bypass", verb: "delete", hostname: "ads.example" })
+  same(m.ruleIntent({ action: 0, question: "ads.example." }, mine),
+    { action: "bypass", verb: "delete", hostname: "ads.example" })
+  // A create carries the canonical spelling too.
+  assert.equal(m.ruleIntent({ action: 0, question: "NEW.EXAMPLE." }, none).hostname, "new.example")
+  // No question is no intent, whatever the verdict says.
+  same(m.ruleIntent({ action: 0, question: "" }, mine), { action: "", verb: "", hostname: "" })
+
   // Matching is exact: a parent rule covers the host but is not its rule.
   const parent = m.parseRules(JSON.stringify([
     { hostname: "example", action: "bypass", enabled: true, order: 1 }

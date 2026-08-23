@@ -871,15 +871,22 @@ function overrideAction(query) {
   return ""
 }
 
+// One spelling of a hostname to compare by. The log reports whatever the
+// resolver was asked, which may be upper case or fully qualified with a
+// trailing dot; neither names a different host.
+function canonicalHost(hostname) {
+  return str(hostname).trim().toLowerCase().replace(/\.+$/, "")
+}
+
 // The rule this profile already holds for a hostname, if any. Exact matches
 // only: a rule on the parent domain covers this host too, but it is not this
 // host's rule and removing it would reach further than the row asked.
 function findRule(rules, hostname) {
-  var want = str(hostname).toLowerCase()
+  var want = canonicalHost(hostname)
   if (want === "") return null
   var list = rules || []
   for (var i = 0; i < list.length; i++)
-    if (list[i].hostname.toLowerCase() === want) return list[i]
+    if (canonicalHost(list[i].hostname) === want) return list[i]
   return null
 }
 
@@ -891,10 +898,13 @@ function findRule(rules, hostname) {
 function ruleIntent(query, rules) {
   var action = overrideAction(query)
   if (action === "") return { action: "", verb: "", hostname: "" }
-  var host = str(query.question)
+  var host = canonicalHost(query ? query.question : "")
+  if (host === "") return { action: "", verb: "", hostname: "" }
   var rule = findRule(rules, host)
   if (rule === null) return { action: action, verb: "create", hostname: host }
-  return { action: rule.action, verb: "delete", hostname: host }
+  // The rule's own spelling, not the log's: this becomes an argv entry, and
+  // cdctl removes the rule it names rather than the one we matched.
+  return { action: rule.action, verb: "delete", hostname: rule.hostname }
 }
 
 // What a row offers when the profile already holds a rule for it. Naming the
