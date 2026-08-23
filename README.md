@@ -111,6 +111,24 @@ The hero switch stands Control D down and brings it back.
   Control D on the live resolver.
 - Paused, the panel says so instead of reporting a missing resolver.
 
+The commands are yours to write. What the panel needs from them:
+
+| Setting | Must |
+| --- | --- |
+| `statusCommand` | Exit 0 when Control D is on, non-zero when it is not |
+| `pauseCommand` | Stand it down, and return without waiting on a terminal |
+| `resumeCommand` | Put it back |
+
+The panel runs them with no tty, so anything needing root has to escalate on its own -- `pkexec`,
+or a passwordless `sudo` rule. A command that waits for a password never returns, and the switch
+stays where you put it until the write watchdog gives up.
+
+For a `ctrld` service the three are `systemctl is-active --quiet ctrld`, `systemctl stop ctrld`
+and `systemctl start ctrld`. A systemd-resolved setup takes more care, since a link that carries
+its own DNS quietly outranks the global endpoint;
+[`dns-controld`](https://github.com/joaodrp/omarchy/blob/main/dot_local/bin/executable_dns-controld)
+is a worked example that handles it.
+
 ## Keyboard shortcuts
 
 Press `?` in the panel for the same list:
