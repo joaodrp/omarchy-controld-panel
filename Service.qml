@@ -96,7 +96,7 @@ Item {
   property bool loadingRules: false
   property string lastError: ""
   property string lastHint: ""
-  property string statusText: "Checking…"
+  property string statusText: "Checking..."
 
   readonly property int refreshIntervalSec: intSetting("refreshIntervalSec", 120, 15, 3600)
   readonly property int statsWindowHours: intSetting("statsWindowHours", 24, 1, 720)

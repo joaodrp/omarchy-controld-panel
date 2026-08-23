@@ -122,7 +122,7 @@ Panel {
   }
   readonly property string statsCaption: {
     if (!controld.statsAvailable) return "analytics off for this endpoint"
-    if (controld.statsLoading) return "loading…"
+    if (controld.statsLoading) return "loading..."
     return ""
   }
   // Only rule rows take the cursor; folder headers are labels.
@@ -140,14 +140,14 @@ Panel {
   readonly property string heroMeta: {
     if (!controld.installed) return "cdctl is not installed"
     if (controld.needsAuth) return "Not authenticated"
-    if (controld.refreshing && !controld.authenticated) return "Checking…"
+    if (controld.refreshing && !controld.authenticated) return "Checking..."
     // The caret is the only thing saying the profile can be changed, since the
     // hero's meta is a plain string with nowhere to hang a control. The name is
     // the profile asked for rather than the one confirmed, so the hero answers
     // the click at once and the ellipsis carries the wait.
     if (controld.endpoint) {
       var name = controld.activeProfile ? controld.activeProfile.name : ""
-      if (controld.enforceBusy) return name + "…"
+      if (controld.enforceBusy) return name + "..."
       return name + (controld.canEnforce ? (profilePickerOpen ? " \udb80\udd43" : " \udb80\udd40") : "")
     }
     // With no endpoint to name, the empty state below carries the reason. The
@@ -161,7 +161,7 @@ Panel {
   // is nothing in it, or that it is showing fewer rules than the profile has.
   // The plain "5 of 6 enabled" is what the rows already tell you.
   readonly property string rulesCaption: {
-    if (controld.loadingRules && controld.rules.length === 0) return "Loading rules…"
+    if (controld.loadingRules && controld.rules.length === 0) return "Loading rules..."
     if (controld.ruleCount.total === 0) return "No custom rules in this profile."
     if (controld.shownRuleCount < controld.ruleCount.total)
       return "showing " + controld.shownRuleCount + " of " + controld.ruleCount.total
@@ -937,7 +937,7 @@ Panel {
                   anchors.rightMargin: Style.space(8)
                   anchors.verticalCenter: parent.verticalCenter
                   visible: profileRow.enforced
-                  text: profileRow.switching ? "switching…" : "in force"
+                  text: profileRow.switching ? "switching..." : "in force"
                   color: root.dim
                   font.family: root.fontFamily
                   font.pixelSize: Style.font.caption

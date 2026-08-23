@@ -80,7 +80,8 @@ function errorLine(err, fallback) {
 function elide(text, max) {
   var value = str(text).replace(/\s+/g, " ").trim()
   var limit = max || 140
-  return value.length > limit ? value.substring(0, limit - 1) + "…" : value
+  // The marker counts towards the limit: `max` is what the caller has room for.
+  return value.length > limit ? value.substring(0, Math.max(0, limit - 3)) + "..." : value
 }
 
 function parseAuthStatus(raw) {
