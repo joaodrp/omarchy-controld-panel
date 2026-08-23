@@ -83,7 +83,8 @@ Panel {
     if (showEndpoint) keys.push({ key: "m", what: "machine" })
     if (controld.canEnforce) keys.push({ key: "p", what: "profile" })
     keys.push({ key: "g/G", what: "top/bottom" }, { key: "o", what: "dashboard" },
-      { key: "R", what: "refresh" }, { key: "esc", what: "close" })
+      { key: "R", what: "refresh" }, { key: "A", what: "ask agent" },
+      { key: "esc", what: "close" })
     return keys
   }
 
@@ -298,6 +299,24 @@ Panel {
   // is normally already in the log with a glyph offering it.
   property bool addRuleOpen: false
   property string addRuleAction: "block"
+
+  // Hand the panel over to whichever agent the user has made default. Pointers
+  // only: the account, the endpoint and the rules are all one `cdctl` call
+  // away, so passing them would ship a snapshot that is stale on arrival and
+  // put account identifiers in a terminal for nothing.
+  function askAgent() {
+    // Derived from the skill's own path: `Qt.resolvedUrl("")` answers with
+    // nothing, so the directory has to come from a file that is in it.
+    var skill = String(controld.scriptPath("agent/SKILL.md"))
+    var dir = skill.replace(/\/agent\/SKILL\.md$/, "")
+    var prompt = "I use the Control D panel in Omarchy's bar and I want help with it.\n\n"
+      + "The plugin is at " + dir + "\n"
+      + "Control D's account CLI is `cdctl`; `cdctl reference` prints its whole command "
+      + "surface as one document. Everything about the account, this machine's endpoint, "
+      + "its profile and its rules is readable from there -- read it rather than asking me.\n\n"
+      + "Read " + skill + " and follow it."
+    Quickshell.execDetached(["omarchy-agent", "--prompt", prompt])
+  }
 
   function toggleAddRule() {
     addRuleOpen = !addRuleOpen
@@ -605,6 +624,8 @@ Panel {
         else if (t === "o") Quickshell.execDetached(["omarchy-launch-browser", root.dashboardUrl])
         // Shift for the action, since the plain letter now names a section.
         else if (t === "R") controld.refresh()
+        // Shift, as `R` is: this one leaves the panel entirely.
+        else if (t === "A") root.askAgent()
         else if (t === "y" || t === "Y") root.yank()
         // Shift for the heavier verdict, as `r`/`R` already reads here.
         else if (t === "b") root.applyRuleKey("bypass")
@@ -1792,16 +1813,34 @@ Panel {
       wrapMode: Text.WordWrap
     }
 
-    Button {
+    Row {
+      // A state that deliberately offers no action offers no agent either:
+      // being paused on purpose is not a thing to go debugging.
       visible: emptyState.actionText !== ""
-      text: emptyState.actionText
-      bordered: true
-      foreground: root.foreground
-      accent: Color.accent
-      fontFamily: root.fontFamily
-      fontSize: Style.font.body
+      spacing: Style.space(8)
       topPadding: Style.space(4)
-      onClicked: Quickshell.execDetached(["omarchy-launch-browser", emptyState.actionUrl])
+
+      Button {
+        text: emptyState.actionText
+        bordered: true
+        foreground: root.foreground
+        accent: Color.accent
+        fontFamily: root.fontFamily
+        fontSize: Style.font.body
+        onClicked: Quickshell.execDetached(["omarchy-launch-browser", emptyState.actionUrl])
+      }
+
+      // Offered here rather than everywhere: a panel that is working has
+      // nothing to ask about, and this is where somebody stuck already is.
+      Button {
+        text: "Ask an agent"
+        bordered: true
+        foreground: root.foreground
+        accent: Color.accent
+        fontFamily: root.fontFamily
+        fontSize: Style.font.body
+        onClicked: root.askAgent()
+      }
     }
   }
 
