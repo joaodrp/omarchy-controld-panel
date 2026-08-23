@@ -1,5 +1,8 @@
 # Control D panel for Omarchy
 
+[![CI](https://github.com/joaodrp/omarchy-controld-panel/actions/workflows/ci.yml/badge.svg)](https://github.com/joaodrp/omarchy-controld-panel/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 See what [Control D](https://controld.com) is doing on **your machine**, from the Omarchy bar: the
 endpoint you resolve through, the profile it enforces, and that profile's statistics, recent
 lookups and rules. Block or bypass a host straight from the log.
