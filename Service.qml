@@ -512,6 +512,15 @@ Item {
     lastHint = hint || ""
   }
 
+  // A write failure is only news until the panel has read the world again.
+  // Otherwise the next open redisplays an error from ten minutes ago as if it
+  // had just happened.
+  function clearWriteErrors() {
+    ruleError = ""
+    pauseError = ""
+    enforceError = ""
+  }
+
   function applyError(err, fallback) {
     lastError = Model.errorLine(err, fallback)
     lastHint = err ? err.hint : ""
@@ -784,8 +793,8 @@ Item {
       "echo @@daemon; systemctl is-active ctrld 2>/dev/null"]
     stdout: StdioCollector { id: resolverStdout; waitForEnd: true }
     onExited: {
-      root.resolverProbe = resolverStdout.text
       if (root.reaped(resolverProcess)) return
+      root.resolverProbe = resolverStdout.text
       root.resolverChecked = true
       // The device list is what turns the probe into an identity, so it is
       // fetched whether or not the probe looks like Control D: a device
@@ -985,6 +994,10 @@ Item {
       } else {
         var parsed = Model.parseFolders(foldersStdout.text)
         root._pendingFolders = parsed.ok ? parsed.folders : []
+        // Every sibling parse reports its failure. Dropping this one leaves
+        // foldered rules under a heading `groupRules` invents from the id and
+        // empty folders gone altogether, with nothing saying so.
+        if (!parsed.ok) root.applyError(Model.parseError(parsed.error, exitCode), "Could not read folders")
       }
       root.commitRules()
     }

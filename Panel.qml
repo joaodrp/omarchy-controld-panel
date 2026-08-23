@@ -525,6 +525,7 @@ Panel {
     cursorActive = false
     cursorKey = "header"
     activityExpanded = false
+    controld.clearWriteErrors()
     controld.stickyActivity = []
     controld.setActivityFilter("blocked")
     controld.setActivityGrouped(true)
