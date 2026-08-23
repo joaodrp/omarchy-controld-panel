@@ -15,27 +15,12 @@ import sys
 
 import controld_api as api
 
-# One row per host, not per lookup. A resolver asks for A and AAAA at the same
-# instant, and a chatty host is asked for again every minute, so a raw page
-# spends most of its rows on a handful of names. What the reader is scanning
-# for is which hosts were blocked, and repetition is a count, so rows for the
-# same question and verdict fold into the newest one and carry a tally.
-# The most this hands back, and the page it reads to fill that. The caller
-# draws a slice and expands into the rest, so keeping them all is what makes
-# expanding cost nothing. The ceiling is small on purpose: past twenty or so a
-# bar panel is the wrong place to be reading a log.
-#
-# The page is the largest the endpoint accepts, because folding by host costs
-# rows: a hundred blocked lookups can be a handful of hosts, one of them most
-# of the tally. A page this size is what it takes to fill the ceiling with
-# names worth reading, and it is still one request.
+# Folding by host costs rows -- a hundred blocked lookups can be a handful of
+# hosts, one of them most of the tally -- so it takes a page this large to fill
+# a ceiling this small with names worth reading. It is still one request, and
+# the caller keeps every row, so expanding the list costs nothing.
 PAGE_SIZE = 500
 MAX_ROWS = 20
-# How far back the log reaches. Recent is the whole point, and the panel polls
-# every fifteen seconds, so a wide window only buys rows nobody scrolls to --
-# except for the verdicts that hardly ever happen, where a short window reports
-# their absence rather than their rarity. The caller says which it is asking
-# for.
 WINDOW_HOURS = 6
 
 
@@ -43,12 +28,9 @@ def collapse(rows, limit, by_host=True):
     """Fold the page, newest kept, and tally what folded into each row.
 
     By host, every row for a question and verdict folds together wherever it
-    sits: which hosts were blocked is the question, and repetition is a count.
-    By lookup, only neighbours fold, which still spares the A/AAAA pair of one
-    lookup its own row but keeps the sequence intact.
-
-    The whole page is folded before truncating, so a tally counts every lookup
-    in the window rather than only those above the cut.
+    sits. By lookup, only neighbours fold, which still spares one lookup's
+    A/AAAA pair a row each but keeps the sequence intact. Folding happens
+    before truncating, so a tally counts the whole window, not just the top.
     """
     out = []
     seen = {}
@@ -56,14 +38,12 @@ def collapse(rows, limit, by_host=True):
         question = str(row.get("question") or "")
         if question == "":
             continue
-        action = int(row.get("action") if row.get("action") is not None else -1)
+        key = (question, int(-1 if row.get("action") is None else row["action"]))
         kind = str(row.get("rrType") or "")
         if by_host:
-            entry = seen.get((question, action))
+            entry = seen.get(key)
         else:
-            entry = out[-1] if out else None
-            if entry is not None and (entry["question"], entry["action"]) != (question, action):
-                entry = None
+            entry = out[-1] if out and (out[-1]["question"], out[-1]["action"]) == key else None
         if entry is not None:
             entry["repeats"] += 1
             if kind and kind not in entry["types"]:
@@ -73,14 +53,14 @@ def collapse(rows, limit, by_host=True):
         entry = {
             "time": str(row.get("timestamp") or ""),
             "question": question,
-            "action": action,
+            "action": key[1],
             "trigger": str(row.get("trigger") or ""),
             "triggerValue": str(row.get("triggerValue") or ""),
             "protocol": str(row.get("protocol") or ""),
             "types": [kind] if kind else [],
             "repeats": 1,
         }
-        seen[(question, action)] = entry
+        seen[key] = entry
         out.append(entry)
     return out[:limit]
 

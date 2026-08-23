@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
 """Query Control D analytics for one endpoint and print a normalized document.
 
-Analytics lives on a different origin than the REST API (`<region>.analytics.
-controld.com`), which `cdctl api` cannot reach, so the panel comes here
-instead (see controld_api). The fan-out lives in Python rather than QML
-because it is nine requests folded into one document.
-
-One run answers one (window, action) pair: the totals and the series never
-change with the action, so the panel can cache per pair and still redraw its
-summary from any of them.
+The fan-out lives here rather than in QML because it is nine requests folded
+into one document, against an origin `cdctl api` cannot reach (see
+controld_api). One run answers one (window, action) pair: the totals and the
+series do not change with the action, so the panel can cache per pair and still
+redraw its summary from any of them.
 
     {"ok": true, "hours": 24, "action": 0,
      "totals": {"all": 20000, "blocked": 6000, "bypassed": 14000, "redirected": 0},
@@ -31,8 +28,7 @@ import controld_api as api
 
 # The verdict analytics records per query. Values match the dashboard's tabs.
 ACTIONS = {"blocked": 0, "bypassed": 1, "redirected": 2}
-# Buckets in the series. The API decides the interval from the window and this
-# cap. The last bucket may still be filling, so series() drops it when it is.
+# The API picks the series interval from the window and this cap.
 SERIES_BUCKETS = 24
 
 
@@ -48,24 +44,22 @@ def counts(body, limit):
 def series(body, now):
     """Total and blocked per bucket, which is all the sparkline draws.
 
-    The last bucket is still filling when the window ends at now, so it lands
-    a fraction of the others and would draw as a cliff. Dropped when it is.
+    A last bucket still filling when the window ends lands a fraction of the
+    others and would draw as a cliff, so it is dropped.
     """
     out = []
     for bucket in (body.get("queries") or []):
         per_action = bucket.get("count") or {}
-        total = sum(int(v or 0) for v in per_action.values())
         out.append({
             "time": str(bucket.get("time") or ""),
-            "total": total,
+            "total": sum(int(v or 0) for v in per_action.values()),
             "blocked": int(per_action.get(str(ACTIONS["blocked"])) or 0),
         })
     if len(out) > 2:
         try:
-            first = datetime.fromisoformat(out[0]["time"].replace("Z", "+00:00"))
-            second = datetime.fromisoformat(out[1]["time"].replace("Z", "+00:00"))
-            last = datetime.fromisoformat(out[-1]["time"].replace("Z", "+00:00"))
-            if now - last < (second - first):
+            first, second, last = (datetime.fromisoformat(row["time"].replace("Z", "+00:00"))
+                                   for row in (out[0], out[1], out[-1]))
+            if now - last < second - first:
                 out.pop()
         except ValueError:
             pass

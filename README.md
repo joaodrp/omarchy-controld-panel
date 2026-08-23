@@ -1,74 +1,73 @@
 # Control D panel for Omarchy
 
-Bar widget for the Omarchy shell that reports what [Control D](https://controld.com) is doing
-on **this machine**: the endpoint it resolves through, the profile that endpoint enforces, and
-that profile's statistics, recent lookups and custom DNS rules. Backed by
+Bar widget for the Omarchy shell reporting what [Control D](https://controld.com) is doing on
+**this machine**: the endpoint it resolves through, the profile that endpoint enforces, and that
+profile's statistics, recent lookups and custom rules. Backed by
 [`cdctl`](https://github.com/joaodrp/controld-cli), the Control D CLI.
 
-Mostly a reader. It writes in three places: the profile this endpoint enforces, custom rules
-(add, remove, switch off, and override a lookup straight from the log), and standing Control D
-down. Every write goes through `cdctl`, which verifies it by reading the account back.
+Mostly a reader. It writes three things, each through `cdctl`, which verifies the write by reading
+the account back:
 
-## Features
+| Write | From |
+| --- | --- |
+| Custom rules: add, delete, switch off, override a lookup | Rules section, activity rows |
+| The profile this endpoint enforces | Hero caret |
+| This device's on/off state | Hero switch |
 
-- Hero names this machine's endpoint and the profile it enforces, and links to the Control D
-  dashboard for everything the panel does not do, identified from the DNS
-  resolver actually in use rather than the hostname. With no endpoint to name, the hero says
-  which account is signed in instead
-- Bar icon shows account state: dimmed when unavailable, badge when `cdctl` needs a login,
-  crossed when `cdctl` is missing or nothing here is protected
-- The hero mark opens the Control D dashboard, which is where everything the panel cannot do
-  lives. `o` does the same, `R` refreshes
-- Hero caret switches which profile this endpoint enforces. The name changes as soon as it is
-  picked, and settles on what the account confirms
-- Hero switch pauses and resumes Control D. If `pauseCommand` and `resumeCommand` say how, the
-  panel runs those; otherwise it stands the device down through the account, so the switch is
-  there without any setup. The two are not equivalent: the host command changes what this
-  machine resolves through, the account changes what Control D does with what it is asked. There
-  is no one way to do it: `ctrld` has a service, a systemd-resolved setup has a drop-in, so the
-  panel runs what the host tells it rather than guessing. Paused, the panel says so instead of
-  reporting a missing resolver. `statusCommand` answers whether it is on, which also inherits
-  any check the panel cannot make, such as a link carrying its own DNS. Without one the switch
-  falls back to the identified device or Control D on the live resolver
-- Left click opens a keyboard-friendly panel; middle click refreshes
-- Machine facts under the hero, in the built-in panels' key/value idiom: the endpoint ID (click
-  to copy), protocol, resolver, and the unmatched action. The profile is the hero's subtitle, so
-  it is not repeated here. The resolver row is probed on the machine, never taken from the
-  account, so it names `ctrld` and its version when a daemon is running or when `ctrld`'s own
-  config is what holds the endpoint
-- STATISTICS for this endpoint: a queries-over-time chart with the blocked share shaded under
-  it, totals, and top domains, filters and destinations as meter rows. Pick the window
-  (1h/24h/7d/30d) and the verdict (blocked/bypassed/redirected); destinations switch between
-  networks and countries, spelled out from ISO 3166-1. Domain rows copy the hostname; filter,
-  network and country rows are inert, since nothing takes those as input. Fetched only while
-  the panel is open.
-  The verdict governs domains and filters, not destinations: a blocked query never reaches
-  one, so destinations are the traffic that was allowed
-- ACTIVITY: this endpoint's most recent lookups, refreshed every 15s while the panel is open.
-  Filtered to **blocked** by default, which is the verdict worth acting on when a site will not
-  load; `Bypassed` and `Others` are the rest, the last being where a redirect or a spoof is
-  visible at all. Filtering happens server side, so a blocked list is a full list. `Grouped`, on by default, folds every row for a host into the newest one with an `xN`
-  tally, which is what keeps a chatty telemetry endpoint from filling the section; turn it off
-  to keep each lookup and read the sequence. Drawn short with a
-  `+N` at the foot: one poll already holds up to 20, so expanding costs no extra request.
-  Bypass a blocked host, or block a bypassed one, from the row itself: the verdict glyph turns
-  into the action on hover, `b` and `B` do the same from the keyboard. The row holds its new
-  state for a few seconds so the change is visible, then leaves. Pressing again removes the rule
-- RULES: the enforced profile's custom rules, root first, then one group per folder, with
-  action, spoof/redirect target, and disabled state. Capped like every other list; the caption
-  says how many are hidden
-- Add a rule from the panel with the `Add` button, switch one off without deleting it, or
-  delete it behind an inline confirmation. `x` toggles the rule under the cursor
-- Copy a rule's hostname to the clipboard
-- `A` hands the panel to Omarchy's default agent, with pointers to `cdctl` and the plugin
-  rather than a dump of the account
-- Every section needs an identified endpoint. Without one the panel shows nothing but the
-  reason: no Control D resolver here, a resolver whose endpoint is not in this account, or a
-  device lookup that failed
+## What it shows
+
+Left click opens the panel, middle click refreshes. Every section needs an identified endpoint;
+without one the panel shows only the reason -- no Control D resolver here, a resolver whose
+endpoint is not in this account, or a failed device lookup.
+
+| Area | Contents |
+| --- | --- |
+| Bar icon | Account state: dimmed when unavailable, badged when `cdctl` needs a login, crossed when `cdctl` is missing or nothing here is protected |
+| Hero | The endpoint and the profile it enforces, or the signed-in account when there is no endpoint. The mark opens the Control D dashboard, which is where everything the panel cannot do lives |
+| MACHINE | Endpoint ID (click to copy), protocol, resolver, unmatched action. The resolver is probed on the machine, never taken from the account, so it names `ctrld` and its version whenever `ctrld` holds the endpoint |
+| STATISTICS | Queries over time with the blocked share shaded under it, totals, and top domains, filters and destinations as meter rows. Fetched only while the panel is open |
+| ACTIVITY | The endpoint's most recent lookups, refreshed every 15s while the panel is open |
+| RULES | The enforced profile's custom rules, root first then one group per folder, with action, spoof or redirect target, and disabled state. Capped; the caption says how many are hidden |
+
+### Statistics
+
+Pick the window (1h/24h/7d/30d) and the verdict (blocked/bypassed/redirected); destinations switch
+between networks and countries, spelled out from ISO 3166-1. The verdict governs domains and
+filters, not destinations: a blocked query never reaches one, so destinations are the traffic that
+was allowed. Domain rows copy the hostname; filter, network and country rows are inert, since
+nothing takes those as input.
+
+### Activity
+
+- Filtered to **blocked** by default, the verdict worth acting on when a site will not load.
+  `Bypassed` and `Others` are the rest, the last being where a redirect or a spoof shows at all.
+  Filtering happens server side, so a blocked list is a full list.
+- `Grouped`, on by default, folds every row for a host into the newest with an `xN` tally, so a
+  chatty telemetry endpoint cannot fill the section. Off keeps each lookup, in sequence.
+- Bypass a blocked host, or block a bypassed one, from the row itself: the verdict glyph turns
+  into the action on hover, `b` and `B` do the same from the keyboard. Pressing again removes the
+  rule. The list is drawn short with a `+N` expander that costs no extra request.
+
+### Rules
+
+`Add` creates a rule, `x` switches the one under the cursor off without deleting it, delete sits
+behind an inline confirmation, and `y` copies the hostname.
+
+### Pause switch
+
+The hero switch stands Control D down and brings it back.
+
+- With `pauseCommand` and `resumeCommand` set, the panel runs those; empty, it pauses the device
+  through the account instead, so the switch works with no setup. The two are not equivalent: a
+  host command changes what this machine resolves through, the account changes what Control D does
+  with what it is asked. There is no one right host command -- `ctrld` has a service, a
+  systemd-resolved setup has a drop-in -- so the panel runs what you give it.
+- `statusCommand` answers whether it is on, inheriting any check the panel cannot make, such as a
+  link carrying its own DNS. Without one the switch falls back to the identified device, or to
+  Control D on the live resolver.
+- Paused, the panel says so instead of reporting a missing resolver.
 
 ## Keyboard shortcuts
-
-Inside the panel:
 
 | Key | Does |
 | --- | --- |
@@ -76,25 +75,22 @@ Inside the panel:
 | `o` | Open the Control D dashboard |
 | `m` / `s` / `a` / `r` | Jump to machine, statistics, activity, rules |
 | `g` / `G` | Jump to the top or the bottom |
-| `j` / `k` or arrows | Move the cursor through every actionable row, top to bottom |
+| `j` / `k` or arrows | Move the cursor through every actionable row |
 | `enter` / `space` | Activate the cursor row |
 | `y` | Yank what the cursor is on, or the endpoint ID when it is on nothing |
 | `p` | Open the profile picker |
 | `b` / `B` | Bypass or block the host the cursor is on, or undo the rule for it |
 | `x` | Switch the rule under the cursor on or off |
-| `A` | Hand the panel to Omarchy's default agent |
-| `R` | Refresh |
+| `A` | Hand the panel to Omarchy's default agent, pointed at `cdctl` and the plugin rather than a dump of the account |
+| `R` | Refresh (`r` names the rules section, so refresh takes the shift) |
 | `esc` | Close |
-
-`r` names the rules section, so refresh takes the shifted `R`.
 
 ## Endpoint detection
 
-Each device publishes itself four ways: a DoT hostname, a DoH URL, and its own IPv6 and legacy
-IPv4 addresses. All four carry the device id, so the panel reads the local DNS config and looks
-for any of them in `cdctl api /devices` (the escape hatch, so it reads raw upstream fields
-rather than the CLI's normalized schema). Matching against the device list rather than a
-hostname pattern is what lets a plain IPv6 resolver identify the endpoint with no proxy at all.
+Each device publishes itself four ways -- DoT hostname, DoH URL, its own IPv6 and legacy IPv4
+addresses -- and all four carry the device id. The panel reads the local DNS config and looks for
+any of them in `cdctl api /devices`. Matching the device list rather than a hostname pattern is
+what lets a plain IPv6 resolver identify the endpoint with no proxy at all.
 
 The configs it reads, and the resolver each one implies:
 
@@ -109,54 +105,40 @@ The configs it reads, and the resolver each one implies:
 | `resolvectl status` | `systemd-resolved` |
 | `/etc/resolv.conf` | `unknown` |
 
-The first config that names the endpoint wins, so a manager gets credit over whatever it
-generates downstream. `ctrld` is also confirmed with `systemctl is-active`, because the account
-keeps a `ctrld` block on a device long after the daemon is gone.
+The first config that names the endpoint wins, so a manager gets credit over what it generates
+downstream. `ctrld` is confirmed with `systemctl is-active`, because the account keeps a `ctrld`
+block on a device long after the daemon is gone.
 
-An endpoint found only in `/etc/resolv.conf` means something set it that this list does not
-cover: the row reads `unknown` and links to the issue tracker. **If that is your setup, please
-open an issue or a PR** so it can be added. A router or network filtering upstream is not
-visible from the machine at all, and no local probe can change that.
+An endpoint found only in `/etc/resolv.conf` means something set it that this list does not cover:
+the row reads `unknown` and links to the issue tracker. **If that is your setup, please open an
+issue or a PR** so it can be added. Filtering on a router or upstream is invisible from the
+machine, and no local probe changes that.
 
-Statistics and activity come from Control D's analytics origin
-(`<region>.analytics.controld.com`), a different host than the REST API and so out of reach of
-`cdctl api`. `scripts/stats.py` and `scripts/activity.py` make those calls through
-`scripts/controld_api.py`, which resolves the token the way `cdctl` does — `CONTROLD_API_TOKEN`
-first, otherwise the token for the current context in `cdctl`'s own config (honouring
-`XDG_CONFIG_HOME`) — and sends it in a request header. The token never reaches a process
-argument, which is world readable on Linux, and never appears in output. The region comes from
-`cdctl auth status`; the helpers refuse to guess it. Analytics has to be on for the endpoint
-(`none` reports nothing); the section says so when it is off.
+## Analytics and the API token
 
-With `cdctl` installed but not signed in, the panel shows what to do and a link to this guide
-rather than an empty shell.
+Statistics and activity come from Control D's analytics origin (`<region>.analytics.controld.com`),
+a different host than the REST API and so out of reach of `cdctl api`. `scripts/stats.py` and
+`scripts/activity.py` call it through `scripts/controld_api.py`, which:
+
+- Resolves the token as `cdctl` does: `CONTROLD_API_TOKEN`, else the token for the current context
+  in `cdctl`'s config (honouring `XDG_CONFIG_HOME`).
+- Sends it in a request header only. Never a process argument, which is world readable on Linux,
+  and never in output.
+- Takes the region from `cdctl auth status` rather than guessing it.
+
+Analytics has to be enabled for the endpoint; the section says so when it is off.
 
 ## Requirements
 
-- `cdctl` installed and authenticated (`cdctl auth login --token-stdin`). The panel looks on
+- `cdctl`, installed and authenticated (`cdctl auth login --token-stdin`). The panel looks on
   `PATH`, then in `~/.cargo/bin`, `~/.local/bin`, `/usr/local/bin`, `/usr/bin`
-- `wl-copy` for clipboard copy actions
-- `python3` for the statistics helper (standard library only)
-- `omarchy-launch-browser` to open the dashboard, and `omarchy-agent` for the `A` key. Both ship
-  with Omarchy
+- `wl-copy` for clipboard actions
+- `python3` for the analytics helpers, standard library only
+- `omarchy-launch-browser` to open the dashboard, `omarchy-agent` for the `A` key. Both ship with
+  Omarchy
 
-The panel always passes `--profile <id>` explicitly, so `cdctl`'s `default_profile` does not
-have to be set.
-
-## Install
-
-```sh
-omarchy plugin add https://github.com/joaodrp/omarchy-controld-panel.git --enable
-```
-
-Move it with `omarchy bar move io.github.joaodrp.controld --section right`.
-
-## Icons
-
-The bar and hero mark is the Control D logo, drawn natively from its paths in
-`ControldIcon.qml`.
-
-The artwork belongs to Control D; this project is not affiliated with them.
+The panel always passes `--profile <id>` explicitly, so `cdctl`'s `default_profile` need not be
+set. Installed but not signed in, the panel shows what to do and a link to this guide.
 
 ## Settings
 
@@ -175,13 +157,21 @@ Set through the bar's widget settings, or inline on the widget's `shell.json` en
 | `pauseCommand` | `""` | Command that stands Control D down. Empty means no switch |
 | `resumeCommand` | `""` | Command that brings it back. Both must be set for the switch to appear |
 
+## Install
+
+```sh
+omarchy plugin add https://github.com/joaodrp/omarchy-controld-panel.git --enable
+omarchy bar move io.github.joaodrp.controld --section right   # optional
+omarchy plugin remove io.github.joaodrp.controld              # to uninstall
+```
+
 ## IPC
 
 ```sh
 omarchy-shell io.github.joaodrp.controld toggle
 omarchy-shell io.github.joaodrp.controld refresh
-omarchy-shell io.github.joaodrp.controld profile              # enforced profile name
-omarchy-shell io.github.joaodrp.controld status               # account line
+omarchy-shell io.github.joaodrp.controld profile   # enforced profile name
+omarchy-shell io.github.joaodrp.controld status    # account line
 ```
 
 ## Develop
@@ -192,8 +182,8 @@ omarchy-shell shell rescanPlugins
 omarchy plugin enable io.github.joaodrp.controld
 ```
 
-The shell's hot reload watches the plugins dir with `inotifywait -r`, which does not follow a
-symlinked checkout, so reload after edits with `omarchy-restart-shell`. Check before sharing:
+Hot reload watches the plugins dir with `inotifywait -r`, which does not follow a symlinked
+checkout, so reload after edits with `omarchy-restart-shell`. Check before sharing:
 
 ```sh
 node test/model.test.js
@@ -201,15 +191,14 @@ omarchy plugin validate "$PWD"
 /usr/lib/qt6/bin/qmllint -I <dir-with-qs-symlink> Panel.qml Service.qml ControldIcon.qml
 ```
 
-The Qt 6 linter needs an import dir containing a `qs` symlink to `$OMARCHY_PATH/shell`; the
-`qmllint` on `PATH` (Qt 5) cannot parse the typed IPC functions Quickshell requires and fails on
-the built-in panels too.
+The Qt 6 linter needs an import dir holding a `qs` symlink to `$OMARCHY_PATH/shell`. The `qmllint`
+on `PATH` is Qt 5 and cannot parse the typed IPC functions Quickshell requires; it fails on the
+built-in panels too.
 
-## Remove
+## Icons
 
-```sh
-omarchy plugin remove io.github.joaodrp.controld
-```
+The bar and hero mark is the Control D logo, drawn natively from its paths in `ControldIcon.qml`.
+The artwork belongs to Control D; this project is not affiliated with them.
 
 ## License
 

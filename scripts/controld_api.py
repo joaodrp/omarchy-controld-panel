@@ -1,10 +1,9 @@
 """Shared access to Control D's analytics origin for the panel's helpers.
 
-Analytics lives on a different origin than the REST API (`<region>.analytics.
-controld.com`), which `cdctl api` cannot reach, so the helpers come here. The
-token is read from the environment or cdctl's own config and sent only in a
-request header: it must never reach a process argument, which is world
-readable on Linux.
+Analytics lives on `<region>.analytics.controld.com`, which `cdctl api` cannot
+reach -- hence this module. The token comes from the environment or cdctl's own
+config and is sent only in a request header: it must never reach a process
+argument, since `/proc/*/cmdline` is world readable.
 """
 
 import json
@@ -16,15 +15,6 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 
 TIMEOUT = 15
-CONFIG_ENV = "CDCTL_CONFIG"
-
-
-def config_path():
-    override = os.environ.get(CONFIG_ENV)
-    if override:
-        return override
-    base = os.environ.get("XDG_CONFIG_HOME") or os.path.join(os.path.expanduser("~"), ".config")
-    return os.path.join(base, "cdctl", "config.toml")
 
 
 def read_token():
@@ -32,7 +22,8 @@ def read_token():
     env = os.environ.get("CONTROLD_API_TOKEN")
     if env:
         return env
-    path = config_path()
+    base = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+    path = os.environ.get("CDCTL_CONFIG") or os.path.join(base, "cdctl", "config.toml")
     try:
         with open(path, "rb") as handle:
             config = tomllib.load(handle)
@@ -41,7 +32,7 @@ def read_token():
     except (OSError, tomllib.TOMLDecodeError) as exc:
         raise RuntimeError("could not read %s: %s" % (path, exc))
     context = config.get("current_context", "personal")
-    token = (config.get("contexts", {}).get(context, {}) or {}).get("token")
+    token = (config.get("contexts", {}).get(context) or {}).get("token")
     if not token:
         raise RuntimeError("no API token in %s for context %s" % (path, context))
     return token
@@ -50,8 +41,8 @@ def read_token():
 def host_for(region):
     """Analytics is per region, and only the account knows which.
 
-    `cdctl auth status` reports it; guessing would send the query to a host
-    that either does not exist or holds someone else's region.
+    `cdctl auth status` reports it; guessing would query a host that either does
+    not exist or holds someone else's region.
     """
     name = str(region or "").strip().lower()
     if name == "":
@@ -71,9 +62,8 @@ def window(hours, endpoint, now=None):
 
 
 def get(host, path, params, token):
-    query = urllib.parse.urlencode(params, doseq=True)
     request = urllib.request.Request(
-        "https://%s%s?%s" % (host, path, query),
+        "https://%s%s?%s" % (host, path, urllib.parse.urlencode(params, doseq=True)),
         headers={"Authorization": "Bearer %s" % token, "Accept": "application/json"},
     )
     try:
@@ -92,10 +82,9 @@ def get(host, path, params, token):
         raise RuntimeError("bad analytics response: %s" % exc)
     if not payload.get("success"):
         raise RuntimeError((payload.get("error") or {}).get("message") or "analytics request failed")
-    # A success we cannot read is not an empty result. Falling back to {} here
-    # reports zero queries and empty lists, which is exactly what a genuinely
-    # quiet endpoint looks like, so a shape change would read as good news.
     body = payload.get("body")
+    # A success we cannot read is not an empty result: falling back to {} would
+    # report zero queries, which is what a genuinely quiet endpoint looks like.
     if not isinstance(body, dict):
         raise RuntimeError("analytics returned no readable body for %s" % path)
     return body
