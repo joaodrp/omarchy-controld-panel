@@ -172,18 +172,27 @@ Item {
   }
 
   // Everything a process prints is held whole by a StdioCollector, which has no
-  // size cap, inside a shell process that outlives the panel. A hostile answer
-  // or a pathological config file would exhaust it, and the watchdogs bound
-  // time rather than bytes, so output is bounded where it is produced.
+  // size cap, inside a shell process that outlives the panel. A hostile answer,
+  // a pathological config file or a noisy command would exhaust it, and the
+  // watchdogs bound time rather than bytes, so both streams are capped where
+  // they are produced.
   //
-  // `pipefail` keeps the command's own exit code, which the error handling
-  // reads, and argv goes through positional parameters so no hostname or
-  // command needs quoting. Output past the cap kills the writer, which surfaces
-  // as a failed read rather than as a shell that will not recover.
+  // The two are capped separately rather than merged: cdctl reports failures as
+  // a JSON envelope on stderr, and the error handling reads it there. stderr is
+  // the smaller cap because it carries a message, never a document.
+  //
+  // Written with descriptors rather than `2> >(head -c ...)`, whose process
+  // substitution is asynchronous and can lose the message it was meant to keep.
+  // `pipefail` preserves the command's own exit code -- 8 means retryable, and
+  // the panel acts on it -- and argv passes positionally, so no hostname or
+  // user-supplied command needs quoting.
   readonly property int outputLimit: 1048576
+  readonly property int errorLimit: 65536
 
   function bounded(argv) {
-    return ["bash", "-c", "set -o pipefail; \"$@\" | head -c " + outputLimit, "bash"].concat(argv)
+    var cap = "set -o pipefail; { { \"$@\" 2>&1 1>&3 | head -c " + errorLimit
+            + " >&2; } 3>&1 | head -c " + outputLimit + "; }"
+    return ["bash", "-c", cap, "bash"].concat(argv)
   }
 
   function cdctl(args) {
