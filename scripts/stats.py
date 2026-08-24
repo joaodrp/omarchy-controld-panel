@@ -42,7 +42,7 @@ def counts(body, limit):
         value = str(entry.get("value") or "")
         if value:
             out.append({"value": value, "count": int(entry.get("count") or 0)})
-    return out[:limit]
+    return out
 
 
 def series(body, now):

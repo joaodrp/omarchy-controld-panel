@@ -44,6 +44,7 @@ node test/model.test.js
 omarchy plugin validate "$PWD"
 python3 -m py_compile scripts/*.py
 python3 .github/check-manifest.py
+python3 .github/check-qml.py
 
 # QML lint needs an import dir holding a `qs` symlink to the shell
 mkdir -p /tmp/qslint && ln -sfn "$OMARCHY_PATH/shell" /tmp/qslint/qs

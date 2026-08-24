@@ -188,11 +188,12 @@ Item {
   // user-supplied command needs quoting.
   readonly property int outputLimit: 1048576
   readonly property int errorLimit: 65536
+  readonly property string capScript:
+    "set -o pipefail; { { \"$@\" 2>&1 1>&3 | head -c " + errorLimit
+    + " >&2; } 3>&1 | head -c " + outputLimit + "; }"
 
   function bounded(argv) {
-    var cap = "set -o pipefail; { { \"$@\" 2>&1 1>&3 | head -c " + errorLimit
-            + " >&2; } 3>&1 | head -c " + outputLimit + "; }"
-    return ["bash", "-c", cap, "bash"].concat(argv)
+    return ["bash", "-c", capScript, "bash"].concat(argv)
   }
 
   function cdctl(args) {
@@ -333,7 +334,7 @@ Item {
     ruleError = ""
     pendingRuleHost = hostname
     _ruleIntent = intent || null
-    ruleProcess.command = cdctl(["-y"].concat(args))
+    ruleProcess.command = cdctl(["-y"].concat(args, ["--", hostname]))
     beginWrite(ruleProcess)
   }
 
@@ -346,7 +347,7 @@ Item {
     if (!Model.validHostname(intent.hostname)) return
     var args = ["rule", intent.verb, "--profile", activeProfile.id]
     if (intent.verb !== "delete") args = args.concat(["--action", intent.action])
-    startRuleWrite(intent.hostname, args.concat(["--", intent.hostname]), intent)
+    startRuleWrite(intent.hostname, args, intent)
   }
 
   // Hold the row just acted on, or let go of one whose override was undone.
@@ -367,25 +368,24 @@ Item {
   // Switch a rule off, or back on. Not delete: a rule here may be older than
   // this panel, and disabling it is undone in place, whereas removing it is not
   // recoverable from anything the panel shows.
+  // No `validHostname` here or in `deleteRule`: these hostnames come from the
+  // profile's own rule list, which only holds names the account accepted.
   function toggleRule(rule) {
     if (!activeProfile || ruleBusy || !rule) return
     startRuleWrite(rule.hostname, ["rule", "update",
-      "--profile", activeProfile.id, rule.enabled ? "--disabled" : "--enabled",
-      "--", rule.hostname], null)
+      "--profile", activeProfile.id, rule.enabled ? "--disabled" : "--enabled"], null)
   }
 
   function createRule(hostname, action) {
     var host = String(hostname || "").trim().toLowerCase()
     if (!activeProfile || ruleBusy || !Model.validHostname(host)) return
     startRuleWrite(host, ["rule", "create",
-      "--action", String(action || "block"), "--profile", activeProfile.id,
-      "--", host], null)
+      "--action", String(action || "block"), "--profile", activeProfile.id], null)
   }
 
   function deleteRule(rule) {
     if (!activeProfile || ruleBusy || !rule) return
-    startRuleWrite(rule.hostname, ["rule", "delete", "--profile", activeProfile.id,
-      "--", rule.hostname], null)
+    startRuleWrite(rule.hostname, ["rule", "delete", "--profile", activeProfile.id], null)
   }
 
   function setProtection(on) {

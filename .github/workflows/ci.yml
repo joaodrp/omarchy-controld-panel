@@ -29,6 +29,9 @@ jobs:
       - name: Manifest matches the repo and the README
         run: python3 .github/check-manifest.py
 
+      - name: QML invariants qmllint cannot express
+        run: python3 .github/check-qml.py
+
       # The tag and the manifest have to agree, or the marketplace lists a
       # version the release does not match.
       - name: Tag matches manifest version

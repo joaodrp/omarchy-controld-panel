@@ -479,14 +479,18 @@ function parseStats(raw) {
 // a Repeater.
 var MAX_ROWS = 64
 
+function boundedList(value) {
+  return value instanceof Array ? value.slice(0, MAX_ROWS) : []
+}
+
 function parseCounts(list) {
-  var items = (list instanceof Array ? list : []).slice(0, MAX_ROWS)
+  var items = boundedList(list)
   return items.filter(function(entry) { return entry && str(entry.value) !== "" })
     .map(function(entry) { return { value: str(entry.value), count: num(entry.count) } })
 }
 
 function parseSeries(list) {
-  var items = (list instanceof Array ? list : []).slice(0, MAX_ROWS)
+  var items = boundedList(list)
   return items.filter(function(bucket) { return !!bucket })
     .map(function(bucket) { return { time: str(bucket.time), total: num(bucket.total), blocked: num(bucket.blocked) } })
 }
@@ -657,7 +661,7 @@ function parseActivity(raw) {
     return { ok: false, queries: [], error: parsed.error || "bad activity output" }
   var v = parsed.value
   if (v.ok !== true) return { ok: false, queries: [], error: str(v.error) || "activity log failed" }
-  var list = (v.queries instanceof Array ? v.queries : []).slice(0, MAX_ROWS)
+  var list = boundedList(v.queries)
   var out = list.filter(function(q) { return q && str(q.question) !== "" })
     .map(function(q) {
       return {
