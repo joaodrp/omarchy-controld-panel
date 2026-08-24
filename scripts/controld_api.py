@@ -7,6 +7,7 @@ argument, since `/proc/*/cmdline` is world readable.
 """
 
 import json
+import re
 import os
 import tomllib
 import urllib.error
@@ -47,6 +48,11 @@ def host_for(region):
     name = str(region or "").strip().lower()
     if name == "":
         raise RuntimeError("no region: pass --region as `cdctl auth status` reports it")
+    # The region decides where the token is sent, and it arrives from an API
+    # answer rather than from the user. A `/`, `?` or `#` in it would end the
+    # authority and hand the Authorization header to whatever came first.
+    if not re.fullmatch(r"[a-z0-9-]{1,32}", name):
+        raise RuntimeError("region %r is not a name" % name)
     return "%s.analytics.controld.com" % name
 
 
@@ -64,7 +70,9 @@ def window(hours, endpoint, now=None):
 # The panel holds whatever these return inside a long-lived shell process, so
 # a hostile or broken response must not be read without a bound. Real answers
 # are a few hundred kilobytes at the largest page size.
-MAX_BODY = 8 << 20
+# Per response, and stats.py holds nine at once, so this is a ninth of the real
+# ceiling rather than the whole of it.
+MAX_BODY = 1 << 20
 MAX_ERROR_BODY = 64 << 10
 
 
@@ -75,13 +83,24 @@ def _load_json(stream, limit, what):
     return json.loads(raw)
 
 
+# Analytics never redirects. Following one would re-send the Authorization
+# header to the new host, which urllib does by default across origins and even
+# to plain http.
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise RuntimeError("analytics redirected to %s; refusing to follow" % newurl)
+
+
+_opener = urllib.request.build_opener(_NoRedirect)
+
+
 def get(host, path, params, token):
     request = urllib.request.Request(
         "https://%s%s?%s" % (host, path, urllib.parse.urlencode(params, doseq=True)),
         headers={"Authorization": "Bearer %s" % token, "Accept": "application/json"},
     )
     try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT) as response:
+        with _opener.open(request, timeout=TIMEOUT) as response:
             payload = _load_json(response, MAX_BODY, "analytics response")
     except urllib.error.HTTPError as exc:
         detail = ""

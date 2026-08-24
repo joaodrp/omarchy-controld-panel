@@ -34,7 +34,9 @@ def collapse(rows, limit, by_host=True):
     """
     out = []
     seen = {}
-    for row in rows:
+    # PAGE_SIZE is requested, not guaranteed; a longer page would be walked in
+    # full, and the membership scan below makes that quadratic.
+    for row in rows[:PAGE_SIZE]:
         question = str(row.get("question") or "")
         if question == "":
             continue
@@ -46,7 +48,7 @@ def collapse(rows, limit, by_host=True):
             entry = out[-1] if out and (out[-1]["question"], out[-1]["action"]) == key else None
         if entry is not None:
             entry["repeats"] += 1
-            if kind and kind not in entry["types"]:
+            if kind and len(entry["types"]) < 8 and kind not in entry["types"]:
                 entry["types"].append(kind)
             continue
         # Rows arrive newest first, so the one that lands here is the latest.

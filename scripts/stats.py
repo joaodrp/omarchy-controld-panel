@@ -33,8 +33,12 @@ SERIES_BUCKETS = 24
 
 
 def counts(body, limit):
+    # `limit` is asked of the API, not enforced by it, so stop at the cap here
+    # rather than building the whole list and slicing it.
     out = []
     for entry in (body.get("counts") or []):
+        if len(out) >= limit:
+            break
         value = str(entry.get("value") or "")
         if value:
             out.append({"value": value, "count": int(entry.get("count") or 0)})
@@ -47,8 +51,10 @@ def series(body, now):
     A last bucket still filling when the window ends lands a fraction of the
     others and would draw as a cliff, so it is dropped.
     """
+    # SERIES_BUCKETS is what the API is asked for, not what it must return, and
+    # every bucket becomes a point in a layered Shape the shell renders.
     out = []
-    for bucket in (body.get("queries") or []):
+    for bucket in (body.get("queries") or [])[:SERIES_BUCKETS]:
         per_action = bucket.get("count") or {}
         out.append({
             "time": str(bucket.get("time") or ""),

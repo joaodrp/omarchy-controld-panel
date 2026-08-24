@@ -324,6 +324,10 @@ Item {
     if (!writeWatchdog.running) writeWatchdog.start()
   }
 
+  // A hostname reaches here from the activity log, which is to say from an HTTP
+  // response, and cdctl takes it as a positional argument. `--` ends option
+  // parsing so a name beginning with a dash is read as the host it is, not as a
+  // flag; the hostname therefore goes last, after every option.
   function startRuleWrite(hostname, args, intent) {
     ruleBusy = true
     ruleError = ""
@@ -337,9 +341,12 @@ Item {
   function applyRuleIntent(intent) {
     if (!activeProfile || ruleBusy) return
     if (!intent || intent.verb === "" || intent.hostname === "") return
-    var args = ["rule", intent.verb, intent.hostname, "--profile", activeProfile.id]
+    // The log's spelling is canonicalised, never validated. Hold it to the same
+    // shape a typed rule must satisfy before it becomes an argument.
+    if (!Model.validHostname(intent.hostname)) return
+    var args = ["rule", intent.verb, "--profile", activeProfile.id]
     if (intent.verb !== "delete") args = args.concat(["--action", intent.action])
-    startRuleWrite(intent.hostname, args, intent)
+    startRuleWrite(intent.hostname, args.concat(["--", intent.hostname]), intent)
   }
 
   // Hold the row just acted on, or let go of one whose override was undone.
@@ -362,20 +369,23 @@ Item {
   // recoverable from anything the panel shows.
   function toggleRule(rule) {
     if (!activeProfile || ruleBusy || !rule) return
-    startRuleWrite(rule.hostname, ["rule", "update", rule.hostname,
-      "--profile", activeProfile.id, rule.enabled ? "--disabled" : "--enabled"], null)
+    startRuleWrite(rule.hostname, ["rule", "update",
+      "--profile", activeProfile.id, rule.enabled ? "--disabled" : "--enabled",
+      "--", rule.hostname], null)
   }
 
   function createRule(hostname, action) {
     var host = String(hostname || "").trim().toLowerCase()
     if (!activeProfile || ruleBusy || !Model.validHostname(host)) return
-    startRuleWrite(host, ["rule", "create", host,
-      "--action", String(action || "block"), "--profile", activeProfile.id], null)
+    startRuleWrite(host, ["rule", "create",
+      "--action", String(action || "block"), "--profile", activeProfile.id,
+      "--", host], null)
   }
 
   function deleteRule(rule) {
     if (!activeProfile || ruleBusy || !rule) return
-    startRuleWrite(rule.hostname, ["rule", "delete", rule.hostname, "--profile", activeProfile.id], null)
+    startRuleWrite(rule.hostname, ["rule", "delete", "--profile", activeProfile.id,
+      "--", rule.hostname], null)
   }
 
   function setProtection(on) {
@@ -553,7 +563,9 @@ Item {
   function applyError(err, fallback) {
     lastError = Model.errorLine(err, fallback)
     note(fallback, lastError)
-    lastHint = err ? err.hint : ""
+    // Every sibling error line is elided; this one comes from the same envelope
+    // and is rendered without a length of its own.
+    lastHint = err ? Model.elide(err.hint, 200) : ""
     if (err && err.exitCode === Model.EXIT_AUTH) {
       needsAuth = true
       authenticated = false
@@ -605,7 +617,7 @@ Item {
     repeat: false
     onTriggered: {
       var polls = [authProcess, profilesProcess, rulesProcess, foldersProcess,
-        resolverProcess, devicesProcess, statsProcess, statusProcess]
+        resolverProcess, devicesProcess, statsProcess, statusProcess, activityProcess]
       for (var i = 0; i < polls.length; i++) root.reap(polls[i])
       root.refreshing = false
       root.loadingRules = false

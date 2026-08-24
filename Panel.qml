@@ -863,6 +863,7 @@ Panel {
                 currentFill: root.selectedFill
 
                 Text {
+                  textFormat: Text.PlainText
                   id: profileLabel
                   anchors.left: parent.left
                   anchors.leftMargin: Style.space(8)
@@ -1293,14 +1294,20 @@ Panel {
   }
 
   // Panel-wide text defaults, so each use says only what makes it different.
+  // Hostnames, filter names and error messages arrive from the network, and
+  // `Text.AutoText` reads anything tag-shaped as rich text: an `<img>` in a
+  // looked-up name would fetch from the shell process, and rich text ignores
+  // `elide`. Every component that shows a value states the format instead.
   component CaptionText: Text {
     color: root.dim
+    textFormat: Text.PlainText
     font.family: root.fontFamily
     font.pixelSize: Style.font.caption
   }
 
   component BodyText: Text {
     color: root.foreground
+    textFormat: Text.PlainText
     font.family: root.fontFamily
     font.pixelSize: Style.font.body
   }
@@ -1309,6 +1316,7 @@ Panel {
   component NoticeText: Text {
     width: parent.width
     color: root.urgent
+    textFormat: Text.PlainText
     font.family: root.fontFamily
     font.pixelSize: Style.font.bodySmall
     wrapMode: Text.WordWrap
@@ -1388,6 +1396,7 @@ Panel {
     Layout.alignment: Qt.AlignVCenter
 
     Text {
+      textFormat: Text.PlainText
       id: glyphText
       anchors.centerIn: parent
       text: rowGlyph.glyph
@@ -1467,6 +1476,7 @@ Panel {
   component InfoLabel: Text {
     color: root.foreground
     opacity: 0.6
+    textFormat: Text.PlainText
     font.family: root.fontFamily
     font.pixelSize: Style.font.bodySmall
     Layout.fillWidth: true
@@ -1476,6 +1486,7 @@ Panel {
   component DetailValue: Text {
     id: detailValue
     color: root.foreground
+    textFormat: Text.PlainText
     font.family: root.fontFamily
     font.pixelSize: Style.font.bodySmall
     // Deliberately not elided. Every value here comes from a closed set -- an
@@ -1720,6 +1731,7 @@ Panel {
     spacing: Style.space(6)
 
     Text {
+      textFormat: Text.PlainText
       width: emptyState.width
       text: emptyState.title
       color: root.foreground
