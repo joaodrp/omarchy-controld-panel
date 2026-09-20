@@ -127,7 +127,7 @@ Panel {
   readonly property color barIconColor: controld.ready && !unprotected ? barForeground : Qt.darker(barForeground, 1.55)
   readonly property string heroTitle: controld.endpoint ? controld.endpoint.name : "Control D"
   readonly property string heroMeta: {
-    if (!controld.installed) return "cdctl is not installed"
+    if (!controld.installed) return "ctrld is not installed"
     if (controld.needsAuth) return "Not authenticated"
     if (controld.refreshing && !controld.authenticated) return "Checking..."
     // The caret is the only thing saying the profile can be changed: the
@@ -751,7 +751,7 @@ Panel {
           EmptyState {
             visible: controld.checkedInstall && !controld.installed
             title: "Install the Control D CLI"
-            message: "This panel reads your account through cdctl. Install it, then sign in."
+            message: "This panel reads your account through ctrld. Install it, then sign in."
           }
 
           EmptyState {
