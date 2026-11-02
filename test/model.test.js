@@ -376,6 +376,13 @@ test("ctrldActive answers from the machine, not from the account", () => {
   assert.equal(m.ctrldActive(""), false)
 })
 
+test("cdctlLookupNeeded keeps looking until cdctl is found", () => {
+  assert.equal(m.cdctlLookupNeeded(false, false), true)
+  // Installed after the shell loaded: a miss must not be final.
+  assert.equal(m.cdctlLookupNeeded(true, false), true)
+  assert.equal(m.cdctlLookupNeeded(true, true), false)
+})
+
 test("resolverLabel names what talks to Control D, or admits it cannot", () => {
   assert.equal(m.resolverLabel("ctrld", true, "v1.5.5"), "ctrld v1.5.5")
   // A running daemon the account reports no version for.

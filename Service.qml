@@ -464,14 +464,13 @@ Item {
   }
 
   function refresh() {
-    if (!checkedInstall) {
+    if (Model.cdctlLookupNeeded(checkedInstall, installed)) {
       if (!lookupProcess.running) {
         refreshing = true
         lookupProcess.running = true
       }
       return
     }
-    if (!installed) return
     refreshing = true
     if (!authProcess.running) {
       authProcess.command = cdctl(["auth", "status"])

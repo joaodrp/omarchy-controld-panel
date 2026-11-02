@@ -322,6 +322,12 @@ function controldLive(text) {
   return CONTROLD_MARKER.test(probe.resolved) || CONTROLD_MARKER.test(probe.resolvconf)
 }
 
+// cdctl can be installed after the shell loads, as on a fresh machine whose
+// dotfiles build it later, so only a hit ends the lookup.
+function cdctlLookupNeeded(checked, installed) {
+  return !checked || !installed
+}
+
 // The account keeps a `ctrld` block on a device long after the daemon is gone,
 // so whether one runs here is only answerable on the machine.
 function ctrldActive(text) {
