@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<!-- Source of ../../preview.png, the plugin marketplace listing image. See CONTRIBUTING.md. -->
+<html><head><meta charset="utf-8"><style>
+:root { --crust:#11111b; --tick:#2a2b3d; --text:#cdd6f4; --sub:#a6adc8; --blue:#89b4fa; }
+* { margin:0; box-sizing:border-box; }
+html, body { width:1920px; height:1080px; overflow:hidden; }
+body { position:relative; background:var(--crust); color:var(--text); font-family:"iA Writer Quattro S", sans-serif; }
+canvas, svg { position:absolute; inset:0; }
+
+h1 { position:absolute; left:96px; top:372px; font-size:70px; line-height:1.04; font-weight:700; letter-spacing:-2px; }
+.sub { position:absolute; left:100px; top:622px; width:520px; font-size:29px; line-height:1.42; color:var(--sub); }
+
+.shot { position:absolute; overflow:hidden; box-shadow:0 24px 60px rgba(0,0,0,.6); }
+.shot img { display:block; }
+/* Snippets are crops: the outline closes the border the crop cut off. */
+.snip { left:1352px; width:470px; outline:2px solid var(--blue); outline-offset:-2px; }
+.snip img { width:470px; }
+.lbl { position:absolute; left:1352px; font-size:30px; font-weight:700; }
+</style></head><body>
+<canvas id="queries" width="1920" height="1080"></canvas>
+
+<h1>What Control D<br>is doing on<br>your machine.</h1>
+<p class="sub">Its profile, what it blocked and why, in the Omarchy bar.</p>
+
+<!-- The full panel: the 760x1120 frame at 600 wide. The outlines below sit on its switch and profile. -->
+<div class="shot" style="left:660px; top:98px; width:600px; height:884px"><img src="../images/panel.png" style="width:600px"></div>
+
+<div class="lbl" style="top:78px">Pause and resume</div>
+<div class="shot snip" style="top:126px; height:187px"><img src="../images/paused.png"></div>
+<div class="lbl" style="top:378px">Change profile</div>
+<div class="shot snip" style="top:426px; height:146px"><img src="../images/profiles.png" style="margin-top:-133px"></div>
+<div class="lbl" style="top:632px">Live activity</div>
+<div class="shot snip" style="top:680px; height:223px"><img src="../images/activity.png" style="margin-top:-124px"></div>
+
+<svg width="1920" height="1080"><g stroke="#89b4fa" stroke-width="2" fill="none">
+  <rect x="1155" y="132" width="73" height="40"/>
+  <path d="M1228 152 H1352"/>
+  <rect x="768" y="152" width="150" height="30"/>
+  <path d="M918 178 H1316 V499 H1352"/>
+  <path d="M1200 982 V1004 H1316 V791 H1352"/>
+</g><circle cx="1200" cy="982" r="4" fill="#89b4fa"/></svg>
+
+<script>
+// One tick per query, blocked ones red, about half of them as on the panel. Queries arrive in
+// bursts, so the state persists from tick to tick instead of being drawn fresh each time.
+let seed = 7;
+const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+const ease = t => t * t * (3 - 2 * t);
+// Clear around the copy, fading to full strength above and below it and towards the panel.
+const rowAlpha = y => ease(Math.min(1, Math.max(0, 300 - y, y - 810) / 200));
+const colAlpha = x => ease(Math.max(0, 1 - Math.max(0, x - 560) / 480));
+
+const c = document.getElementById("queries").getContext("2d");
+let blocked = false;
+for (let y = 40; y < 1060; y += 26) {
+  for (let x = 8; x < 1100; x += 10) {
+    blocked = rnd() < (blocked ? 0.8 : 0.19);
+    const a = rowAlpha(y) * colAlpha(x);
+    if (!a) continue;
+    c.globalAlpha = a * (blocked ? 0.6 : 1);
+    c.fillStyle = blocked ? "#f38ba8" : "#2a2b3d";
+    c.fillRect(x, blocked ? y : y + 2, 3, blocked ? 12 : 8);
+  }
+}
+</script>
+</body></html>

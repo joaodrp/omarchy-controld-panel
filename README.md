@@ -13,7 +13,7 @@ client for Control D.
 > [!IMPORTANT]
 > An independent project, [not affiliated with Control D](#trademarks).
 
-<img src="preview.png" alt="The panel open in the Omarchy bar, showing the endpoint, its profile, and blocked-query statistics" width="380">
+<img src="docs/images/panel.png" alt="The panel open in the Omarchy bar, showing the endpoint, its profile, and blocked-query statistics" width="380">
 
 ## Highlights
 

@@ -17,6 +17,9 @@ program holds your [Control D](https://controld.com) endpoint and how it is conf
 | `scripts/` | The analytics helpers; see [docs/how-it-works.md](docs/how-it-works.md) |
 | `test/model.test.js` | Unit tests for `Model.js` |
 | `agent/SKILL.md` | What the `A` key hands an agent |
+| `docs/images/` | README screenshots, which the listing image reuses |
+| `preview.png` | The listing image the [plugin marketplace](https://plugins.omarchy.org/publish.html) reads from the repository root |
+| `docs/card/` | The source of `preview.png`; see [Listing image](#listing-image) |
 
 Logic that can live in `Model.js` belongs there rather than in QML: it is the only part with
 tests. QML owns rendering and process orchestration.
@@ -62,6 +65,22 @@ fails against the unfixed code.
 
 CI runs everything above except `omarchy plugin validate` and the linter, which need Omarchy and
 Quickshell on the machine. Run those two yourself.
+
+## Listing image
+
+`preview.png` is `docs/card/preview.html` rendered at 1920x1080. The marketplace crops it to about
+2:1 and shows it 505 px wide with the plugin name underneath, so the page keeps everything that
+matters out of the top and bottom 60 px. It is set in iA Writer Quattro S and JetBrainsMono Nerd
+Font, both installed by Omarchy.
+
+The page shows the README screenshots from `docs/images/` rather than its own copies: the full
+`panel.png`, and crops of `paused.png`, `profiles.png` and `activity.png`. The outlines on the
+switch and the profile sit on `panel.png`, so check them after a new frame.
+
+```sh
+chromium --headless --hide-scrollbars --window-size=1920,1080 --screenshot=preview.png docs/card/preview.html
+optipng -o2 preview.png
+```
 
 ## Conventions
 
