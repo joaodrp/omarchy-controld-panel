@@ -299,16 +299,13 @@ Panel {
     if (!addRuleOpen) return
     // Nothing else should be mid-question while a new rule is being typed.
     pendingDeleteHost = ""
-    addRuleHost.text = ""
-    addRuleHost.forceActiveFocus()
     scrollItemIntoView(addRuleForm)
   }
 
-  function submitAddRule() {
-    if (!Model.validHostname(addRuleHost.text)) return
-    controld.createRule(addRuleHost.text, addRuleAction)
+  function submitAddRule(host) {
+    if (!Model.validHostname(host)) return
+    controld.createRule(host, addRuleAction)
     addRuleOpen = false
-    addRuleHost.text = ""
   }
 
   function askDeleteRule(rule) {
@@ -496,6 +493,7 @@ Panel {
     controld.statsWanted = opened
     legendOpen = false
     profilePickerOpen = false
+    addRuleOpen = false
     if (!opened) return
     cursorActive = false
     cursorKey = "header"
@@ -1168,41 +1166,48 @@ Panel {
             }
 
             // Opens under its own header, as the profile list does under the
-            // hero and the delete question under its row.
-            Column {
+            // hero and the delete question under its row. Built only while open:
+            // a writable field that exists can be handed the selection without
+            // a paste, so none exists until a rule is being typed.
+            Loader {
               id: addRuleForm
+              active: root.addRuleOpen
+              // An unloaded Loader keeps its last size; hiding it frees the space.
               visible: root.addRuleOpen
               width: parent.width
-              spacing: Style.space(8)
-              topPadding: Style.space(2)
-
-              TextField {
-                id: addRuleHost
-                width: parent.width
-                placeholderText: "hostname, or *.example.com"
-                foreground: root.foreground
-                accent: Color.accent
-                onAccepted: root.submitAddRule()
-              }
-
-              RowLayout {
-                width: parent.width
+              sourceComponent: Column {
                 spacing: Style.space(8)
+                topPadding: Style.space(2)
 
-                ChipGroup {
-                  options: [{ value: "block", label: "Block" }, { value: "bypass", label: "Bypass" }]
-                  value: root.addRuleAction
-                  onChanged: function(v) { root.addRuleAction = v }
+                TextField {
+                  id: addRuleHost
+                  width: parent.width
+                  placeholderText: "hostname, or *.example.com"
+                  foreground: root.foreground
+                  accent: Color.accent
+                  onAccepted: root.submitAddRule(text)
+                  Component.onCompleted: forceActiveFocus()
                 }
 
-                Item { Layout.fillWidth: true }
+                RowLayout {
+                  width: parent.width
+                  spacing: Style.space(8)
 
-                ChipButton {
-                  text: "Add"
-                  enabled: Model.validHostname(addRuleHost.text) && !controld.ruleBusy
-                  onClicked: root.submitAddRule()
+                  ChipGroup {
+                    options: [{ value: "block", label: "Block" }, { value: "bypass", label: "Bypass" }]
+                    value: root.addRuleAction
+                    onChanged: function(v) { root.addRuleAction = v }
+                  }
+
+                  Item { Layout.fillWidth: true }
+
+                  ChipButton {
+                    text: "Add"
+                    enabled: Model.validHostname(addRuleHost.text) && !controld.ruleBusy
+                    onClicked: root.submitAddRule(addRuleHost.text)
+                  }
                 }
-              }
+                }
             }
 
             Column {
